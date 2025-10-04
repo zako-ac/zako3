@@ -1,7 +1,7 @@
 use mockall::automock;
 
 use crate::{
-    feature::identity::{entity::Identity, error::IdentityResult},
+    controller::identity::{entity::Identity, error::IdentityResult},
     util::snowflake::LazySnowflake,
 };
 

@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -15,11 +16,11 @@ pub type AppResult<T> = Result<T, AppError>;
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        Json(to_response_error(self))
+        to_response_error(self).into_response()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct ResponseError {
     pub kind: String,
     pub message: String,

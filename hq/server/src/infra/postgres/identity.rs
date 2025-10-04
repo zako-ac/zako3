@@ -1,5 +1,5 @@
 use crate::{
-    feature::identity::{
+    controller::identity::{
         entity::Identity,
         error::{IdentityError, IdentityResult},
         repository::{IdentityRepository, UpdateIdentity},
