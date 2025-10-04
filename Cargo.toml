@@ -1,3 +1,19 @@
 [workspace]
 resolver = "3"
 members = ["hq/server"]
+
+[profile.dev]
+incremental = false
+overflow-checks = false
+codegen-units = 1
+debug = true
+opt-level = 0
+panic = "unwind"
+
+[profile.test]
+incremental = false
+overflow-checks = false
+codegen-units = 1
+debug = true
+opt-level = 0
+panic = "unwind"
