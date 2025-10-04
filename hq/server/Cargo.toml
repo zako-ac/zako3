@@ -1,5 +1,7 @@
 [package]
 name = "zako3_hq_server"
+authors = ["Allen Han <mail@drchi.co.kr>"]
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,14 +10,18 @@ name = "zako3_hq_server"
 path = "src/lib.rs"
 
 [dependencies]
+axum = { version = "0.8.6", features = ["http2", "macros", "multipart"] }
 bitfield-struct = "0.11.0"
 bitflags = "2.9.4"
 chrono = "0.4.42"
 mockall = "0.13.1"
 rand = "0.9.2"
+serde = { version = "1.0.228", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio-native-tls"] }
 thiserror = "2.0.17"
 tokio = { version = "1.47.1", features = ["full"] }
+utoipa = "5.4.0"
+utoipa-axum = "0.2.0"
 validator = { version = "0.20.0", features = ["derive"] }
 
 [dev-dependencies]

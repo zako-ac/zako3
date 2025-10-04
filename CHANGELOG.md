@@ -4,13 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
-## [Unreleased] - 2025-10-03
-  
-### Added
+## [Unreleased]
+- Added base project implementation.
 
-- Base implementation.
- 
-### Changed
- 
-### Fixed
- 
+## [2025-10-04]
+- Made the project public
