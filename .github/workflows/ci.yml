@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -21,3 +21,10 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
 
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
