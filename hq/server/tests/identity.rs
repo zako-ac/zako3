@@ -1,5 +1,8 @@
 use zako3_hq_server::{
-    feature::identity::{entity::Identity, repository::IdentityRepository},
+    feature::identity::{
+        entity::Identity,
+        repository::{IdentityRepository, UpdateIdentity},
+    },
     util::snowflake::Snowflake,
 };
 
@@ -18,11 +21,28 @@ async fn test_identity_db() {
         name: Some("hi".into()),
     };
 
-    db.create_identity(&ident).await.unwrap();
-    let ident_found = db.find_identity(id.as_lazy()).await.unwrap().unwrap();
-    assert_eq!(ident_found, ident);
+    {
+        db.create_identity(&ident).await.unwrap();
+        let ident_found = db.find_identity(id.as_lazy()).await.unwrap().unwrap();
+        assert_eq!(ident_found, ident);
+    }
 
-    db.delete_identity(id.as_lazy()).await.unwrap();
-    let ident_2 = db.find_identity(id.as_lazy()).await.unwrap();
-    assert_eq!(ident_2, None);
+    {
+        db.update_identity(
+            id.as_lazy(),
+            &UpdateIdentity {
+                name: Some("hi1".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+        let ident_found = db.find_identity(id.as_lazy()).await.unwrap().unwrap();
+        assert_eq!(ident_found.name, Some("hi1".to_string()));
+    }
+
+    {
+        db.delete_identity(id.as_lazy()).await.unwrap();
+        let ident_found = db.find_identity(id.as_lazy()).await.unwrap();
+        assert_eq!(ident_found, None);
+    }
 }
