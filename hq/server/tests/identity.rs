@@ -1,5 +1,5 @@
 use zako3_hq_server::{
-    feature::identity::{
+    controller::identity::{
         entity::Identity,
         repository::{IdentityRepository, UpdateIdentity},
     },
