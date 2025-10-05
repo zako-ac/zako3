@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mockall::automock;
 
 use crate::{
-    feature::identity::{entity::Identity, error::IdentityResult},
+    feature::identity::{Identity, error::IdentityResult},
     util::{permission::PermissionFlags, snowflake::LazySnowflake},
 };
 

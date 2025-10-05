@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 
 pub mod identity;
+pub mod settings;
 
 #[derive(Clone, Debug)]
 pub struct PostgresDb {

@@ -1,14 +1,14 @@
 use zako3_hq_server::{
     feature::identity::{
-        entity::Identity,
+        Identity,
         repository::{IdentityRepository, UpdateIdentity},
     },
     util::{permission::PermissionFlags, snowflake::Snowflake},
 };
 
-use crate::db::create_postgres_test;
+use crate::common::db::create_postgres_test;
 
-mod db;
+mod common;
 
 #[tokio::test]
 async fn test_identity_db() {

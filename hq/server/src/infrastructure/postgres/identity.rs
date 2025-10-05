@@ -1,6 +1,6 @@
 use crate::{
     feature::identity::{
-        entity::Identity,
+        Identity,
         error::{IdentityError, IdentityResult},
         repository::{IdentityRepository, UpdateIdentity},
     },

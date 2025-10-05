@@ -10,6 +10,12 @@ use thiserror::Error;
 pub enum AppError {
     #[error("unknown error: {0}")]
     Unknown(String),
+
+    #[error("DB transaction error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error("Serialization error: {0}")]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -26,14 +32,30 @@ struct ResponseError {
     pub message: String,
 }
 
+fn internal_error(kind: &str, message: &str) -> (StatusCode, Json<ResponseError>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ResponseError {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        }),
+    )
+}
+
 fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
     match app_err {
-        AppError::Unknown(message) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ResponseError {
-                kind: "Unknown".into(),
-                message,
-            }),
-        ),
+        AppError::Unknown(message) => {
+            tracing::warn!(event = "error", kind = "unknown", %message);
+
+            internal_error("unknown", "internal server error")
+        }
+        AppError::Sqlx(error) => {
+            tracing::warn!(event = "error", kind = "sqlx", error = %error.to_string());
+            internal_error("unknown", "internal server error")
+        }
+        AppError::SerdeJson(error) => {
+            tracing::warn!(event = "error", kind = "sqlx", error = %error.to_string());
+            internal_error("unknown", "internal server error")
+        }
     }
 }
