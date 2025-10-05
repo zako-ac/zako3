@@ -1,16 +1,19 @@
+use async_trait::async_trait;
 use mockall::automock;
 
 use crate::{
-    controller::identity::{entity::Identity, error::IdentityResult},
-    util::snowflake::LazySnowflake,
+    feature::identity::{entity::Identity, error::IdentityResult},
+    util::{permission::PermissionFlags, snowflake::LazySnowflake},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct UpdateIdentity {
-    pub name: Option<String>,
+    pub name: Option<Option<String>>,
+    pub permissions: Option<PermissionFlags>,
 }
 
 #[automock]
+#[async_trait]
 pub trait IdentityRepository {
     async fn find_identity(&self, id: LazySnowflake) -> IdentityResult<Option<Identity>>;
 

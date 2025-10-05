@@ -2,7 +2,7 @@ use testcontainers_modules::{
     postgres::{self, Postgres},
     testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner},
 };
-use zako3_hq_server::infra::postgres::{PostgresDb, connect_postgres, migrate_postgres};
+use zako3_hq_server::infrastructure::postgres::{PostgresDb, connect_postgres, migrate_postgres};
 
 async fn make_postgres_container() -> (ContainerAsync<Postgres>, String) {
     let container = postgres::Postgres::default()

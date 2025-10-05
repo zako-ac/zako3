@@ -10,6 +10,7 @@ name = "zako3_hq_server"
 path = "src/lib.rs"
 
 [dependencies]
+async-trait = "0.1.89"
 axum = { version = "0.8.6", features = ["http2", "macros", "multipart"] }
 bitfield-struct = "0.11.0"
 bitflags = "2.9.4"

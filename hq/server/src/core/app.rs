@@ -1,4 +1,4 @@
-use crate::infra::postgres::PostgresDb;
+use crate::infrastructure::postgres::PostgresDb;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
