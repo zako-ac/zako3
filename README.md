@@ -5,5 +5,6 @@
 
 ---
 
-## Core Contributors
-- MincoMK (Discord: `@minco_rl`)
+## Contributors
+- MincoMK (Discord: `@minco_rl`) - Zako
+- Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. She made Zako3 exist.
