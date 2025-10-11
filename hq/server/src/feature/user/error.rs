@@ -1,9 +1,9 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum IdentityError {
+pub enum UserError {
     #[error("sqlx error: {0}")]
     Sqlx(#[from] sqlx::Error),
 }
 
-pub type IdentityResult<T> = Result<T, IdentityError>;
+pub type UserResult<T> = Result<T, UserError>;
