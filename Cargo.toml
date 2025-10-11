@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["hq/server"]
+members = [ "crates/discord-oauth2","hq/server"]
 
 [profile.dev]
 incremental = false
