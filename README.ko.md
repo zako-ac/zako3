@@ -3,6 +3,8 @@
 # 3세대 Zako 시스템 구현
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
+[**English**](README.md) | [**한국어**](README.ko.md)
+
 ---
 
 ## Zako란 무엇인가요?
