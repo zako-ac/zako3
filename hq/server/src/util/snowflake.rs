@@ -11,10 +11,10 @@ pub struct Snowflake {
 }
 
 impl Snowflake {
-    pub fn new_now(worker_id: u16) -> Self {
+    pub fn new_now() -> Self {
         Self {
             timestamp: Utc::now(),
-            worker_id,
+            worker_id: 0,
             trace_id: rand::random(),
         }
     }

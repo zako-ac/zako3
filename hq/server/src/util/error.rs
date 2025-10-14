@@ -1,3 +1,5 @@
+use std::time::SystemTimeError;
+
 use axum::{
     Json,
     http::StatusCode,
@@ -16,6 +18,15 @@ pub enum AppError {
 
     #[error("Serialization error: {0}")]
     SerdeJson(#[from] serde_json::Error),
+
+    #[error("Redis error: {0}")]
+    Redis(#[from] redis::RedisError),
+
+    #[error("Time went backwards: {0}")]
+    Time(#[from] SystemTimeError),
+
+    #[error("JWT serialization error: {0}")]
+    Jwt(#[from] jwt::Error),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -54,7 +65,19 @@ fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
             internal_error("unknown", "internal server error")
         }
         AppError::SerdeJson(error) => {
-            tracing::warn!(event = "error", kind = "sqlx", error = %error.to_string());
+            tracing::warn!(event = "error", kind = "serde", error = %error.to_string());
+            internal_error("unknown", "internal server error")
+        }
+        AppError::Redis(error) => {
+            tracing::warn!(event = "error", kind = "redis", error = %error.to_string());
+            internal_error("unknown", "internal server error")
+        }
+        AppError::Time(error) => {
+            tracing::warn!(event = "error", kind = "time", error = %error.to_string());
+            internal_error("unknown", "internal server error")
+        }
+        AppError::Jwt(error) => {
+            tracing::warn!(event = "error", kind = "jwt", error = %error.to_string());
             internal_error("unknown", "internal server error")
         }
     }

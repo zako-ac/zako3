@@ -14,7 +14,7 @@ mod common;
 async fn test_user_db() {
     let (_guard, db) = create_postgres_test().await;
 
-    let id = Snowflake::new_now(42);
+    let id = Snowflake::new_now();
     let perm = PermissionFlags::all();
 
     let ident = User {
