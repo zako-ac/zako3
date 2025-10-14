@@ -3,7 +3,7 @@
 
 # 3rd-gen Zako system implementation.
 
-[**English**](/README.md) | [**한국어**](/docs/kr/README.ko.md)
+[**English**](/README.md) | [**한국어**](/docs/ko/README.md)
 
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
