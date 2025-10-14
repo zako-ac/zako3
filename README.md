@@ -5,7 +5,7 @@
 
 ---
 
-[**English**](README.md) | [**한국어**](docs/kr/README.ko.md)
+[**English**](/README.md) | [**한국어**](/docs/kr/README.ko.md)
 
 ---
 
