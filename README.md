@@ -3,7 +3,9 @@
 # 3rd-gen Zako system implementation.
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
-[**English**](README.md) | [**한국어**](README.ko.md)
+---
+
+[**English**](README.md) | [**한국어**](docs/kr/README.ko.md)
 
 ---
 
@@ -19,3 +21,4 @@ There are a lot of people refusing to reveal one's voice(i.e. no-mic users) in D
 ## Contributors
 - MincoMK (Discord: `@minco_rl`) - Zako
 - Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
+- ridanit_ruma (Discord: `@ruma0607`) - Translator

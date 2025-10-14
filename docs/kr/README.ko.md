@@ -3,7 +3,9 @@
 # 3세대 Zako 시스템 구현
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
-[**English**](README.md) | [**한국어**](README.ko.md)
+---
+
+[**English**](README.md) | [**한국어**](docs/kr/README.ko.md)
 
 ---
 
@@ -20,6 +22,4 @@
 ## 기여자
 - MincoMK (Discord: `@minco_rl`) - Zako
 - Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
-
-
 - ridanit_ruma (Discord: `@ruma0607`) - 옮김
