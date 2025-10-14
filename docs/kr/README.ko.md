@@ -1,13 +1,13 @@
 ![Zako 3](/docs/assets/zako3.png)
 
 # 3세대 Zako 시스템 구현
+
+<center>
+[**English**](/README.md) | [**한국어**](/docs/kr/README.ko.md)
+</center>
+
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
----
-
-[**English**](/README.md) | [**한국어**](/docs/kr/README.ko.md)
-
----
 
 ## Zako란 무엇인가요?
 **Zako**는 기본적으로 디스코드 음악봇과 TTS 봇의 결합체 입니다. 이는 디스코드 음성 채널에 다양한 오디오 트랙을 제공합니다.
