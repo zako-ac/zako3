@@ -3,16 +3,16 @@ use zako3_hq_server::{
         User,
         repository::{UpdateUser, UserRepository},
     },
-    util::{permission::PermissionFlags, snowflake::Snowflake},
+    util::{error::AppError, permission::PermissionFlags, snowflake::Snowflake},
 };
 
-use crate::common::db::create_postgres_test;
+use crate::common::postgres::init_postgres;
 
 mod common;
 
 #[tokio::test]
-async fn test_user_db() {
-    let (_guard, db) = create_postgres_test().await;
+async fn db_user_crud() {
+    let db = init_postgres().await;
 
     let id = Snowflake::new_now();
     let perm = PermissionFlags::all();
@@ -49,5 +49,10 @@ async fn test_user_db() {
         db.delete_user(id.as_lazy()).await.unwrap();
         let ident_found = db.find_user(id.as_lazy()).await.unwrap();
         assert_eq!(ident_found, None);
+    }
+
+    {
+        let r = db.delete_user(id.as_lazy()).await;
+        assert!(matches!(r, Err(AppError::NotFound)));
     }
 }
