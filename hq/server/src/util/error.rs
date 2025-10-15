@@ -8,6 +8,8 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::core::auth::error::AuthError;
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("unknown error: {0}")]
@@ -27,6 +29,9 @@ pub enum AppError {
 
     #[error("JWT serialization error: {0}")]
     Jwt(#[from] jwt::Error),
+
+    #[error("Unauthorized: {0}")]
+    Auth(#[from] AuthError),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -48,6 +53,16 @@ fn internal_error(kind: &str, message: &str) -> (StatusCode, Json<ResponseError>
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ResponseError {
             kind: kind.to_string(),
+            message: message.to_string(),
+        }),
+    )
+}
+
+fn unauthorized(message: &str) -> (StatusCode, Json<ResponseError>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ResponseError {
+            kind: "unauthorized".to_string(),
             message: message.to_string(),
         }),
     )
@@ -79,6 +94,10 @@ fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
         AppError::Jwt(error) => {
             tracing::warn!(event = "error", kind = "jwt", error = %error.to_string());
             internal_error("unknown", "internal server error")
+        }
+        AppError::Auth(error) => {
+            tracing::warn!(event = "auth", kind = "fail", error = %error.to_string());
+            unauthorized(&error.to_string())
         }
     }
 }

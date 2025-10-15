@@ -17,4 +17,6 @@ pub trait TokenRepository {
         &self,
         token_id: LazySnowflake,
     ) -> AppResult<Option<LazySnowflake>>;
+
+    async fn delete_refresh_token_user(&self, token_id: LazySnowflake) -> AppResult<()>;
 }

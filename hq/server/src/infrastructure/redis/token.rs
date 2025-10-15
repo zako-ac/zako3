@@ -20,7 +20,8 @@ impl TokenRepository for RedisDb {
         user_id: LazySnowflake,
         ttl: Duration,
     ) -> AppResult<()> {
-        let key = format!("refresh_token:{}", *token_id);
+        let key = make_key(token_id);
+
         let _: () = self
             .connection_manager()
             .set_ex(key, user_id.to_string(), ttl.as_secs())
@@ -33,7 +34,7 @@ impl TokenRepository for RedisDb {
         &self,
         token_id: LazySnowflake,
     ) -> AppResult<Option<LazySnowflake>> {
-        let key = format!("refresh_token:{}", *token_id);
+        let key = make_key(token_id);
 
         let user_id_str: Option<String> = self.connection_manager().get(key).await?;
 
@@ -47,4 +48,16 @@ impl TokenRepository for RedisDb {
             Ok(None)
         }
     }
+
+    async fn delete_refresh_token_user(&self, token_id: LazySnowflake) -> AppResult<()> {
+        let key = make_key(token_id);
+
+        let _: () = self.connection_manager().del(key).await?;
+
+        Ok(())
+    }
+}
+
+fn make_key(token_id: LazySnowflake) -> String {
+    format!("refresh_token:{}", *token_id)
 }

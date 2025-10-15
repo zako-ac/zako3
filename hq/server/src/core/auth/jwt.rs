@@ -23,7 +23,7 @@ pub async fn generate_jwt(
     let refresh_token_id = Snowflake::new_now().as_lazy();
     let now = SystemTime::now();
 
-    let jwt = sign_jwt(config.clone(), now, refresh_token_id, user_id)?;
+    let jwt = sign_jwt_pure(config.clone(), now, refresh_token_id, user_id)?;
 
     token_repository
         .add_refresh_token_user(refresh_token_id, user_id, config.refresh_token_ttl)
@@ -32,7 +32,20 @@ pub async fn generate_jwt(
     Ok(jwt)
 }
 
-fn sign_jwt(
+pub fn check_jwt(config: JwtConfig, access_token: String) -> AppResult<Option<LazySnowflake>> {
+    check_jwt_pure(config, SystemTime::now(), access_token)
+}
+
+pub async fn revoke_refresh_token(
+    token_repository: impl TokenRepository,
+    refresh_token_id: LazySnowflake,
+) -> AppResult<()> {
+    token_repository
+        .delete_refresh_token_user(refresh_token_id)
+        .await
+}
+
+pub(super) fn sign_jwt_pure(
     config: JwtConfig,
     now: SystemTime,
     refresh_token_id: LazySnowflake,
@@ -74,10 +87,6 @@ fn calculate_iat_exp(now: SystemTime, ttl: Duration) -> AppResult<(u64, u64)> {
     Ok((iat_secs, exp_secs))
 }
 
-pub fn check_jwt(config: JwtConfig, access_token: String) -> AppResult<Option<LazySnowflake>> {
-    check_jwt_pure(config, SystemTime::now(), access_token)
-}
-
 fn check_jwt_pure(
     config: JwtConfig,
     now: SystemTime,
@@ -109,8 +118,8 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use crate::{
-        core::auth::jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt},
-        util::snowflake::Snowflake,
+        core::auth::jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
+        util::snowflake::{LazySnowflake, Snowflake},
     };
 
     use hmac::{Hmac, Mac};
@@ -128,7 +137,7 @@ mod tests {
         let refresh_id = Snowflake::new_now().as_lazy();
         let user_id = Snowflake::new_now().as_lazy();
 
-        let jwt = sign_jwt(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
+        let jwt = sign_jwt_pure(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
         let access_token = jwt.access_token;
 
         let got_user_id = check_jwt_pure(config.clone(), SystemTime::now(), access_token)
@@ -148,7 +157,7 @@ mod tests {
         let refresh_id = Snowflake::new_now().as_lazy();
         let user_id = Snowflake::new_now().as_lazy();
 
-        let jwt = sign_jwt(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
+        let jwt = sign_jwt_pure(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
         let access_token = jwt.access_token;
 
         let got_user_id = check_jwt_pure(config.clone(), SystemTime::now(), access_token).unwrap();
@@ -168,4 +177,16 @@ mod tests {
         assert_eq!(iat, now_secs);
         assert_eq!(exp, now_secs + 10);
     }
+}
+
+#[cfg(test)]
+pub fn sign_jwt_testing(config: JwtConfig, user_id: LazySnowflake) -> String {
+    let pair = sign_jwt_pure(
+        config,
+        SystemTime::now(),
+        Snowflake::new_now().as_lazy(),
+        user_id,
+    )
+    .unwrap();
+    pair.access_token
 }

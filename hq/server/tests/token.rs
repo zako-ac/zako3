@@ -37,4 +37,23 @@ async fn test_refresh_token_cache() {
             .unwrap();
         assert_eq!(got_user_id, None);
     }
+
+    {
+        let user_id = LazySnowflake::from(1234);
+        let token_id = LazySnowflake::from(5678);
+        let ttl = Duration::from_secs(60);
+
+        redis
+            .add_refresh_token_user(token_id, user_id, ttl)
+            .await
+            .unwrap();
+
+        redis.delete_refresh_token_user(token_id).await.unwrap();
+
+        let got_user_id = redis
+            .get_refresh_token_user(LazySnowflake::from(1))
+            .await
+            .unwrap();
+        assert_eq!(got_user_id, None);
+    }
 }

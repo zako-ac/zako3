@@ -1,4 +1,3 @@
-pub mod error;
 pub mod repository;
 
 use crate::util::{permission::PermissionFlags, snowflake::LazySnowflake};

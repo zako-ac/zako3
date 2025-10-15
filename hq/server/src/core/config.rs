@@ -1,0 +1,52 @@
+use std::{env, str::FromStr, time::Duration};
+
+use hmac::{Hmac, Mac};
+
+use crate::core::auth::types::JwtConfig;
+
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub jwt: JwtConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadConfigError {
+    pub field: String,
+    pub message: String,
+}
+
+pub fn load_config() -> Result<Config, LoadConfigError> {
+    let conf = Config {
+        jwt: JwtConfig {
+            secret: Hmac::new_from_slice(load_env::<String>("HQ3_JWT_SECRET")?.as_bytes())
+                .map_err(|e| LoadConfigError {
+                    field: "HQ3_JWT_SECRET".to_string(),
+                    message: e.to_string(),
+                })?,
+            access_token_ttl: Duration::from_secs(load_env("HQ3_JWT_ACCESS_TOKEN_TTL_SECONDS")?),
+            refresh_token_ttl: Duration::from_secs(load_env("HQ3_JWT_REFRESH_TOKEN_TTL_SECONDS")?),
+        },
+    };
+
+    Ok(conf)
+}
+
+fn load_env<T>(env_name: &str) -> Result<T, LoadConfigError>
+where
+    T: FromStr,
+{
+    let val_str = env::var(env_name).map_err(|_| LoadConfigError {
+        field: env_name.to_string(),
+        message: format!("variable {} is not set.", env_name),
+    })?;
+
+    let val = val_str.parse::<T>().map_err(|_| LoadConfigError {
+        field: env_name.to_string(),
+        message: format!(
+            "failed to parse value in variable {}: {}",
+            env_name, val_str
+        ),
+    })?;
+
+    Ok(val)
+}

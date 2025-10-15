@@ -1,11 +1,10 @@
 use crate::{
     feature::user::{
         User,
-        error::{UserError, UserResult},
         repository::{UpdateUser, UserRepository},
     },
     infrastructure::postgres::PostgresDb,
-    util::{permission::PermissionFlags, snowflake::LazySnowflake},
+    util::{error::AppResult, permission::PermissionFlags, snowflake::LazySnowflake},
 };
 
 use async_trait::async_trait;
@@ -13,7 +12,7 @@ use sqlx::{QueryBuilder, Row};
 
 #[async_trait]
 impl UserRepository for PostgresDb {
-    async fn create_user(&self, data: &User) -> UserResult<()> {
+    async fn create_user(&self, data: &User) -> AppResult<()> {
         let query = sqlx::query("INSERT INTO users (id, name, permissions) VALUES ($1, $2, $3)")
             .bind(*data.id as i64)
             .bind(&data.name)
@@ -24,7 +23,7 @@ impl UserRepository for PostgresDb {
         Ok(())
     }
 
-    async fn update_user(&self, id: LazySnowflake, data: &UpdateUser) -> Result<(), UserError> {
+    async fn update_user(&self, id: LazySnowflake, data: &UpdateUser) -> AppResult<()> {
         let mut qb = QueryBuilder::new("UPDATE users SET ");
 
         let mut separated = false;
@@ -59,7 +58,7 @@ impl UserRepository for PostgresDb {
         Ok(())
     }
 
-    async fn delete_user(&self, id: LazySnowflake) -> UserResult<()> {
+    async fn delete_user(&self, id: LazySnowflake) -> AppResult<()> {
         let query = sqlx::query("DELETE FROM users WHERE id = $1").bind(*id as i64);
 
         query.execute(&self.pool).await?;
@@ -67,7 +66,7 @@ impl UserRepository for PostgresDb {
         Ok(())
     }
 
-    async fn find_user(&self, id: LazySnowflake) -> UserResult<Option<User>> {
+    async fn find_user(&self, id: LazySnowflake) -> AppResult<Option<User>> {
         let query = sqlx::query("SELECT * FROM users WHERE id = $1").bind(*id as i64);
 
         if let Some(item) = query.fetch_optional(&self.pool).await? {
