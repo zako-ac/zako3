@@ -23,7 +23,7 @@ use crate::{
     util::{
         error::{AppError, ResponseError},
         permission::PermissionFlags,
-        snowflake::Snowflake,
+        snowflake::{LazySnowflake, Snowflake},
     },
 };
 
@@ -46,13 +46,14 @@ pub struct UpdateUserPermissions {
 #[utoipa::path(
     post,
     path = "/api/v1/user",
+    summary = "Create user",
     tag = "user",
     responses(
         ( status = 200, description = "Create user", body = User ),
         ( status = 401, description = "Unauthorized", body = ResponseError )
     ),
     security(
-        ("bearer" = [ "admin" ])
+        ("admin" = [])
     )
 )]
 pub async fn create_user(
@@ -81,9 +82,10 @@ pub async fn create_user(
 #[utoipa::path(
     get,
     path = "/api/v1/user/{user_id}",
+    summary = "Get user",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "Get user", body = User ),
@@ -92,8 +94,11 @@ pub async fn create_user(
     security(
     )
 )]
-pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> AppResponse<User> {
-    let user = app.db.find_user(user_id.into()).await?;
+pub async fn get_user(
+    State(app): State<AppState>,
+    Path(user_id): Path<LazySnowflake>,
+) -> AppResponse<User> {
+    let user = app.db.find_user(user_id).await?;
 
     if let Some(user) = user {
         into_app_response(user)
@@ -105,9 +110,10 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
 #[utoipa::path(
     put,
     path = "/api/v1/user/{user_id}",
+    summary = "Update user information",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User is updated", body = inline(OkResponse) ),
@@ -115,16 +121,17 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("owned" = [])
     )
 )]
 pub async fn update_user_public(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
     Json(update): Json<UpdateUserName>,
 ) -> AppOkResponse {
     check_permission(
-        OwnedPermission::OwnerOnly(user_id.into()),
+        OwnedPermission::OwnerOnly(user_id),
         access_token.token().to_string(),
         &app,
     )
@@ -132,7 +139,7 @@ pub async fn update_user_public(
 
     app.db
         .update_user(
-            user_id.into(),
+            user_id,
             &UpdateUser {
                 name: Some(update.name),
                 permissions: None,
@@ -146,9 +153,10 @@ pub async fn update_user_public(
 #[utoipa::path(
     put,
     path = "/api/v1/user/{user_id}/permissions",
+    summary = "Update user permissions",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User permissions is updated", body = inline(OkResponse) ),
@@ -156,12 +164,13 @@ pub async fn update_user_public(
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("admin" = [])
     )
 )]
 pub async fn update_user_permissions(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
     Json(update): Json<UpdateUserPermissions>,
 ) -> AppOkResponse {
     check_permission(
@@ -173,7 +182,7 @@ pub async fn update_user_permissions(
 
     app.db
         .update_user(
-            user_id.into(),
+            user_id,
             &UpdateUser {
                 name: None,
                 permissions: Some(update.permissions),
@@ -187,9 +196,10 @@ pub async fn update_user_permissions(
 #[utoipa::path(
     delete,
     path = "/api/v1/user/{user_id}",
+    summary = "Delete user",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User is deleted", body = inline(OkResponse) ),
@@ -197,21 +207,22 @@ pub async fn update_user_permissions(
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("owned" = [])
     )
 )]
 pub async fn delete_user(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
 ) -> AppOkResponse {
     check_permission(
-        OwnedPermission::OwnerOnly(user_id.into()),
+        OwnedPermission::OwnerOnly(user_id),
         access_token.token().to_string(),
         &app,
     )
     .await?;
 
-    app.db.delete_user(user_id.into()).await?;
+    app.db.delete_user(user_id).await?;
 
     ok_app_response()
 }
