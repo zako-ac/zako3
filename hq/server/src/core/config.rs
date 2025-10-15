@@ -1,4 +1,4 @@
-use std::{env, str::FromStr, time::Duration};
+use std::{env, error::Error, fmt::Display, str::FromStr, time::Duration};
 
 use hmac::{Hmac, Mac};
 
@@ -9,6 +9,7 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub postgres_connection_string: String,
     pub redis_connection_string: String,
+    pub http_bind_address: String,
 }
 
 #[derive(Debug, Clone)]
@@ -16,6 +17,14 @@ pub struct LoadConfigError {
     pub field: String,
     pub message: String,
 }
+
+impl Display for LoadConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("[{}] {}", self.field, self.message))
+    }
+}
+
+impl Error for LoadConfigError {}
 
 pub fn load_config() -> Result<Config, LoadConfigError> {
     let conf = Config {
@@ -30,6 +39,7 @@ pub fn load_config() -> Result<Config, LoadConfigError> {
         },
         postgres_connection_string: load_env("HQ3_POSTGRES_CONNECTION_STRING")?,
         redis_connection_string: load_env("HQ3_REDIS_CONNECTION_STRING")?,
+        http_bind_address: load_env("HQ3_HTTP_BIND_ADDR")?,
     };
 
     Ok(conf)

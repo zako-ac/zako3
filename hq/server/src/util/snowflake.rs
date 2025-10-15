@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use bitfield_struct::bitfield;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, PartialEq)]

@@ -6,7 +6,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use sqlx::types::Json;
 use thiserror::Error;
 use utoipa::ToSchema;
 
