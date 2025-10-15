@@ -9,12 +9,17 @@ use axum_extra::{
 use serde::Deserialize;
 
 use crate::{
-    controller::helper::{AppResponse, into_app_response},
+    controller::helper::{
+        AppOkResponse, AppResponse, OkResponse, into_app_response, ok_app_response,
+    },
     core::{
         app::AppState,
         auth::permission::{OwnedPermission, check_permission},
     },
-    feature::user::{User, repository::UserRepository},
+    feature::user::{
+        User,
+        repository::{UpdateUser, UserRepository},
+    },
     util::{
         error::{AppError, ResponseError},
         permission::PermissionFlags,
@@ -25,6 +30,16 @@ use crate::{
 #[derive(Clone, Debug, Deserialize)]
 pub struct CreateUser {
     pub name: Option<String>,
+    pub permissions: PermissionFlags,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UpdateUserName {
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UpdateUserPermissions {
     pub permissions: PermissionFlags,
 }
 
@@ -85,4 +100,45 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
     } else {
         Err(AppError::NotFound)
     }
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/user/{user_id}",
+    tag = "user",
+    params(
+        ("user_id" = u64, Path, description = "ID of the user")
+    ),
+    responses(
+        ( status = 200, description = "User updated", body = inline(OkResponse) ),
+        ( status = 401, description = "Unauthorized", body = ResponseError ),
+        ( status = 404, description = "User not found" ),
+    ),
+    security(
+    )
+)]
+pub async fn update_user_public(
+    State(app): State<AppState>,
+    TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
+    Path(user_id): Path<u64>,
+    Json(update): Json<UpdateUserName>,
+) -> AppOkResponse {
+    check_permission(
+        OwnedPermission::OwnerOnly(user_id.into()),
+        access_token.token().to_string(),
+        &app,
+    )
+    .await?;
+
+    app.db
+        .update_user(
+            user_id.into(),
+            &UpdateUser {
+                name: Some(update.name),
+                permissions: None,
+            },
+        )
+        .await?;
+
+    ok_app_response()
 }
