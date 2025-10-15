@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{num::ParseIntError, ops::Deref, str::FromStr};
 
 use bitfield_struct::bitfield;
 use chrono::{DateTime, Utc};
@@ -107,6 +107,14 @@ impl PartialSchema for LazySnowflake {
 }
 
 impl ToSchema for LazySnowflake {}
+
+impl FromStr for LazySnowflake {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<u64>().map(Into::into)
+    }
+}
 
 #[cfg(test)]
 mod tests {

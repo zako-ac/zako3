@@ -23,7 +23,7 @@ use crate::{
     util::{
         error::{AppError, ResponseError},
         permission::PermissionFlags,
-        snowflake::Snowflake,
+        snowflake::{LazySnowflake, Snowflake},
     },
 };
 
@@ -94,8 +94,11 @@ pub async fn create_user(
     security(
     )
 )]
-pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> AppResponse<User> {
-    let user = app.db.find_user(user_id.into()).await?;
+pub async fn get_user(
+    State(app): State<AppState>,
+    Path(user_id): Path<LazySnowflake>,
+) -> AppResponse<User> {
+    let user = app.db.find_user(user_id).await?;
 
     if let Some(user) = user {
         into_app_response(user)
@@ -124,11 +127,11 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
 pub async fn update_user_public(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
     Json(update): Json<UpdateUserName>,
 ) -> AppOkResponse {
     check_permission(
-        OwnedPermission::OwnerOnly(user_id.into()),
+        OwnedPermission::OwnerOnly(user_id),
         access_token.token().to_string(),
         &app,
     )
@@ -136,7 +139,7 @@ pub async fn update_user_public(
 
     app.db
         .update_user(
-            user_id.into(),
+            user_id,
             &UpdateUser {
                 name: Some(update.name),
                 permissions: None,
@@ -167,7 +170,7 @@ pub async fn update_user_public(
 pub async fn update_user_permissions(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
     Json(update): Json<UpdateUserPermissions>,
 ) -> AppOkResponse {
     check_permission(
@@ -179,7 +182,7 @@ pub async fn update_user_permissions(
 
     app.db
         .update_user(
-            user_id.into(),
+            user_id,
             &UpdateUser {
                 name: None,
                 permissions: Some(update.permissions),
@@ -210,16 +213,16 @@ pub async fn update_user_permissions(
 pub async fn delete_user(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
-    Path(user_id): Path<u64>,
+    Path(user_id): Path<LazySnowflake>,
 ) -> AppOkResponse {
     check_permission(
-        OwnedPermission::OwnerOnly(user_id.into()),
+        OwnedPermission::OwnerOnly(user_id),
         access_token.token().to_string(),
         &app,
     )
     .await?;
 
-    app.db.delete_user(user_id.into()).await?;
+    app.db.delete_user(user_id).await?;
 
     ok_app_response()
 }
