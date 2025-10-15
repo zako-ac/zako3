@@ -5,6 +5,10 @@ license = "MIT"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["dotenv"]
+dotenv = ["dep:dotenvy"]
+
 [lib]
 name = "zako3_hq_server"
 path = "src/lib.rs"
@@ -18,6 +22,7 @@ bitfield-struct = "0.11.0"
 bitflags = { version = "2.9.4", features = ["serde"] }
 chrono = "0.4.42"
 delegate = "0.13.4"
+dotenvy = { version = "0.15.7", optional = true }
 hmac = "0.12.1"
 jwt = "0.16.0"
 lazy_static = "1.5.0"

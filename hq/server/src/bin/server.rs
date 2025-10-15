@@ -9,6 +9,9 @@ use zako3_hq_server::{
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "dotenv")]
+    let _ = dotenvy::dotenv();
+
     zako3_hq_server::util::tracing::init();
 
     let config = load_config()?;
