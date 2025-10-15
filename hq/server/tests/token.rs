@@ -6,7 +6,7 @@ use zako3_hq_server::{
 
 use crate::common::redis::create_redis_test;
 
-mod common;
+pub mod common;
 
 #[tokio::test]
 async fn test_refresh_token_cache() {

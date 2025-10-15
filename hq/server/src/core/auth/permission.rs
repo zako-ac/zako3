@@ -1,5 +1,10 @@
+use tracing::instrument;
+
 use crate::{
-    core::auth::{error::AuthError, jwt::check_jwt, types::JwtConfig},
+    core::{
+        app::AppState,
+        auth::{error::AuthError, jwt::check_jwt, types::JwtConfig},
+    },
     feature::user::{User, repository::UserRepository},
     util::{error::AppResult, permission::PermissionFlags, snowflake::LazySnowflake},
 };
@@ -28,17 +33,25 @@ fn check_logic_non_public(permission: OwnedPermission, user: User) -> AppResult<
                 } else {
                     Err(AuthError::InsufficientPrevileges.into())
                 }
+            } else if user.permissions.contains(PermissionFlags::Admin) {
+                Ok(())
             } else {
-                if user.permissions.contains(PermissionFlags::Admin) {
-                    Ok(())
-                } else {
-                    Err(AuthError::NotAllowedService.into())
-                }
+                Err(AuthError::NotAllowedService.into())
             }
         }
     }
 }
 
+pub async fn check_permission(
+    permission: OwnedPermission,
+    access_token: String,
+    app: &AppState,
+) -> AppResult<()> {
+    let app = app.clone();
+    check_logic(permission, access_token, app.config.jwt, app.db).await
+}
+
+#[instrument(skip_all)]
 pub async fn check_logic(
     permission: OwnedPermission,
     access_token: String,

@@ -5,13 +5,13 @@ use zako3_hq_server::feature::settings::{
     types::QueuePolicy,
 };
 
-use crate::common::db::create_postgres_test;
+use crate::common::postgres::init_postgres;
 
-mod common;
+pub mod common;
 
 #[tokio::test]
 async fn test_settings_db() {
-    let (_guard, db) = create_postgres_test().await;
+    let db = init_postgres().await;
 
     // insert, update, remove
 

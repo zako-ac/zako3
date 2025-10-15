@@ -2,6 +2,7 @@ use redis::{Client, RedisError, aio::ConnectionManager};
 
 pub mod token;
 
+#[derive(Clone)]
 pub struct RedisDb {
     connection_manager: ConnectionManager,
 }

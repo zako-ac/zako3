@@ -4,7 +4,11 @@ use crate::{
         repository::{UpdateUser, UserRepository},
     },
     infrastructure::postgres::PostgresDb,
-    util::{error::AppResult, permission::PermissionFlags, snowflake::LazySnowflake},
+    util::{
+        error::{AppError, AppResult},
+        permission::PermissionFlags,
+        snowflake::LazySnowflake,
+    },
 };
 
 use async_trait::async_trait;
@@ -52,18 +56,28 @@ impl UserRepository for PostgresDb {
             qb.push(" WHERE id = ").push_bind(*id as i64);
 
             let query = qb.build();
-            query.execute(&self.pool).await?;
-        }
+            let result = query.execute(&self.pool).await?;
 
-        Ok(())
+            if result.rows_affected() > 0 {
+                Ok(())
+            } else {
+                Err(AppError::NotFound)
+            }
+        } else {
+            Ok(())
+        }
     }
 
     async fn delete_user(&self, id: LazySnowflake) -> AppResult<()> {
         let query = sqlx::query("DELETE FROM users WHERE id = $1").bind(*id as i64);
 
-        query.execute(&self.pool).await?;
+        let result = query.execute(&self.pool).await?;
 
-        Ok(())
+        if result.rows_affected() > 0 {
+            Ok(())
+        } else {
+            Err(AppError::NotFound)
+        }
     }
 
     async fn find_user(&self, id: LazySnowflake) -> AppResult<Option<User>> {
