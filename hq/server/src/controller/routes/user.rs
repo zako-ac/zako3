@@ -85,7 +85,7 @@ pub async fn create_user(
     summary = "Get user",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "Get user", body = User ),
@@ -113,7 +113,7 @@ pub async fn get_user(
     summary = "Update user information",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User is updated", body = inline(OkResponse) ),
@@ -156,7 +156,7 @@ pub async fn update_user_public(
     summary = "Update user permissions",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User permissions is updated", body = inline(OkResponse) ),
@@ -199,7 +199,7 @@ pub async fn update_user_permissions(
     summary = "Delete user",
     tag = "user",
     params(
-        ("user_id" = u64, Path, description = "ID of the user")
+        ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
     responses(
         ( status = 200, description = "User is deleted", body = inline(OkResponse) ),
