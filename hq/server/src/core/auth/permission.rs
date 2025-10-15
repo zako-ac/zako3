@@ -33,12 +33,10 @@ fn check_logic_non_public(permission: OwnedPermission, user: User) -> AppResult<
                 } else {
                     Err(AuthError::InsufficientPrevileges.into())
                 }
+            } else if user.permissions.contains(PermissionFlags::Admin) {
+                Ok(())
             } else {
-                if user.permissions.contains(PermissionFlags::Admin) {
-                    Ok(())
-                } else {
-                    Err(AuthError::NotAllowedService.into())
-                }
+                Err(AuthError::NotAllowedService.into())
             }
         }
     }

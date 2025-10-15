@@ -8,7 +8,7 @@ use zako3_hq_server::{
 
 use crate::common::postgres::init_postgres;
 
-mod common;
+pub mod common;
 
 #[tokio::test]
 async fn db_user_crud() {

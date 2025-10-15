@@ -110,7 +110,7 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
         ("user_id" = u64, Path, description = "ID of the user")
     ),
     responses(
-        ( status = 200, description = "User updated", body = inline(OkResponse) ),
+        ( status = 200, description = "User is updated", body = inline(OkResponse) ),
         ( status = 401, description = "Unauthorized", body = ResponseError ),
         ( status = 404, description = "User not found" ),
     ),
@@ -139,6 +139,79 @@ pub async fn update_user_public(
             },
         )
         .await?;
+
+    ok_app_response()
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/user/{user_id}/permissions",
+    tag = "user",
+    params(
+        ("user_id" = u64, Path, description = "ID of the user")
+    ),
+    responses(
+        ( status = 200, description = "User permissions is updated", body = inline(OkResponse) ),
+        ( status = 401, description = "Unauthorized", body = ResponseError ),
+        ( status = 404, description = "User not found" ),
+    ),
+    security(
+    )
+)]
+pub async fn update_user_permissions(
+    State(app): State<AppState>,
+    TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
+    Path(user_id): Path<u64>,
+    Json(update): Json<UpdateUserPermissions>,
+) -> AppOkResponse {
+    check_permission(
+        OwnedPermission::AdminOnly,
+        access_token.token().to_string(),
+        &app,
+    )
+    .await?;
+
+    app.db
+        .update_user(
+            user_id.into(),
+            &UpdateUser {
+                name: None,
+                permissions: Some(update.permissions),
+            },
+        )
+        .await?;
+
+    ok_app_response()
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/user/{user_id}",
+    tag = "user",
+    params(
+        ("user_id" = u64, Path, description = "ID of the user")
+    ),
+    responses(
+        ( status = 200, description = "User is deleted", body = inline(OkResponse) ),
+        ( status = 401, description = "Unauthorized", body = ResponseError ),
+        ( status = 404, description = "User not found" ),
+    ),
+    security(
+    )
+)]
+pub async fn delete_user(
+    State(app): State<AppState>,
+    TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
+    Path(user_id): Path<u64>,
+) -> AppOkResponse {
+    check_permission(
+        OwnedPermission::OwnerOnly(user_id.into()),
+        access_token.token().to_string(),
+        &app,
+    )
+    .await?;
+
+    app.db.delete_user(user_id.into()).await?;
 
     ok_app_response()
 }

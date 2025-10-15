@@ -9,10 +9,10 @@ pub fn create_router(state: AppState) -> Router {
         .routes(routes!(create_user))
         .split_for_parts();
 
-    let app = Router::new()
+    
+
+    Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", openapi))
         .merge(router)
-        .with_state(state);
-
-    app
+        .with_state(state)
 }

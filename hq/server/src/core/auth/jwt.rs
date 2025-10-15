@@ -96,12 +96,12 @@ fn check_jwt_pure(
 
     let user_id_str = claims
         .get("sub")
-        .ok_or(AppError::Unknown(format!("expected `sub`")))?;
-    let user_id = parse_u64(&user_id_str)?;
+        .ok_or(AppError::Unknown("expected `sub`".to_string()))?;
+    let user_id = parse_u64(user_id_str)?;
 
     let exp_str = claims
         .get("exp")
-        .ok_or(AppError::Unknown(format!("expected `exp`")))?;
+        .ok_or(AppError::Unknown("expected `exp`".to_string()))?;
     let exp = parse_u64(exp_str)?;
 
     let now_secs = now.duration_since(UNIX_EPOCH)?.as_secs();
@@ -119,7 +119,7 @@ mod tests {
 
     use crate::{
         core::auth::jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
-        util::snowflake::{LazySnowflake, Snowflake},
+        util::snowflake::Snowflake,
     };
 
     use hmac::{Hmac, Mac};

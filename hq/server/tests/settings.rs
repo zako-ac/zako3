@@ -7,7 +7,7 @@ use zako3_hq_server::feature::settings::{
 
 use crate::common::postgres::init_postgres;
 
-mod common;
+pub mod common;
 
 #[tokio::test]
 async fn test_settings_db() {
