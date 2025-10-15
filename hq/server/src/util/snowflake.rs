@@ -3,7 +3,10 @@ use std::ops::Deref;
 use bitfield_struct::bitfield;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{
+    PartialSchema, ToSchema,
+    openapi::{KnownFormat, ObjectBuilder, RefOr, Schema, SchemaFormat, Type, schema::SchemaType},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Snowflake {
@@ -49,7 +52,7 @@ struct SnowflakeBits {
     trace_id: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct LazySnowflake {
     value: u64,
@@ -91,6 +94,19 @@ impl From<Snowflake> for LazySnowflake {
         value.as_lazy()
     }
 }
+
+impl PartialSchema for LazySnowflake {
+    fn schema() -> RefOr<Schema> {
+        RefOr::T(Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(SchemaType::Type(Type::Integer))
+                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Int64)))
+                .build(),
+        ))
+    }
+}
+
+impl ToSchema for LazySnowflake {}
 
 #[cfg(test)]
 mod tests {

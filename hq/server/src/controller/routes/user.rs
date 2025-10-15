@@ -46,13 +46,14 @@ pub struct UpdateUserPermissions {
 #[utoipa::path(
     post,
     path = "/api/v1/user",
+    summary = "Create user",
     tag = "user",
     responses(
         ( status = 200, description = "Create user", body = User ),
         ( status = 401, description = "Unauthorized", body = ResponseError )
     ),
     security(
-        ("bearer" = [ "admin" ])
+        ("admin" = [])
     )
 )]
 pub async fn create_user(
@@ -81,6 +82,7 @@ pub async fn create_user(
 #[utoipa::path(
     get,
     path = "/api/v1/user/{user_id}",
+    summary = "Get user",
     tag = "user",
     params(
         ("user_id" = u64, Path, description = "ID of the user")
@@ -105,6 +107,7 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
 #[utoipa::path(
     put,
     path = "/api/v1/user/{user_id}",
+    summary = "Update user information",
     tag = "user",
     params(
         ("user_id" = u64, Path, description = "ID of the user")
@@ -115,6 +118,7 @@ pub async fn get_user(State(app): State<AppState>, Path(user_id): Path<u64>) -> 
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("owned" = [])
     )
 )]
 pub async fn update_user_public(
@@ -146,6 +150,7 @@ pub async fn update_user_public(
 #[utoipa::path(
     put,
     path = "/api/v1/user/{user_id}/permissions",
+    summary = "Update user permissions",
     tag = "user",
     params(
         ("user_id" = u64, Path, description = "ID of the user")
@@ -156,6 +161,7 @@ pub async fn update_user_public(
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("admin" = [])
     )
 )]
 pub async fn update_user_permissions(
@@ -187,6 +193,7 @@ pub async fn update_user_permissions(
 #[utoipa::path(
     delete,
     path = "/api/v1/user/{user_id}",
+    summary = "Delete user",
     tag = "user",
     params(
         ("user_id" = u64, Path, description = "ID of the user")
@@ -197,6 +204,7 @@ pub async fn update_user_permissions(
         ( status = 404, description = "User not found" ),
     ),
     security(
+        ("owned" = [])
     )
 )]
 pub async fn delete_user(
