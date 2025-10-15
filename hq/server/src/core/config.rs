@@ -7,6 +7,8 @@ use crate::core::auth::types::JwtConfig;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub jwt: JwtConfig,
+    pub postgres_connection_string: String,
+    pub redis_connection_string: String,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +28,8 @@ pub fn load_config() -> Result<Config, LoadConfigError> {
             access_token_ttl: Duration::from_secs(load_env("HQ3_JWT_ACCESS_TOKEN_TTL_SECONDS")?),
             refresh_token_ttl: Duration::from_secs(load_env("HQ3_JWT_REFRESH_TOKEN_TTL_SECONDS")?),
         },
+        postgres_connection_string: load_env("HQ3_POSTGRES_CONNECTION_STRING")?,
+        redis_connection_string: load_env("HQ3_REDIS_CONNECTION_STRING")?,
     };
 
     Ok(conf)

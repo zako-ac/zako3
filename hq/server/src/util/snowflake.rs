@@ -2,6 +2,8 @@ use std::ops::Deref;
 
 use bitfield_struct::bitfield;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Snowflake {
@@ -47,7 +49,8 @@ struct SnowflakeBits {
     trace_id: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(transparent)]
 pub struct LazySnowflake {
     value: u64,
 }

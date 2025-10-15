@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use crate::{
     core::{
         app::AppState,
@@ -51,6 +53,7 @@ pub async fn check_permission(
     check_logic(permission, access_token, app.config.jwt, app.db).await
 }
 
+#[instrument(skip_all)]
 pub async fn check_logic(
     permission: OwnedPermission,
     access_token: String,

@@ -6,7 +6,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use sqlx::types::Json;
 use thiserror::Error;
+use utoipa::ToSchema;
 
 use crate::core::auth::error::AuthError;
 
@@ -32,6 +34,9 @@ pub enum AppError {
 
     #[error("Unauthorized: {0}")]
     Auth(#[from] AuthError),
+
+    #[error("Resource not found")]
+    NotFound,
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -42,8 +47,8 @@ impl IntoResponse for AppError {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct ResponseError {
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ResponseError {
     pub kind: String,
     pub message: String,
 }
@@ -64,6 +69,16 @@ fn unauthorized(message: &str) -> (StatusCode, Json<ResponseError>) {
         Json(ResponseError {
             kind: "unauthorized".to_string(),
             message: message.to_string(),
+        }),
+    )
+}
+
+fn not_found() -> (StatusCode, Json<ResponseError>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ResponseError {
+            kind: "not_found".to_string(),
+            message: "Not found".to_string(),
         }),
     )
 }
@@ -99,5 +114,6 @@ fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
             tracing::warn!(event = "auth", kind = "fail", error = %error.to_string());
             unauthorized(&error.to_string())
         }
+        AppError::NotFound => not_found(),
     }
 }
