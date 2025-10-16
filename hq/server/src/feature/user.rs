@@ -1,4 +1,6 @@
 pub mod repository;
+pub mod service;
+pub mod types;
 
 use serde::Serialize;
 use utoipa::ToSchema;

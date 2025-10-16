@@ -16,7 +16,7 @@ use sqlx::{QueryBuilder, Row};
 
 #[async_trait]
 impl UserRepository for PostgresDb {
-    async fn create_user(&self, data: &User) -> AppResult<()> {
+    async fn create_user(&self, data: User) -> AppResult<()> {
         let query = sqlx::query("INSERT INTO users (id, name, permissions) VALUES ($1, $2, $3)")
             .bind(*data.id as i64)
             .bind(&data.name)
@@ -27,7 +27,7 @@ impl UserRepository for PostgresDb {
         Ok(())
     }
 
-    async fn update_user(&self, id: LazySnowflake, data: &UpdateUser) -> AppResult<()> {
+    async fn update_user(&self, id: LazySnowflake, data: UpdateUser) -> AppResult<()> {
         let mut qb = QueryBuilder::new("UPDATE users SET ");
 
         let mut separated = false;

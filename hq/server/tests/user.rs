@@ -24,7 +24,7 @@ async fn db_user_crud() {
     };
 
     {
-        db.create_user(&ident).await.unwrap();
+        db.create_user(ident.clone()).await.unwrap();
         let ident_found = db.find_user(id.as_lazy()).await.unwrap().unwrap();
         assert_eq!(ident_found, ident);
     }
@@ -32,7 +32,7 @@ async fn db_user_crud() {
     {
         db.update_user(
             id.as_lazy(),
-            &UpdateUser {
+            UpdateUser {
                 permissions: Some(PermissionFlags::empty()),
                 ..Default::default()
             },

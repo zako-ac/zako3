@@ -143,7 +143,7 @@ fn check_jwt_pure(
 
     let now_secs = now.duration_since(UNIX_EPOCH)?.as_secs();
 
-    if now_secs > exp {
+    if now_secs >= exp {
         return Err(AppError::Auth(AuthError::ExpiredAccessToken));
     }
 

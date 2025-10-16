@@ -1,6 +1,7 @@
 use zako3_hq_server::{
     controller::router::create_router,
     core::{app::AppState, config::load_config},
+    feature::service::Service,
     infrastructure::{
         postgres::{connect_postgres, migrate_postgres},
         redis::RedisDb,
@@ -30,8 +31,11 @@ async fn main() -> anyhow::Result<()> {
 
     let app = AppState {
         config: config.clone(),
-        db,
-        redis,
+        service: Service {
+            config_repo: config.clone(),
+            token_repo: redis.clone(),
+            user_repo: db.clone(),
+        },
     };
 
     let router = create_router(app);

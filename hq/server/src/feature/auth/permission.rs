@@ -4,7 +4,7 @@ use crate::{
     core::app::AppState,
     feature::{
         auth::{error::AuthError, jwt::check_access_token, types::JwtConfig},
-        user::{User, repository::UserRepository},
+        user::{User, service::UserService},
     },
     util::{error::AppResult, permission::PermissionFlags, snowflake::LazySnowflake},
 };
@@ -48,7 +48,7 @@ pub async fn check_permission(
     app: &AppState,
 ) -> AppResult<()> {
     let app = app.clone();
-    check_logic(permission, access_token, app.config.jwt, app.db).await
+    check_logic(permission, access_token, app.config.jwt, app.service).await
 }
 
 #[instrument(skip_all)]
@@ -56,7 +56,7 @@ pub async fn check_logic(
     permission: OwnedPermission,
     access_token: String,
     config: JwtConfig,
-    repo: impl UserRepository,
+    repo: impl UserService,
 ) -> AppResult<()> {
     match permission {
         OwnedPermission::Public => Ok(()),
@@ -64,7 +64,7 @@ pub async fn check_logic(
             let user_id = check_access_token(config, access_token)?;
 
             let user = repo
-                .find_user(user_id)
+                .get_user(user_id)
                 .await?
                 .ok_or(AuthError::UserNotExists)?;
 
@@ -79,13 +79,16 @@ mod tests {
     use mockall::predicate::eq;
 
     use crate::{
-        feature::auth::{
-            error::AuthError,
-            jwt::sign_jwt_testing,
-            permission::{OwnedPermission, check_logic, check_logic_non_public},
-            types::JwtConfig,
+        feature::{
+            auth::{
+                error::AuthError,
+                jwt::sign_jwt_testing,
+                permission::{OwnedPermission, check_logic, check_logic_non_public},
+                types::JwtConfig,
+            },
+            service::MockServiceRepository,
+            user::User,
         },
-        feature::user::{User, repository::MockUserRepository},
         util::{
             error::AppError,
             permission::PermissionFlags,
@@ -97,24 +100,25 @@ mod tests {
     async fn check_logic_admin_only_success() {
         let config = JwtConfig::default_testing();
 
-        let mut user_repo = MockUserRepository::new();
-
         let user_id = LazySnowflake::from(12);
-
-        user_repo
-            .expect_find_user()
-            .with(eq(user_id))
-            .returning(|_| {
-                Ok(Some(User {
-                    id: LazySnowflake::from(12),
-                    name: None,
-                    permissions: PermissionFlags::Admin,
-                }))
-            });
 
         let token = sign_jwt_testing(config.clone(), user_id);
 
-        let r = check_logic(OwnedPermission::AdminOnly, token, config, user_repo).await;
+        let service = MockServiceRepository::modified_service(|mut s| {
+            s.user_repo
+                .expect_find_user()
+                .with(eq(user_id))
+                .returning(|_| {
+                    Ok(Some(User {
+                        id: LazySnowflake::from(12),
+                        name: None,
+                        permissions: PermissionFlags::Admin,
+                    }))
+                });
+            s
+        });
+
+        let r = check_logic(OwnedPermission::AdminOnly, token, config, service).await;
         assert!(r.is_ok())
     }
 
@@ -122,24 +126,25 @@ mod tests {
     async fn check_logic_admin_only_fail() {
         let config = JwtConfig::default_testing();
 
-        let mut user_repo = MockUserRepository::new();
-
         let user_id = LazySnowflake::from(12);
 
-        user_repo
-            .expect_find_user()
-            .with(eq(user_id))
-            .returning(|_| {
-                Ok(Some(User {
-                    id: LazySnowflake::from(12),
-                    name: None,
-                    permissions: PermissionFlags::BaseUser,
-                }))
-            });
+        let service = MockServiceRepository::modified_service(|mut s| {
+            s.user_repo
+                .expect_find_user()
+                .with(eq(user_id))
+                .returning(|_| {
+                    Ok(Some(User {
+                        id: LazySnowflake::from(12),
+                        name: None,
+                        permissions: PermissionFlags::BaseUser,
+                    }))
+                });
+            s
+        });
 
         let token = sign_jwt_testing(config.clone(), user_id);
 
-        let r = check_logic(OwnedPermission::AdminOnly, token, config, user_repo).await;
+        let r = check_logic(OwnedPermission::AdminOnly, token, config, service).await;
         assert!(matches!(
             r,
             Err(AppError::Auth(AuthError::InsufficientPrevileges))
@@ -150,15 +155,16 @@ mod tests {
     async fn check_logic_user_invalid_fail() {
         let config = JwtConfig::default_testing();
 
-        let mut user_repo = MockUserRepository::new();
+        let service = MockServiceRepository::modified_service(|mut s| {
+            s.user_repo.expect_find_user().returning(|_| Ok(None));
+            s
+        });
 
         let user_id = LazySnowflake::from(13);
 
-        user_repo.expect_find_user().returning(|_| Ok(None));
-
         let token = sign_jwt_testing(config.clone(), user_id);
 
-        let r = check_logic(OwnedPermission::AdminOnly, token, config, user_repo).await;
+        let r = check_logic(OwnedPermission::AdminOnly, token, config, service).await;
         assert!(matches!(r, Err(AppError::Auth(AuthError::UserNotExists))));
     }
 
