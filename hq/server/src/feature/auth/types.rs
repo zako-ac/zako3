@@ -3,6 +3,8 @@ use std::time::Duration;
 use hmac::Hmac;
 use sha2::Sha256;
 
+use crate::util::snowflake::LazySnowflake;
+
 pub type AccessToken = String;
 pub type RefreshToken = String;
 
@@ -17,6 +19,12 @@ pub struct JwtConfig {
     pub secret: Hmac<Sha256>,
     pub access_token_ttl: Duration,
     pub refresh_token_ttl: Duration,
+}
+
+#[derive(Clone, Debug)]
+pub struct RefreshTokenMeta {
+    pub user_id: LazySnowflake,
+    pub refresh_token_id: LazySnowflake,
 }
 
 #[cfg(test)]

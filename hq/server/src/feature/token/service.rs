@@ -28,15 +28,16 @@ where
     S: ServiceRepository,
 {
     async fn refresh_user_token(&self, refresh_token: &str) -> AppResult<JwtPair> {
-        let check_result = check_refresh_token(self.config.jwt.clone(), refresh_token.to_string())?;
+        let given_refresh_token =
+            check_refresh_token(self.config.jwt.clone(), refresh_token.to_string())?;
 
         let user_id = self
             .token_repo
-            .get_refresh_token_user(check_result.refresh_token_id)
+            .get_refresh_token_user(given_refresh_token.refresh_token_id)
             .await?;
 
         if let Some(user_id) = user_id {
-            if check_result.user_id == user_id {
+            if given_refresh_token.user_id == user_id {
                 // 1
                 let sign_result = sign_jwt(self.config.jwt.clone(), user_id)?;
 
@@ -50,7 +51,7 @@ where
 
                 // 2
                 self.token_repo
-                    .delete_refresh_token_user(check_result.refresh_token_id)
+                    .delete_refresh_token_user(given_refresh_token.refresh_token_id)
                     .await?;
 
                 // 3

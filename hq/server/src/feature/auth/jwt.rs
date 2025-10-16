@@ -6,22 +6,19 @@ use std::{
 use jwt::{SignWithKey, VerifyWithKey};
 
 use crate::{
-    feature::auth::{
-        error::AuthError,
-        types::{JwtConfig, JwtPair},
+    feature::{
+        auth::{
+            error::AuthError,
+            types::{JwtConfig, JwtPair, RefreshTokenMeta},
+        },
+        token::repository::TokenRepository,
     },
-    feature::token::repository::TokenRepository,
     util::{
         error::{AppError, AppResult},
         parse::parse_u64,
         snowflake::{LazySnowflake, Snowflake},
     },
 };
-
-pub struct RefreshTokenCheckResult {
-    pub user_id: LazySnowflake,
-    pub refresh_token_id: LazySnowflake,
-}
 
 pub struct SignJwtResult {
     pub pair: JwtPair,
@@ -45,14 +42,14 @@ pub fn check_access_token(config: JwtConfig, access_token: String) -> AppResult<
 pub fn check_refresh_token(
     config: JwtConfig,
     refresh_token: String,
-) -> AppResult<RefreshTokenCheckResult> {
+) -> AppResult<RefreshTokenMeta> {
     let r = check_jwt_pure(config, SystemTime::now(), refresh_token)?;
 
     let refresh_id = r
         .refresh_token_id
         .ok_or(AppError::Auth(AuthError::InvalidRefreshToken))?;
 
-    Ok(RefreshTokenCheckResult {
+    Ok(RefreshTokenMeta {
         user_id: r.user_id,
         refresh_token_id: refresh_id,
     })
