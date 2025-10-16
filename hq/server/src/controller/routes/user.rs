@@ -6,48 +6,32 @@ use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
 };
-use serde::Deserialize;
 
 use crate::{
     controller::helper::{
         AppOkResponse, AppResponse, OkResponse, into_app_response, ok_app_response,
     },
-    core::{
-        app::AppState,
+    core::app::AppState,
+    feature::{
         auth::permission::{OwnedPermission, check_permission},
-    },
-    feature::user::{
-        User,
-        repository::{UpdateUser, UserRepository},
+        user::{
+            User,
+            service::UserService,
+            types::{CreateUser, UpdateUserInfo, UpdateUserPermissions},
+        },
     },
     util::{
         error::{AppError, ResponseError},
-        permission::PermissionFlags,
-        snowflake::{LazySnowflake, Snowflake},
+        snowflake::LazySnowflake,
     },
 };
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct CreateUser {
-    pub name: Option<String>,
-    pub permissions: PermissionFlags,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct UpdateUserName {
-    pub name: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct UpdateUserPermissions {
-    pub permissions: PermissionFlags,
-}
 
 #[utoipa::path(
     post,
     path = "/api/v1/user",
     summary = "Create user",
     tag = "user",
+    request_body = CreateUser,
     responses(
         ( status = 200, description = "Create user", body = User ),
         ( status = 401, description = "Unauthorized", body = ResponseError )
@@ -68,13 +52,7 @@ pub async fn create_user(
     )
     .await?;
 
-    let user = User {
-        id: Snowflake::new_now().as_lazy(),
-        name: create_user.name,
-        permissions: create_user.permissions,
-    };
-
-    app.db.create_user(&user).await?;
+    let user = app.service.create_user(create_user).await?;
 
     into_app_response(user)
 }
@@ -98,7 +76,7 @@ pub async fn get_user(
     State(app): State<AppState>,
     Path(user_id): Path<LazySnowflake>,
 ) -> AppResponse<User> {
-    let user = app.db.find_user(user_id).await?;
+    let user = app.service.get_user(user_id).await?;
 
     if let Some(user) = user {
         into_app_response(user)
@@ -115,6 +93,7 @@ pub async fn get_user(
     params(
         ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
+    request_body = UpdateUserInfo,
     responses(
         ( status = 200, description = "User is updated", body = inline(OkResponse) ),
         ( status = 401, description = "Unauthorized", body = ResponseError ),
@@ -128,7 +107,7 @@ pub async fn update_user_public(
     State(app): State<AppState>,
     TypedHeader(access_token): TypedHeader<Authorization<Bearer>>,
     Path(user_id): Path<LazySnowflake>,
-    Json(update): Json<UpdateUserName>,
+    Json(update): Json<UpdateUserInfo>,
 ) -> AppOkResponse {
     check_permission(
         OwnedPermission::OwnerOnly(user_id),
@@ -137,15 +116,7 @@ pub async fn update_user_public(
     )
     .await?;
 
-    app.db
-        .update_user(
-            user_id,
-            &UpdateUser {
-                name: Some(update.name),
-                permissions: None,
-            },
-        )
-        .await?;
+    app.service.update_user_information(user_id, update).await?;
 
     ok_app_response()
 }
@@ -155,6 +126,7 @@ pub async fn update_user_public(
     path = "/api/v1/user/{user_id}/permissions",
     summary = "Update user permissions",
     tag = "user",
+    request_body = UpdateUserPermissions,
     params(
         ("user_id" = LazySnowflake, Path, description = "ID of the user")
     ),
@@ -180,15 +152,7 @@ pub async fn update_user_permissions(
     )
     .await?;
 
-    app.db
-        .update_user(
-            user_id,
-            &UpdateUser {
-                name: None,
-                permissions: Some(update.permissions),
-            },
-        )
-        .await?;
+    app.service.update_user_permissions(user_id, update).await?;
 
     ok_app_response()
 }
@@ -222,7 +186,7 @@ pub async fn delete_user(
     )
     .await?;
 
-    app.db.delete_user(user_id).await?;
+    app.service.delete_user(user_id).await?;
 
     ok_app_response()
 }

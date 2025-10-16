@@ -4,6 +4,7 @@ use crate::feature::settings::{scope::Field, types::QueuePolicy};
 
 pub mod repository;
 pub mod scope;
+pub mod service;
 pub mod types;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

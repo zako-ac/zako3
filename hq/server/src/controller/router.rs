@@ -4,7 +4,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    controller::{api::ApiDoc, routes::user::*},
+    controller::{
+        api::ApiDoc,
+        routes::{auth::*, user::*},
+    },
     core::app::AppState,
 };
 
@@ -31,7 +34,8 @@ fn create_split_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
             update_user_public,
             delete_user
         ))
-        .routes(routes!(update_user_permissions,))
+        .routes(routes!(update_user_permissions))
+        .routes(routes!(refresh_refresh_token))
         .split_for_parts();
 
     (router, openapi)

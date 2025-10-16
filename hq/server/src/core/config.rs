@@ -2,7 +2,7 @@ use std::{env, error::Error, fmt::Display, str::FromStr, time::Duration};
 
 use hmac::{Hmac, Mac};
 
-use crate::core::auth::types::JwtConfig;
+use crate::feature::auth::types::JwtConfig;
 
 #[derive(Clone, Debug)]
 pub struct Config {

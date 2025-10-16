@@ -5,14 +5,17 @@ pub enum AuthError {
     #[error("unknown auth error: {0}")]
     Unknown(String),
 
-    #[error("expred access token")]
+    #[error("expired access token")]
     ExpiredAccessToken,
+
+    #[error("invalid refresh token")]
+    InvalidRefreshToken,
 
     #[error("user not exists")]
     UserNotExists,
 
-    #[error("insufficient previleges")]
-    InsufficientPrevileges,
+    #[error("insufficient privileges")]
+    InsufficientPrivileges,
 
     #[error("you are not allowed to use the service")]
     NotAllowedService,

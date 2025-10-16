@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use mockall::automock;
 
 use crate::util::{error::AppResult, snowflake::LazySnowflake};
 
+#[automock]
 #[async_trait]
-pub trait TokenRepository {
+pub trait TokenRepository: Send + Sync {
     async fn add_refresh_token_user(
         &self,
         token_id: LazySnowflake,

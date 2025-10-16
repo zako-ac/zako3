@@ -14,12 +14,12 @@ pub struct UpdateUser {
 
 #[automock]
 #[async_trait]
-pub trait UserRepository {
+pub trait UserRepository: Send + Sync {
     async fn find_user(&self, id: LazySnowflake) -> AppResult<Option<User>>;
 
-    async fn create_user(&self, data: &User) -> AppResult<()>;
+    async fn create_user(&self, data: User) -> AppResult<()>;
 
-    async fn update_user(&self, id: LazySnowflake, data: &UpdateUser) -> AppResult<()>;
+    async fn update_user(&self, id: LazySnowflake, data: UpdateUser) -> AppResult<()>;
 
     async fn delete_user(&self, id: LazySnowflake) -> AppResult<()>;
 }
