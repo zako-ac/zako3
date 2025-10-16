@@ -23,7 +23,7 @@ fn check_logic_non_public(permission: OwnedPermission, user: User) -> AppResult<
             if user.permissions.contains(PermissionFlags::Admin) {
                 Ok(())
             } else {
-                Err(AuthError::InsufficientPrevileges.into())
+                Err(AuthError::InsufficientPrivileges.into())
             }
         }
         OwnedPermission::OwnerOnly(owner_id) => {
@@ -31,7 +31,7 @@ fn check_logic_non_public(permission: OwnedPermission, user: User) -> AppResult<
                 if user.id == owner_id || user.permissions.contains(PermissionFlags::Admin) {
                     Ok(())
                 } else {
-                    Err(AuthError::InsufficientPrevileges.into())
+                    Err(AuthError::InsufficientPrivileges.into())
                 }
             } else if user.permissions.contains(PermissionFlags::Admin) {
                 Ok(())
@@ -147,7 +147,7 @@ mod tests {
         let r = check_logic(OwnedPermission::AdminOnly, token, config, service).await;
         assert!(matches!(
             r,
-            Err(AppError::Auth(AuthError::InsufficientPrevileges))
+            Err(AppError::Auth(AuthError::InsufficientPrivileges))
         ));
     }
 
@@ -195,7 +195,7 @@ mod tests {
 
         assert!(matches!(
             r,
-            Err(AppError::Auth(AuthError::InsufficientPrevileges))
+            Err(AppError::Auth(AuthError::InsufficientPrivileges))
         ));
     }
 
@@ -257,7 +257,7 @@ mod tests {
 
         assert!(matches!(
             r,
-            Err(AppError::Auth(AuthError::InsufficientPrevileges))
+            Err(AppError::Auth(AuthError::InsufficientPrivileges))
         ));
     }
 }

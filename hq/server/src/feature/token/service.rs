@@ -60,10 +60,10 @@ where
                 // 3
                 Ok(sign_result.pair)
             } else {
-                Err(AppError::Auth(AuthError::InsufficientPrevileges))
+                Err(AppError::Auth(AuthError::InsufficientPrivileges))
             }
         } else {
-            Err(AppError::Auth(AuthError::InsufficientPrevileges))
+            Err(AppError::Auth(AuthError::InsufficientPrivileges))
         }
     }
 }
