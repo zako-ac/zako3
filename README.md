@@ -9,6 +9,8 @@
 
 ---
 
+## Extra Documents
+- [Project Plan](/docs/en/project.md)
 
 ## What is Zako?
 **Zako** is basically a combination of Discord music bot and TTS bot. It serves various audio tracks to Discord voice channels.
