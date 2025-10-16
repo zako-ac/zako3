@@ -1,11 +1,11 @@
 use tracing::instrument;
 
 use crate::{
-    core::{
-        app::AppState,
-        auth::{error::AuthError, jwt::check_jwt, types::JwtConfig},
+    core::app::AppState,
+    feature::{
+        auth::{error::AuthError, jwt::check_access_token, types::JwtConfig},
+        user::{User, repository::UserRepository},
     },
-    feature::user::{User, repository::UserRepository},
     util::{error::AppResult, permission::PermissionFlags, snowflake::LazySnowflake},
 };
 
@@ -61,7 +61,7 @@ pub async fn check_logic(
     match permission {
         OwnedPermission::Public => Ok(()),
         OwnedPermission::AdminOnly | OwnedPermission::OwnerOnly(_) => {
-            let user_id = check_jwt(config, access_token)?.ok_or(AuthError::ExpiredAccessToken)?;
+            let user_id = check_access_token(config, access_token)?;
 
             let user = repo
                 .find_user(user_id)
@@ -79,7 +79,7 @@ mod tests {
     use mockall::predicate::eq;
 
     use crate::{
-        core::auth::{
+        feature::auth::{
             error::AuthError,
             jwt::sign_jwt_testing,
             permission::{OwnedPermission, check_logic, check_logic_non_public},

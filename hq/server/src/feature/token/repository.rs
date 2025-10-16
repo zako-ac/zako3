@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use crate::util::{error::AppResult, snowflake::LazySnowflake};
 
 #[async_trait]
-pub trait TokenRepository {
+pub trait TokenRepository: Send + Sync {
     async fn add_refresh_token_user(
         &self,
         token_id: LazySnowflake,

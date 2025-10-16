@@ -18,21 +18,14 @@ use crate::{
     },
 };
 
-pub async fn generate_jwt(
-    token_repository: impl TokenRepository,
-    config: JwtConfig,
-    user_id: LazySnowflake,
-) -> AppResult<JwtPair> {
-    let refresh_token_id = Snowflake::new_now().as_lazy();
-    let now = SystemTime::now();
+pub struct RefreshTokenCheckResult {
+    pub user_id: LazySnowflake,
+    pub refresh_token_id: LazySnowflake,
+}
 
-    let jwt = sign_jwt_pure(config.clone(), now, refresh_token_id, user_id)?;
-
-    token_repository
-        .add_refresh_token_user(refresh_token_id, user_id, config.refresh_token_ttl)
-        .await?;
-
-    Ok(jwt)
+pub struct SignJwtResult {
+    pub pair: JwtPair,
+    pub refresh_token_id: LazySnowflake,
 }
 
 /// Check JWT
@@ -44,11 +37,11 @@ pub fn check_access_token(config: JwtConfig, access_token: String) -> AppResult<
     Ok(check_jwt_pure(config, SystemTime::now(), access_token)?.user_id)
 }
 
-pub struct RefreshTokenCheckResult {
-    pub user_id: LazySnowflake,
-    pub refresh_token_id: LazySnowflake,
-}
-
+/// Check refresh token.
+///
+/// ## Note
+///
+/// This does NOT check DB!
 pub fn check_refresh_token(
     config: JwtConfig,
     refresh_token: String,
@@ -72,6 +65,18 @@ pub async fn revoke_refresh_token(
     token_repository
         .delete_refresh_token_user(refresh_token_id)
         .await
+}
+
+pub fn sign_jwt(config: JwtConfig, user_id: LazySnowflake) -> AppResult<SignJwtResult> {
+    let now = SystemTime::now();
+    let refresh_token_id = Snowflake::new_now().as_lazy();
+
+    let pair = sign_jwt_pure(config, now, refresh_token_id, user_id)?;
+
+    Ok(SignJwtResult {
+        pair,
+        refresh_token_id,
+    })
 }
 
 pub(super) fn sign_jwt_pure(

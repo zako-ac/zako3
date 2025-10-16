@@ -25,7 +25,7 @@ mod tests {
 
     use hmac::{Hmac, Mac};
 
-    use crate::core::auth::types::JwtConfig;
+    use crate::feature::auth::types::JwtConfig;
 
     impl JwtConfig {
         pub fn default_testing() -> Self {

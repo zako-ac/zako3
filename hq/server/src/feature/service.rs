@@ -1,6 +1,6 @@
 use crate::{core::config::Config, feature::token::repository::TokenRepository};
 
-pub trait ServiceRepository {
+pub trait ServiceRepository: Send + Sync {
     type TokenRepository: TokenRepository;
 }
 
