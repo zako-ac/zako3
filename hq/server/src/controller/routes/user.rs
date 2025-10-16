@@ -12,10 +12,8 @@ use crate::{
     controller::helper::{
         AppOkResponse, AppResponse, OkResponse, into_app_response, ok_app_response,
     },
-    core::{
-        app::AppState,
-        auth::permission::{OwnedPermission, check_permission},
-    },
+    core::app::AppState,
+    feature::auth::permission::{OwnedPermission, check_permission},
     feature::user::{
         User,
         repository::{UpdateUser, UserRepository},

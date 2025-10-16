@@ -8,6 +8,9 @@ pub enum AuthError {
     #[error("expred access token")]
     ExpiredAccessToken,
 
+    #[error("invalid refresh token")]
+    InvalidRefreshToken,
+
     #[error("user not exists")]
     UserNotExists,
 

@@ -6,7 +6,10 @@ use std::{
 use jwt::{SignWithKey, VerifyWithKey};
 
 use crate::{
-    core::auth::types::{JwtConfig, JwtPair},
+    feature::auth::{
+        error::AuthError,
+        types::{JwtConfig, JwtPair},
+    },
     feature::token::repository::TokenRepository,
     util::{
         error::{AppError, AppResult},
@@ -32,8 +35,34 @@ pub async fn generate_jwt(
     Ok(jwt)
 }
 
-pub fn check_jwt(config: JwtConfig, access_token: String) -> AppResult<Option<LazySnowflake>> {
-    check_jwt_pure(config, SystemTime::now(), access_token)
+/// Check JWT
+///
+/// # Returns
+///
+/// User ID
+pub fn check_access_token(config: JwtConfig, access_token: String) -> AppResult<LazySnowflake> {
+    Ok(check_jwt_pure(config, SystemTime::now(), access_token)?.user_id)
+}
+
+pub struct RefreshTokenCheckResult {
+    pub user_id: LazySnowflake,
+    pub refresh_token_id: LazySnowflake,
+}
+
+pub fn check_refresh_token(
+    config: JwtConfig,
+    refresh_token: String,
+) -> AppResult<RefreshTokenCheckResult> {
+    let r = check_jwt_pure(config, SystemTime::now(), refresh_token)?;
+
+    let refresh_id = r
+        .refresh_token_id
+        .ok_or(AppError::Auth(AuthError::InvalidRefreshToken))?;
+
+    Ok(RefreshTokenCheckResult {
+        user_id: r.user_id,
+        refresh_token_id: refresh_id,
+    })
 }
 
 pub async fn revoke_refresh_token(
@@ -87,11 +116,17 @@ fn calculate_iat_exp(now: SystemTime, ttl: Duration) -> AppResult<(u64, u64)> {
     Ok((iat_secs, exp_secs))
 }
 
+#[derive(Debug)]
+struct CheckJwtResult {
+    pub user_id: LazySnowflake,
+    pub refresh_token_id: Option<LazySnowflake>,
+}
+
 fn check_jwt_pure(
     config: JwtConfig,
     now: SystemTime,
     access_token: String,
-) -> AppResult<Option<LazySnowflake>> {
+) -> AppResult<CheckJwtResult> {
     let claims: BTreeMap<String, String> = access_token.verify_with_key(&config.secret)?;
 
     let user_id_str = claims
@@ -106,10 +141,24 @@ fn check_jwt_pure(
 
     let now_secs = now.duration_since(UNIX_EPOCH)?.as_secs();
 
-    if now_secs < exp {
-        Ok(Some(user_id.into()))
+    if now_secs > exp {
+        return Err(AppError::Auth(AuthError::ExpiredAccessToken));
+    }
+
+    let jti_str = claims.get("jti");
+
+    if let Some(jti_str) = jti_str {
+        let refresh_token_id = parse_u64(jti_str)?;
+
+        Ok(CheckJwtResult {
+            user_id: user_id.into(),
+            refresh_token_id: Some(refresh_token_id.into()),
+        })
     } else {
-        Ok(None)
+        Ok(CheckJwtResult {
+            user_id: user_id.into(),
+            refresh_token_id: None,
+        })
     }
 }
 
@@ -118,13 +167,16 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use crate::{
-        core::auth::jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
-        util::snowflake::Snowflake,
+        feature::auth::{
+            error::AuthError,
+            jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
+        },
+        util::{error::AppError, snowflake::Snowflake},
     };
 
     use hmac::{Hmac, Mac};
 
-    use crate::core::auth::types::JwtConfig;
+    use crate::feature::auth::types::JwtConfig;
 
     #[test]
     fn test_check_jwt_success() {
@@ -138,12 +190,18 @@ mod tests {
         let user_id = Snowflake::new_now().as_lazy();
 
         let jwt = sign_jwt_pure(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
-        let access_token = jwt.access_token;
 
-        let got_user_id = check_jwt_pure(config.clone(), SystemTime::now(), access_token)
-            .unwrap()
-            .unwrap();
-        assert_eq!(user_id, got_user_id);
+        {
+            let r = check_jwt_pure(config.clone(), SystemTime::now(), jwt.access_token).unwrap();
+            assert_eq!(r.user_id, user_id);
+            assert_eq!(r.refresh_token_id, None);
+        }
+
+        {
+            let r = check_jwt_pure(config.clone(), SystemTime::now(), jwt.refresh_token).unwrap();
+            assert_eq!(r.user_id, user_id);
+            assert_eq!(r.refresh_token_id, Some(refresh_id));
+        }
     }
 
     #[test]
@@ -160,9 +218,12 @@ mod tests {
         let jwt = sign_jwt_pure(config.clone(), SystemTime::now(), refresh_id, user_id).unwrap();
         let access_token = jwt.access_token;
 
-        let got_user_id = check_jwt_pure(config.clone(), SystemTime::now(), access_token).unwrap();
+        let r = check_jwt_pure(config.clone(), SystemTime::now(), access_token);
 
-        assert_eq!(got_user_id, None);
+        assert!(matches!(
+            r,
+            Err(AppError::Auth(AuthError::ExpiredAccessToken))
+        ));
     }
 
     #[test]
