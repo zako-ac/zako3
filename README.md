@@ -22,6 +22,10 @@ There are a lot of people refusing to reveal one's voice(i.e. no-mic users) in D
 - **Lack of Customizability** They let users to use only handful of TTS voices. Users cannot customize their voice.
 
 ## Contributors
+Contributors listed in the main `README.md` are the ones who influenced signifiacnt things to the growth of Zako3.
+The project is mainly developed by Minco alone nowadays. Thus, not only big code change but also just having interest in Zako provides strong motivation to Minco, which ultimately leads to active development.
+Also, it is intentional that this section is not automated. I want to show that I care every single contributors by manually updating the list every time it changes.
 - MincoMK (Discord: `@minco_rl`) - Zako
 - Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
 - ridanit_ruma (Discord: `@ruma0607`) - Translator
+- 200mill (Discord: `@200mill`) - Translator
