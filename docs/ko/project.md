@@ -1,5 +1,5 @@
 > [!NOTE]
-> 이 문서는 번역된 문서입니다. 정확한 정보가 필요하시다면 [원본](github.com/zako-ac/zako3/blob/main/docs/en/project.md)을 확인하세요
+> 이 문서는 번역된 문서입니다. 정확한 정보가 필요하시다면 [원본](http://github.com/zako-ac/zako3/blob/main/docs/en/project.md)을 확인하세요
 >
 > Zako 및 Zako3는 고유명사입니다. 각각 "자코", "자코3"으로 발음하면 됩니다.
 > 
