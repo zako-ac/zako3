@@ -18,6 +18,6 @@
 - **맞춤형 기능 부족** 사용자가 소수의 TTS 음성만 사용할 수 있도록 허용합니다. 사용자는 그들의 음성을 커스터마이징할 수 없습니다.
 
 ## 기여자
-- MincoMK (Discord: `@minco_rl`) - Zako
-- Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
+- MincoMK (Discord: `@minco_rl`) - 허접
+- Kanowara Sinoka (Discord: `@u_sinokadev`) - 많은 기능을 고안해 냈고, Zako3가 존재하기에 큰 도움을 줬습니다.
 - ridanit_ruma (Discord: `@ruma0607`) - 옮김
