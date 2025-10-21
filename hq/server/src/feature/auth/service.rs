@@ -153,31 +153,27 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_user_token_success() {
-        let jwt_config = JwtConfig::default_testing();
-
         let user_id = LazySnowflake::from(1234);
 
-        let service = mock_auth_service(jwt_config, user_id);
+        let jwt_config = JwtConfig::default_testing();
+        let service = mock_auth_service(jwt_config.clone(), user_id);
 
-        let config = JwtConfig::default_testing();
+        let r = sign_jwt(jwt_config, user_id).unwrap();
 
-        let r = sign_jwt(config, user_id).unwrap();
+        let refreshed = service.refresh_user_token(&r.pair.refresh_token).await;
 
-        let rs = service.refresh_user_token(&r.pair.refresh_token).await;
-
-        assert!(rs.is_ok());
+        assert!(refreshed.is_ok());
     }
 
     #[tokio::test]
     async fn issue_token_success() {
-        let jwt_config = JwtConfig::default_testing();
-
         let user_id = LazySnowflake::from(1234);
 
+        let jwt_config = JwtConfig::default_testing();
         let service = mock_auth_service(jwt_config, user_id);
 
-        let rs = service.issue_token(user_id).await;
+        let refreshed = service.issue_token(user_id).await;
 
-        assert!(rs.is_ok());
+        assert!(refreshed.is_ok());
     }
 }
