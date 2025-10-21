@@ -117,38 +117,58 @@ where
 mod tests {
     use crate::{
         feature::{
-            auth::{domain::jwt::sign_jwt, service::AuthService},
-            config::model::JwtConfig,
+            auth::{
+                domain::{
+                    error::AuthError,
+                    jwt::{check_access_token, sign_jwt},
+                },
+                service::AuthService,
+            },
+            config::model::{DebugConfig, JwtConfig},
             token::repository::MockTokenRepository,
         },
-        util::snowflake::LazySnowflake,
+        util::{error::AppError, password::hash_password, snowflake::LazySnowflake},
     };
 
-    fn mock_token_repository(user_id: LazySnowflake) -> MockTokenRepository {
-        let mut token_repo = MockTokenRepository::new();
-        token_repo
-            .expect_add_refresh_token_user()
-            .returning(|_, _, _| Ok(()));
-        token_repo
-            .expect_delete_refresh_token_user()
-            .returning(|_| Ok(()));
-        token_repo
-            .expect_get_refresh_token_user()
-            .returning(move |_| Ok(Some(user_id)));
+    #[tokio::test]
+    async fn success_test_login() {
+        let password = "muffin-babo";
 
-        token_repo
+        let jwt_config = JwtConfig::default_testing();
+        let service = mock_auth_service_debug_config(
+            jwt_config.clone(),
+            0.into(),
+            DebugConfig {
+                debug_password_argon2: Some(hash_password(password).unwrap()),
+            },
+        );
+
+        let login_result = service.test_login(password).await.unwrap();
+
+        let user_id = check_access_token(jwt_config, login_result.access_token).unwrap();
+        assert_eq!(*user_id, 0);
     }
 
-    fn mock_auth_service(
-        jwt_config: JwtConfig,
-        user_id: LazySnowflake,
-    ) -> AuthService<MockTokenRepository> {
-        let token_repo = mock_token_repository(user_id);
-        AuthService {
-            jwt_config,
-            token_repo,
-            debug_config: Default::default(),
-        }
+    #[tokio::test]
+    async fn fail_test_login() {
+        let password1 = "muffin-babo";
+        let password2 = "muffin-zako";
+
+        let jwt_config = JwtConfig::default_testing();
+        let service = mock_auth_service_debug_config(
+            jwt_config.clone(),
+            0.into(),
+            DebugConfig {
+                debug_password_argon2: Some(hash_password(password1).unwrap()),
+            },
+        );
+
+        let login_result = service.test_login(password2).await;
+
+        assert!(matches!(
+            login_result,
+            Err(AppError::Auth(AuthError::AttemptToLoginTestAccount))
+        ));
     }
 
     #[tokio::test]
@@ -175,5 +195,40 @@ mod tests {
         let refreshed = service.issue_token(user_id).await;
 
         assert!(refreshed.is_ok());
+    }
+
+    fn mock_token_repository(user_id: LazySnowflake) -> MockTokenRepository {
+        let mut token_repo = MockTokenRepository::new();
+        token_repo
+            .expect_add_refresh_token_user()
+            .returning(|_, _, _| Ok(()));
+        token_repo
+            .expect_delete_refresh_token_user()
+            .returning(|_| Ok(()));
+        token_repo
+            .expect_get_refresh_token_user()
+            .returning(move |_| Ok(Some(user_id)));
+
+        token_repo
+    }
+
+    fn mock_auth_service(
+        jwt_config: JwtConfig,
+        user_id: LazySnowflake,
+    ) -> AuthService<MockTokenRepository> {
+        mock_auth_service_debug_config(jwt_config, user_id, Default::default())
+    }
+
+    fn mock_auth_service_debug_config(
+        jwt_config: JwtConfig,
+        user_id: LazySnowflake,
+        debug_config: DebugConfig,
+    ) -> AuthService<MockTokenRepository> {
+        let token_repo = mock_token_repository(user_id);
+        AuthService {
+            jwt_config,
+            token_repo,
+            debug_config,
+        }
     }
 }
