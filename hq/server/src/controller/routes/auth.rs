@@ -5,10 +5,7 @@ use utoipa::ToSchema;
 use crate::{
     controller::helper::{AppResponse, into_app_response},
     core::app::AppState,
-    feature::{
-        auth::{service::AuthService, types::JwtPair},
-        token::service::TokenService,
-    },
+    feature::auth::domain::model::JwtPair,
     util::error::ResponseError,
 };
 
@@ -41,7 +38,11 @@ pub async fn refresh_refresh_token(
 ) -> AppResponse<JwtPair> {
     let refresh_token = refresh_req.refresh_token;
 
-    let refresh_result = app.service.refresh_user_token(&refresh_token).await?;
+    let refresh_result = app
+        .service
+        .auth_service
+        .refresh_user_token(&refresh_token)
+        .await?;
 
     into_app_response(refresh_result)
 }
@@ -63,7 +64,7 @@ pub async fn test_login(
     State(app): State<AppState>,
     Json(req): Json<TestLoginRequest>,
 ) -> AppResponse<JwtPair> {
-    let r = app.service.test_login(&req.password).await?;
+    let r = app.service.auth_service.test_login(&req.password).await?;
 
     into_app_response(r)
 }

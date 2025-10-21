@@ -73,7 +73,7 @@ mod tests {
             queue_policy: Field::new_important(QueuePolicy::TTS),
         };
 
-        let merged = merge_settings(&vec![s1, s2, s3, s4]).unwrap();
+        let merged = merge_settings(&[s1, s2, s3, s4]).unwrap();
         assert_eq!(merged.queue_policy.value.unwrap(), QueuePolicy::User);
     }
 
@@ -95,7 +95,7 @@ mod tests {
             queue_policy: Field::new_non_important(QueuePolicy::TTS),
         };
 
-        let merged = merge_settings(&vec![s1, s2, s3, s4]).unwrap();
+        let merged = merge_settings(&[s1, s2, s3, s4]).unwrap();
         assert_eq!(merged.queue_policy.value.unwrap(), QueuePolicy::TTS);
     }
 }

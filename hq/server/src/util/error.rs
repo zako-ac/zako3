@@ -9,7 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 
-use crate::feature::auth::error::AuthError;
+use crate::feature::auth::domain::error::AuthError;
 
 #[derive(Error, Debug)]
 pub enum AppError {

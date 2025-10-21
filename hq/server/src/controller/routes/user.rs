@@ -13,10 +13,9 @@ use crate::{
     },
     core::app::AppState,
     feature::{
-        auth::permission::{OwnedPermission, check_permission},
+        auth::domain::permission::{OwnedPermission, check_permission},
         user::{
             User,
-            service::UserService,
             types::{CreateUser, UpdateUserInfo, UpdateUserPermissions},
         },
     },
@@ -52,7 +51,7 @@ pub async fn create_user(
     )
     .await?;
 
-    let user = app.service.create_user(create_user).await?;
+    let user = app.service.user_service.create_user(create_user).await?;
 
     into_app_response(user)
 }
@@ -76,7 +75,7 @@ pub async fn get_user(
     State(app): State<AppState>,
     Path(user_id): Path<LazySnowflake>,
 ) -> AppResponse<User> {
-    let user = app.service.get_user(user_id).await?;
+    let user = app.service.user_service.get_user(user_id).await?;
 
     if let Some(user) = user {
         into_app_response(user)
@@ -116,7 +115,10 @@ pub async fn update_user_public(
     )
     .await?;
 
-    app.service.update_user_information(user_id, update).await?;
+    app.service
+        .user_service
+        .update_user_information(user_id, update)
+        .await?;
 
     ok_app_response()
 }
@@ -152,7 +154,10 @@ pub async fn update_user_permissions(
     )
     .await?;
 
-    app.service.update_user_permissions(user_id, update).await?;
+    app.service
+        .user_service
+        .update_user_permissions(user_id, update)
+        .await?;
 
     ok_app_response()
 }
@@ -186,7 +191,7 @@ pub async fn delete_user(
     )
     .await?;
 
-    app.service.delete_user(user_id).await?;
+    app.service.user_service.delete_user(user_id).await?;
 
     ok_app_response()
 }
