@@ -64,6 +64,10 @@ pub async fn revoke_refresh_token(
         .await
 }
 
+/// Signs JWT.
+///
+/// # Note
+/// This function does not store refresh token in DB.
 pub fn sign_jwt(config: JwtConfig, user_id: LazySnowflake) -> AppResult<SignJwtResult> {
     let now = SystemTime::now();
     let refresh_token_id = Snowflake::new_now().as_lazy();
