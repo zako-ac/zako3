@@ -26,3 +26,26 @@ pub fn verify_password(password: &str, hash: &str) -> AppResult<bool> {
 
     Ok(r)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::util::password::{hash_password, verify_password};
+
+    #[test]
+    fn password_hash_success() {
+        let password0 = "muffin-is-babo";
+        let password1 = "muffin-is-babo";
+
+        let hash = hash_password(password0).unwrap();
+        assert!(verify_password(password1, &hash).unwrap());
+    }
+
+    #[test]
+    fn password_hash_fail() {
+        let password0 = "muffin-is-babo";
+        let password1 = "muffin-is-zako";
+
+        let hash = hash_password(password0).unwrap();
+        assert!(!verify_password(password1, &hash).unwrap());
+    }
+}
