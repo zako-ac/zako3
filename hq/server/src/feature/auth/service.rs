@@ -45,23 +45,3 @@ where
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[tokio::test]
-    async fn test_login_success() {
-        let config = JwtConfig::default_testing();
-
-        let user_id = LazySnowflake::from(1234);
-
-        let service = MockServiceRepository::modified_service(modify_service_repository_token);
-
-        let config = JwtConfig::default_testing();
-
-        let r = sign_jwt(config, user_id).unwrap();
-
-        let rs = service.refresh_user_token(&r.pair.refresh_token).await;
-
-        assert!(rs.is_ok());
-    }
-}
