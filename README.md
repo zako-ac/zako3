@@ -29,3 +29,4 @@ Also, it is intentional that this section is not automated. I want to show that 
 - Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
 - ridanit_ruma (Discord: `@ruma0607`) - Translator
 - 200mill (Discord: `@200mill`) - Translator
+- NYANI (NYANI) - Translator
