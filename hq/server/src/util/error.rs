@@ -34,6 +34,9 @@ pub enum AppError {
     #[error("Unauthorized: {0}")]
     Auth(#[from] AuthError),
 
+    #[error("Password hash error: {0}")]
+    PasswordHash(#[from] password_hash::Error),
+
     #[error("Resource not found")]
     NotFound,
 }
@@ -112,6 +115,10 @@ fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
         AppError::Auth(error) => {
             tracing::warn!(event = "auth", kind = "fail", error = %error.to_string());
             unauthorized(&error.to_string())
+        }
+        AppError::PasswordHash(error) => {
+            tracing::warn!(event = "error", kind = "password_hash", error = %error.to_string());
+            internal_error("unknown", "internal server error")
         }
         AppError::NotFound => not_found(),
     }
