@@ -7,11 +7,11 @@ use jwt::{SignWithKey, VerifyWithKey};
 
 use crate::{
     feature::{
-        auth::{
+        auth::domain::{
             error::AuthError,
-            types::{JwtConfig, JwtPair, RefreshTokenMeta},
+            model::{JwtPair, RefreshTokenMeta},
         },
-        token::repository::TokenRepository,
+        config::model::JwtConfig,
     },
     util::{
         error::{AppError, AppResult},
@@ -55,15 +55,10 @@ pub fn check_refresh_token(
     })
 }
 
-pub async fn revoke_refresh_token(
-    token_repository: impl TokenRepository,
-    refresh_token_id: LazySnowflake,
-) -> AppResult<()> {
-    token_repository
-        .delete_refresh_token_user(refresh_token_id)
-        .await
-}
-
+/// Signs JWT.
+///
+/// # Note
+/// This function does not store refresh token in DB.
 pub fn sign_jwt(config: JwtConfig, user_id: LazySnowflake) -> AppResult<SignJwtResult> {
     let now = SystemTime::now();
     let refresh_token_id = Snowflake::new_now().as_lazy();
@@ -165,20 +160,24 @@ fn check_jwt_pure(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use crate::{
-        feature::auth::{
-            error::AuthError,
-            jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
+        feature::{
+            auth::domain::{
+                error::AuthError,
+                jwt::{calculate_iat_exp, check_jwt_pure, sign_jwt_pure},
+            },
+            config::model::JwtConfig,
         },
-        util::{error::AppError, snowflake::Snowflake},
+        util::{
+            error::AppError,
+            snowflake::{LazySnowflake, Snowflake},
+        },
     };
 
     use hmac::{Hmac, Mac};
-
-    use crate::feature::auth::types::JwtConfig;
 
     #[test]
     fn test_check_jwt_success() {
@@ -240,16 +239,15 @@ mod tests {
         assert_eq!(iat, now_secs);
         assert_eq!(exp, now_secs + 10);
     }
-}
 
-#[cfg(test)]
-pub fn sign_jwt_testing(config: JwtConfig, user_id: LazySnowflake) -> String {
-    let pair = sign_jwt_pure(
-        config,
-        SystemTime::now(),
-        Snowflake::new_now().as_lazy(),
-        user_id,
-    )
-    .unwrap();
-    pair.access_token
+    pub fn sign_jwt_testing(config: JwtConfig, user_id: LazySnowflake) -> String {
+        let pair = sign_jwt_pure(
+            config,
+            SystemTime::now(),
+            Snowflake::new_now().as_lazy(),
+            user_id,
+        )
+        .unwrap();
+        pair.access_token
+    }
 }

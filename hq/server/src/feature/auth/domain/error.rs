@@ -17,6 +17,9 @@ pub enum AuthError {
     #[error("insufficient privileges")]
     InsufficientPrivileges,
 
-    #[error("you are not allowed to use the service")]
+    #[error("attempt to login test account")]
+    AttemptToLoginTestAccount,
+
+    #[error("you are not allowed to use the service. your account is suspended")]
     NotAllowedService,
 }

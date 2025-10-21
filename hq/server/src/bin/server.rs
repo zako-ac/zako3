@@ -1,7 +1,7 @@
 use zako3_hq_server::{
     controller::router::create_router,
-    core::{app::AppState, config::load_config},
-    feature::service::Service,
+    core::app::{AppState, make_app_service},
+    feature::config::load::load_config,
     infrastructure::{
         postgres::{connect_postgres, migrate_postgres},
         redis::RedisDb,
@@ -21,26 +21,22 @@ async fn main() -> anyhow::Result<()> {
         event = "boot",
         kind = "boot",
         message = "server started on address: {}",
-        config.http_bind_address
+        config.listen.http_bind_address
     );
 
-    let db = connect_postgres(&config.postgres_connection_string).await?;
-    migrate_postgres(&db).await?;
+    let postgres = connect_postgres(&config.infra.postgres_connection_string).await?;
+    migrate_postgres(&postgres).await?;
 
-    let redis = RedisDb::connect(&config.redis_connection_string).await?;
+    let redis = RedisDb::connect(&config.infra.redis_connection_string).await?;
 
     let app = AppState {
         config: config.clone(),
-        service: Service {
-            config_repo: config.clone(),
-            token_repo: redis.clone(),
-            user_repo: db.clone(),
-        },
+        service: make_app_service(config.clone(), postgres, redis).into(),
     };
 
     let router = create_router(app);
 
-    let listener = tokio::net::TcpListener::bind(&config.http_bind_address).await?;
+    let listener = tokio::net::TcpListener::bind(&config.listen.http_bind_address).await?;
     axum::serve(listener, router).await?;
 
     Ok(())
