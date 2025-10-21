@@ -9,7 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 
-use crate::feature::auth::error::AuthError;
+use crate::feature::auth::domain::error::AuthError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -33,6 +33,9 @@ pub enum AppError {
 
     #[error("Unauthorized: {0}")]
     Auth(#[from] AuthError),
+
+    #[error("Password hash error: {0}")]
+    PasswordHash(#[from] password_hash::Error),
 
     #[error("Resource not found")]
     NotFound,
@@ -84,35 +87,25 @@ fn not_found() -> (StatusCode, Json<ResponseError>) {
 
 fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
     match app_err {
-        AppError::Unknown(message) => {
-            tracing::warn!(event = "error", kind = "unknown", %message);
+        // things that users should not see
+        AppError::Unknown(message) => unknown_response_error("unknown", message),
+        AppError::Sqlx(error) => unknown_response_error("sqlx", error),
+        AppError::SerdeJson(error) => unknown_response_error("serde_json", error),
+        AppError::Redis(error) => unknown_response_error("redis", error),
+        AppError::Time(error) => unknown_response_error("time", error),
+        AppError::Jwt(error) => unknown_response_error("jwt", error),
+        AppError::PasswordHash(error) => unknown_response_error("password_hash", error),
 
-            internal_error("unknown", "internal server error")
-        }
-        AppError::Sqlx(error) => {
-            tracing::warn!(event = "error", kind = "sqlx", error = %error.to_string());
-            internal_error("unknown", "internal server error")
-        }
-        AppError::SerdeJson(error) => {
-            tracing::warn!(event = "error", kind = "serde", error = %error.to_string());
-            internal_error("unknown", "internal server error")
-        }
-        AppError::Redis(error) => {
-            tracing::warn!(event = "error", kind = "redis", error = %error.to_string());
-            internal_error("unknown", "internal server error")
-        }
-        AppError::Time(error) => {
-            tracing::warn!(event = "error", kind = "time", error = %error.to_string());
-            internal_error("unknown", "internal server error")
-        }
-        AppError::Jwt(error) => {
-            tracing::warn!(event = "error", kind = "jwt", error = %error.to_string());
-            internal_error("unknown", "internal server error")
-        }
+        // things that users should see
         AppError::Auth(error) => {
             tracing::warn!(event = "auth", kind = "fail", error = %error.to_string());
             unauthorized(&error.to_string())
         }
         AppError::NotFound => not_found(),
     }
+}
+
+fn unknown_response_error(kind: &str, error: impl ToString) -> (StatusCode, Json<ResponseError>) {
+    tracing::warn!(event = "error", kind = %kind, error = %error.to_string());
+    internal_error("unknown", "internal server error")
 }

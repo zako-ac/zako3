@@ -1,14 +1,8 @@
-use async_trait::async_trait;
-use mockall::automock;
-
 use crate::{
-    feature::{
-        service::{Service, ServiceRepository},
-        user::{
-            User,
-            repository::{UpdateUser, UserRepository},
-            types::{CreateUser, UpdateUserInfo, UpdateUserPermissions},
-        },
+    feature::user::{
+        User,
+        repository::{UpdateUser, UserRepository},
+        types::{CreateUser, UpdateUserInfo, UpdateUserPermissions},
     },
     util::{
         error::AppResult,
@@ -16,30 +10,18 @@ use crate::{
     },
 };
 
-#[automock]
-#[async_trait]
-pub trait UserService {
-    async fn create_user(&self, data: CreateUser) -> AppResult<User>;
-    async fn get_user(&self, user_id: LazySnowflake) -> AppResult<Option<User>>;
-    async fn update_user_information(
-        &self,
-        user_id: LazySnowflake,
-        data: UpdateUserInfo,
-    ) -> AppResult<()>;
-    async fn update_user_permissions(
-        &self,
-        user_id: LazySnowflake,
-        data: UpdateUserPermissions,
-    ) -> AppResult<()>;
-    async fn delete_user(&self, user_id: LazySnowflake) -> AppResult<()>;
+pub struct UserService<UR>
+where
+    UR: UserRepository,
+{
+    pub user_repo: UR,
 }
 
-#[async_trait]
-impl<S> UserService for Service<S>
+impl<UR> UserService<UR>
 where
-    S: ServiceRepository,
+    UR: UserRepository,
 {
-    async fn create_user(&self, data: CreateUser) -> AppResult<User> {
+    pub async fn create_user(&self, data: CreateUser) -> AppResult<User> {
         let user_id = Snowflake::new_now().as_lazy();
 
         let user = User {
@@ -53,11 +35,11 @@ where
         Ok(user)
     }
 
-    async fn get_user(&self, user_id: LazySnowflake) -> AppResult<Option<User>> {
+    pub async fn get_user(&self, user_id: LazySnowflake) -> AppResult<Option<User>> {
         self.user_repo.find_user(user_id).await
     }
 
-    async fn update_user_information(
+    pub async fn update_user_information(
         &self,
         user_id: LazySnowflake,
         data: UpdateUserInfo,
@@ -73,7 +55,7 @@ where
             .await
     }
 
-    async fn update_user_permissions(
+    pub async fn update_user_permissions(
         &self,
         user_id: LazySnowflake,
         data: UpdateUserPermissions,
@@ -89,7 +71,7 @@ where
             .await
     }
 
-    async fn delete_user(&self, user_id: LazySnowflake) -> AppResult<()> {
+    pub async fn delete_user(&self, user_id: LazySnowflake) -> AppResult<()> {
         self.user_repo.delete_user(user_id).await
     }
 }

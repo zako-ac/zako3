@@ -1,4 +1,2 @@
-pub mod error;
-pub mod jwt;
-pub mod permission;
-pub mod types;
+pub mod domain;
+pub mod service;
