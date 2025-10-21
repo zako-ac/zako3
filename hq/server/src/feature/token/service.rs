@@ -12,13 +12,18 @@ use crate::{
         service::{Service, ServiceRepository},
         token::repository::TokenRepository,
     },
-    util::error::{AppError, AppResult},
+    util::{
+        error::{AppError, AppResult},
+        snowflake::LazySnowflake,
+    },
 };
 
 #[automock]
 #[async_trait]
 pub trait TokenService {
     async fn refresh_user_token(&self, refresh_token: &str) -> AppResult<JwtPair>;
+
+    async fn issue_token(&self, user_id: LazySnowflake) -> AppResult<JwtPair>;
 
     // TODO revoke
 }
@@ -28,6 +33,22 @@ impl<S> TokenService for Service<S>
 where
     S: ServiceRepository,
 {
+    async fn issue_token(&self, user_id: LazySnowflake) -> AppResult<JwtPair> {
+        let jwt_config = self.config_repo.jwt_config();
+
+        let sign_result = sign_jwt(jwt_config.clone(), user_id)?;
+
+        self.token_repo
+            .add_refresh_token_user(
+                sign_result.refresh_token_id,
+                user_id,
+                jwt_config.refresh_token_ttl,
+            )
+            .await?;
+
+        Ok(sign_result.pair)
+    }
+
     async fn refresh_user_token(&self, refresh_token: &str) -> AppResult<JwtPair> {
         let jwt_config = self.config_repo.jwt_config();
 
@@ -73,19 +94,17 @@ mod tests {
     use crate::{
         feature::{
             auth::{jwt::sign_jwt, types::JwtConfig},
-            service::MockServiceRepository,
+            service::{MockServiceRepository, Service},
             token::service::TokenService,
         },
         util::snowflake::LazySnowflake,
     };
 
-    #[tokio::test]
-    async fn refresh_user_token_success() {
-        let config = JwtConfig::default_testing();
-
-        let user_id = LazySnowflake::from(1234);
-
-        let service = MockServiceRepository::modified_service(|mut s| {
+    pub fn modify_service_repository_token(
+        user_id: LazySnowflake,
+        config: JwtConfig,
+    ) -> impl Fn(Service<MockServiceRepository>) -> Service<MockServiceRepository> {
+        move |mut s| {
             s.token_repo
                 .expect_add_refresh_token_user()
                 .returning(|_, _, _| Ok(()));
@@ -101,7 +120,18 @@ mod tests {
                 .expect_jwt_config()
                 .returning(move || config.clone());
             s
-        });
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_user_token_success() {
+        let config = JwtConfig::default_testing();
+
+        let user_id = LazySnowflake::from(1234);
+
+        let service = MockServiceRepository::modified_service(modify_service_repository_token(
+            user_id, config,
+        ));
 
         let config = JwtConfig::default_testing();
 
@@ -109,7 +139,31 @@ mod tests {
 
         let rs = service.refresh_user_token(&r.pair.refresh_token).await;
 
-        println!("{:?}", rs);
+        assert!(rs.is_ok());
+    }
+
+    #[tokio::test]
+    async fn issue_token_success() {
+        let config = JwtConfig::default_testing();
+
+        let user_id = LazySnowflake::from(1234);
+
+        let service = MockServiceRepository::modified_service(|mut s| {
+            s.token_repo
+                .expect_add_refresh_token_user()
+                .returning(|_, _, _| Ok(()));
+            s.token_repo
+                .expect_get_refresh_token_user()
+                .returning(move |_| Ok(Some(user_id)));
+
+            let config = config.clone();
+            s.config_repo
+                .expect_jwt_config()
+                .returning(move || config.clone());
+            s
+        });
+
+        let rs = service.issue_token(user_id).await;
 
         assert!(rs.is_ok());
     }

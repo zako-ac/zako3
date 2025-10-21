@@ -7,6 +7,7 @@ use crate::feature::auth::types::JwtConfig;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub jwt: JwtConfig,
+    pub debug_password_argon2: Option<String>,
     pub postgres_connection_string: String,
     pub redis_connection_string: String,
     pub http_bind_address: String,
@@ -37,6 +38,7 @@ pub fn load_config() -> Result<Config, LoadConfigError> {
             access_token_ttl: Duration::from_secs(load_env("HQ3_JWT_ACCESS_TOKEN_TTL_SECONDS")?),
             refresh_token_ttl: Duration::from_secs(load_env("HQ3_JWT_REFRESH_TOKEN_TTL_SECONDS")?),
         },
+        debug_password_argon2: load_env_optional("HQ3_DEBUG_PASSWORD_ARGON2"),
         postgres_connection_string: load_env("HQ3_POSTGRES_CONNECTION_STRING")?,
         redis_connection_string: load_env("HQ3_REDIS_CONNECTION_STRING")?,
         http_bind_address: load_env("HQ3_HTTP_BIND_ADDR")?,
@@ -63,4 +65,11 @@ where
     })?;
 
     Ok(val)
+}
+
+fn load_env_optional<T>(env_name: &str) -> Option<T>
+where
+    T: FromStr,
+{
+    load_env(env_name).ok()
 }

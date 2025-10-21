@@ -36,6 +36,7 @@ fn create_split_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
         ))
         .routes(routes!(update_user_permissions))
         .routes(routes!(refresh_refresh_token))
+        .routes(routes!(test_login))
         .split_for_parts();
 
     (router, openapi)

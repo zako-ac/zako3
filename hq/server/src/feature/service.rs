@@ -25,6 +25,15 @@ impl ServiceRepository for MockServiceRepository {
     type ConfigRepository = MockConfigRepository;
 }
 
+impl Service<MockServiceRepository> {
+    pub fn modify<F>(self, f: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        f(self)
+    }
+}
+
 impl MockServiceRepository {
     pub fn empty_service() -> Service<Self> {
         Service {
