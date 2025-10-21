@@ -1,8 +1,4 @@
-use std::time::Duration;
-
-use hmac::Hmac;
 use serde::Serialize;
-use sha2::Sha256;
 use utoipa::ToSchema;
 
 use crate::util::snowflake::LazySnowflake;
@@ -17,13 +13,6 @@ pub struct JwtPair {
 }
 
 #[derive(Clone, Debug)]
-pub struct JwtConfig {
-    pub secret: Hmac<Sha256>,
-    pub access_token_ttl: Duration,
-    pub refresh_token_ttl: Duration,
-}
-
-#[derive(Clone, Debug)]
 pub struct RefreshTokenMeta {
     pub user_id: LazySnowflake,
     pub refresh_token_id: LazySnowflake,
@@ -35,7 +24,7 @@ mod tests {
 
     use hmac::{Hmac, Mac};
 
-    use crate::feature::auth::types::JwtConfig;
+    use crate::feature::config::model::JwtConfig;
 
     impl JwtConfig {
         pub fn default_testing() -> Self {
