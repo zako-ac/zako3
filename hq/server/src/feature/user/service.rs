@@ -48,7 +48,7 @@ where
             .update_user(
                 user_id,
                 UpdateUser {
-                    name: Some(data.name),
+                    name: data.name,
                     permissions: None,
                 },
             )

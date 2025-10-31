@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 
 pub mod settings;
+pub mod tap;
 pub mod user;
 
 #[derive(Clone, Debug)]

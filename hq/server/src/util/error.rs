@@ -9,7 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 
-use crate::feature::{auth::domain::error::AuthError, user::error::UserError};
+use crate::feature::{auth::domain::error::AuthError, tap::error::TapError, user::error::UserError};
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -48,6 +48,8 @@ pub enum AppError {
 pub enum BusinessError {
     #[error("user error: {0}")]
     User(#[from] UserError),
+    #[error("tap error: {0}")]
+    Tap(#[from] TapError),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
