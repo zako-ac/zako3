@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Clone, Debug, Default)]
 pub struct UpdateUser {
-    pub name: Option<Option<String>>,
+    pub name: Option<String>,
     pub permissions: Option<PermissionFlags>,
 }
 
