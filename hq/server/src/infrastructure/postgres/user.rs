@@ -1,18 +1,31 @@
 use crate::{
     feature::user::{
         User,
+        error::UserError,
         repository::{UpdateUser, UserRepository},
     },
     infrastructure::postgres::PostgresDb,
     util::{
-        error::{AppError, AppResult},
+        error::{AppError, AppResult, BusinessError},
         permission::PermissionFlags,
         snowflake::LazySnowflake,
     },
 };
 
 use async_trait::async_trait;
-use sqlx::{QueryBuilder, Row};
+use sqlx::{QueryBuilder, Row, postgres::PgDatabaseError};
+
+fn map_user_query_error(err: sqlx::Error) -> AppError {
+    if let Some(db_err) = err.as_database_error() {
+        if let Some(pg_err) = db_err.try_downcast_ref::<PgDatabaseError>() {
+            // <table>_<field>_key
+            if pg_err.code() == "23505" && pg_err.constraint() == Some("users_name_key") {
+                return AppError::Business(BusinessError::User(UserError::DuplicateName));
+            }
+        }
+    }
+    err.into()
+}
 
 #[async_trait]
 impl UserRepository for PostgresDb {
@@ -22,7 +35,10 @@ impl UserRepository for PostgresDb {
             .bind(&data.name)
             .bind(data.permissions.bits() as i64);
 
-        query.execute(&self.pool).await?;
+        query
+            .execute(&self.pool)
+            .await
+            .map_err(map_user_query_error)?;
 
         Ok(())
     }
@@ -56,7 +72,10 @@ impl UserRepository for PostgresDb {
             qb.push(" WHERE id = ").push_bind(*id as i64);
 
             let query = qb.build();
-            let result = query.execute(&self.pool).await?;
+            let result = query
+                .execute(&self.pool)
+                .await
+                .map_err(map_user_query_error)?;
 
             if result.rows_affected() > 0 {
                 Ok(())
@@ -100,3 +119,4 @@ impl UserRepository for PostgresDb {
         }
     }
 }
+

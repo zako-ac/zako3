@@ -9,7 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 
-use crate::feature::auth::domain::error::AuthError;
+use crate::feature::{auth::domain::error::AuthError, user::error::UserError};
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -39,6 +39,15 @@ pub enum AppError {
 
     #[error("Resource not found")]
     NotFound,
+
+    #[error("business error: {0}")]
+    Business(#[from] BusinessError),
+}
+
+#[derive(Error, Debug, Clone)]
+pub enum BusinessError {
+    #[error("user error: {0}")]
+    User(#[from] UserError),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -75,6 +84,16 @@ fn unauthorized(message: &str) -> (StatusCode, Json<ResponseError>) {
     )
 }
 
+fn invalid_request(message: &str) -> (StatusCode, Json<ResponseError>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ResponseError {
+            kind: "bad_request".to_string(),
+            message: message.to_string(),
+        }),
+    )
+}
+
 fn not_found() -> (StatusCode, Json<ResponseError>) {
     (
         StatusCode::NOT_FOUND,
@@ -101,6 +120,7 @@ fn to_response_error(app_err: AppError) -> (StatusCode, Json<ResponseError>) {
             tracing::warn!(event = "auth", kind = "fail", error = %error.to_string());
             unauthorized(&error.to_string())
         }
+        AppError::Business(error) => invalid_request(&error.to_string()),
         AppError::NotFound => not_found(),
     }
 }

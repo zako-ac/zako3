@@ -1,9 +1,14 @@
 use zako3_hq_server::{
     feature::user::{
         User,
+        error::UserError,
         repository::{UpdateUser, UserRepository},
     },
-    util::{error::AppError, permission::PermissionFlags, snowflake::Snowflake},
+    util::{
+        error::{AppError, BusinessError},
+        permission::PermissionFlags,
+        snowflake::Snowflake,
+    },
 };
 
 use crate::common::postgres::init_postgres;
@@ -19,8 +24,13 @@ async fn db_user_crud() {
 
     let ident = User {
         id: id.as_lazy(),
-        name: Some("hi".into()),
+        name: "hi".into(),
         permissions: perm.clone(),
+    };
+
+    let ident1 = User {
+        id: Snowflake::new_now().as_lazy(),
+        ..ident.clone()
     };
 
     {
@@ -41,7 +51,7 @@ async fn db_user_crud() {
         .unwrap();
         let ident_found = db.find_user(id.as_lazy()).await.unwrap().unwrap();
 
-        assert_eq!(ident_found.name, Some("hi".to_string()));
+        assert_eq!(ident_found.name, "hi".to_string());
         assert_eq!(ident_found.permissions, PermissionFlags::empty());
     }
 
@@ -54,5 +64,16 @@ async fn db_user_crud() {
     {
         let r = db.delete_user(id.as_lazy()).await;
         assert!(matches!(r, Err(AppError::NotFound)));
+    }
+
+    {
+        db.create_user(ident.clone()).await.unwrap();
+        let r = db.create_user(ident1).await;
+        assert!(matches!(
+            r,
+            Err(AppError::Business(BusinessError::User(
+                UserError::DuplicateName
+            )))
+        ));
     }
 }

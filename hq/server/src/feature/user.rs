@@ -1,3 +1,4 @@
+pub mod error;
 pub mod repository;
 pub mod service;
 pub mod types;
@@ -10,6 +11,6 @@ use crate::util::{permission::PermissionFlags, snowflake::LazySnowflake};
 #[derive(Clone, Debug, PartialEq, ToSchema, Serialize)]
 pub struct User {
     pub id: LazySnowflake,
-    pub name: Option<String>,
+    pub name: String,
     pub permissions: PermissionFlags,
 }

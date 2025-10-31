@@ -117,7 +117,7 @@ mod tests {
             .returning(|_| {
                 Ok(Some(User {
                     id: LazySnowflake::from(12),
-                    name: None,
+                    name: "".to_string(),
                     permissions: PermissionFlags::Admin,
                 }))
             });
@@ -141,7 +141,7 @@ mod tests {
             .returning(|_| {
                 Ok(Some(User {
                     id: LazySnowflake::from(12),
-                    name: None,
+                    name: "".to_string(),
                     permissions: PermissionFlags::BaseUser,
                 }))
             });
@@ -178,7 +178,7 @@ mod tests {
             OwnedPermission::AdminOnly,
             User {
                 id: Snowflake::new_now().as_lazy(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::Admin,
             },
         );
@@ -192,7 +192,7 @@ mod tests {
             OwnedPermission::AdminOnly,
             User {
                 id: Snowflake::new_now().as_lazy(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::empty(),
             },
         );
@@ -209,7 +209,7 @@ mod tests {
             OwnedPermission::OwnerOnly(13.into()),
             User {
                 id: 13.into(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::BaseUser,
             },
         );
@@ -223,7 +223,7 @@ mod tests {
             OwnedPermission::OwnerOnly(13.into()),
             User {
                 id: 14.into(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::Admin,
             },
         );
@@ -237,7 +237,7 @@ mod tests {
             OwnedPermission::OwnerOnly(13.into()),
             User {
                 id: 13.into(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::empty(),
             },
         );
@@ -254,7 +254,7 @@ mod tests {
             OwnedPermission::OwnerOnly(13.into()),
             User {
                 id: 14.into(),
-                name: Some("asdf".to_string()),
+                name: "asdf".to_string(),
                 permissions: PermissionFlags::BaseUser,
             },
         );
