@@ -23,13 +23,16 @@ bitfield-struct = "0.11.0"
 bitflags = { version = "2.9.4", features = ["serde"] }
 chrono = "0.4.42"
 delegate = "0.13.4"
+derive_more = { version = "2.0.1", features = ["add", "from", "into"] }
 dotenvy = { version = "0.15.7", optional = true }
 hmac = "0.12.1"
 jwt = "0.16.0"
 mockall = "0.13.1"
 password-hash = { version = "0.5.0", features = ["std"] }
+proptest = "1.9.0"
 rand = "0.9.2"
 redis = { version = "0.32.7", features = ["connection-manager", "json", "tokio-comp"] }
+regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
