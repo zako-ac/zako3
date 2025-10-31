@@ -1,17 +1,30 @@
 use crate::{
     feature::tap::{
         Tap,
+        error::TapError,
         repository::{UpdateTap, TapRepository},
     },
     infrastructure::postgres::PostgresDb,
     util::{
-        error::{AppError, AppResult},
+        error::{AppError, AppResult, BusinessError},
         snowflake::LazySnowflake,
     },
 };
 
 use async_trait::async_trait;
-use sqlx::{QueryBuilder, Row};
+use sqlx::{QueryBuilder, Row, postgres::PgDatabaseError};
+
+fn map_tap_query_error(err: sqlx::Error) -> AppError {
+    if let Some(db_err) = err.as_database_error() {
+        if let Some(pg_err) = db_err.try_downcast_ref::<PgDatabaseError>() {
+            // <table>_<field>_key
+            if pg_err.code() == "23505" && pg_err.constraint() == Some("taps_name_key") {
+                return AppError::Business(BusinessError::Tap(TapError::DuplicateName));
+            }
+        }
+    }
+    err.into()
+}
 
 #[async_trait]
 impl TapRepository for PostgresDb {
@@ -22,7 +35,8 @@ impl TapRepository for PostgresDb {
 
         query
             .execute(&self.pool)
-            .await?;
+            .await
+            .map_err(map_tap_query_error)?;
 
         Ok(())
     }
@@ -54,7 +68,8 @@ impl TapRepository for PostgresDb {
             let query = qb.build();
             let result = query
                 .execute(&self.pool)
-                .await?;
+                .await
+                .map_err(map_tap_query_error)?;
 
             if result.rows_affected() > 0 {
                 Ok(())

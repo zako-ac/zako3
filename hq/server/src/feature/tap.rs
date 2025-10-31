@@ -2,6 +2,7 @@ use derive_more::{From, Into};
 
 use crate::util::snowflake::LazySnowflake;
 
+pub mod error;
 pub mod repository;
 
 #[derive(Clone, Debug, PartialEq, From, Into)]
