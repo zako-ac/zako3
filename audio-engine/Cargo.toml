@@ -7,8 +7,9 @@ edition = "2024"
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 derive_more = { version = "2.1.1", features = ["from", "into", "from_str"] }
 lazy_static = "1.5.0"
+mockall = "0.14.0"
 parking_lot = "0.12.5"
-ringbuf = "0.4.8"
+ringbuf = { version = "0.4.8", git = "https://github.com/mincomk/ringbuf" }
 rs-snowflake = "0.6.0"
 serde = { version = "1.0.228", features = ["derive"] }
 sha2 = "0.10.9"

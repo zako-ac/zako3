@@ -1,14 +1,18 @@
 use crossbeam::channel::Sender;
-use ringbuf::traits::Consumer;
+use mockall::automock;
 use tokio::io::AsyncRead;
 
-use crate::{error::ZakoResult, types::TrackId};
+use crate::{
+    error::ZakoResult,
+    types::{BoxConsumer, TrackId},
+};
 
+#[automock]
 pub trait Decoder {
-    fn start_decoding<C: Consumer<Item = f32> + Send + 'static>(
+    fn start_decoding(
         &self,
         track_id: TrackId,
-        stream: impl AsyncRead,
+        stream: Box<dyn AsyncRead + Unpin + Send>,
         end_tx: Sender<TrackId>,
-    ) -> ZakoResult<C>;
+    ) -> ZakoResult<BoxConsumer>;
 }

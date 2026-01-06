@@ -1,7 +1,7 @@
 use crate::{
     error::ZakoResult,
     service::{DiscordService, StateService},
-    types::{ChannelId, GuildId, Session},
+    types::{ChannelId, GuildId, SessionState},
 };
 
 pub struct Controller<DS, SS>
@@ -23,10 +23,10 @@ where
             .join_voice_channel(guild_id, channel_id)
             .await?;
 
-        let session = Session {
+        let session = SessionState {
             guild_id,
             channel_id: channel_id,
-            queues: vec![],
+            queues: Default::default(),
         };
 
         self.state_service.save_session(&session).await?;

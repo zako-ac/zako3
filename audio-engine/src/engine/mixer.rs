@@ -1,33 +1,28 @@
 use crossbeam::channel::{Receiver, Sender};
-use ringbuf::traits::{Consumer, Producer};
+use mockall::automock;
+use ringbuf::traits::Consumer;
 
-use crate::{constant::BUFFER_SIZE, types::TrackId};
+use crate::{
+    constant::BUFFER_SIZE,
+    types::{BoxConsumer, BoxProducer, TrackId},
+};
 
-pub enum MixerCommand<C>
-where
-    C: Consumer<Item = f32>,
-{
-    AddSource(TrackId, C),
+pub enum MixerCommand {
+    AddSource(TrackId, BoxConsumer),
     RemoveSource(TrackId),
     SetVolume(TrackId, f32),
     HasSource(TrackId, tokio::sync::oneshot::Sender<bool>),
 }
 
-struct ManagedSource<C>
-where
-    C: Consumer<Item = f32>,
-{
+struct ManagedSource {
     track_id: TrackId,
-    consumer: C,
+    consumer: Box<dyn Consumer<Item = f32> + Send>,
     current_volume: f32,
     target_volume: f32,
 }
 
-fn mixer_thread<C>(cmd_rx: Receiver<MixerCommand<C>>, mut output: impl Producer<Item = f32>)
-where
-    C: Consumer<Item = f32> + Send,
-{
-    let mut sources: Vec<ManagedSource<C>> = Vec::new();
+fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: BoxProducer) {
+    let mut sources: Vec<ManagedSource> = Vec::new();
 
     loop {
         while let Ok(cmd) = cmd_rx.try_recv() {
@@ -74,45 +69,44 @@ where
     }
 }
 
-pub struct Mixer<C>
-where
-    C: Consumer<Item = f32> + Send,
-{
-    cmd_tx: Sender<MixerCommand<C>>,
+#[automock]
+pub trait Mixer {
+    fn add_source(&self, track_id: TrackId, consumer: BoxConsumer);
+    fn remove_source(&self, track_id: TrackId);
+    fn set_volume(&self, track_id: TrackId, volume: f32);
+    async fn has_source(&self, track_id: TrackId) -> bool;
 }
 
-pub fn create_mixer<C>(output: impl Producer<Item = f32> + Send + 'static) -> Mixer<C>
-where
-    C: Consumer<Item = f32> + Send + 'static,
-{
+pub struct ThreadMixer {
+    cmd_tx: Sender<MixerCommand>,
+}
+
+pub fn create_thread_mixer<C>(output: BoxProducer) -> ThreadMixer {
     let (cmd_tx, cmd_rx) = crossbeam::channel::unbounded();
 
     std::thread::spawn(move || {
         mixer_thread(cmd_rx, output);
     });
 
-    Mixer { cmd_tx }
+    ThreadMixer { cmd_tx }
 }
 
-impl<C> Mixer<C>
-where
-    C: Consumer<Item = f32> + Send,
-{
-    pub fn add_source(&self, track_id: TrackId, consumer: C) {
+impl Mixer for ThreadMixer {
+    fn add_source(&self, track_id: TrackId, consumer: BoxConsumer) {
         let _ = self
             .cmd_tx
             .send(MixerCommand::AddSource(track_id, consumer));
     }
 
-    pub fn remove_source(&self, track_id: TrackId) {
+    fn remove_source(&self, track_id: TrackId) {
         let _ = self.cmd_tx.send(MixerCommand::RemoveSource(track_id));
     }
 
-    pub fn set_volume(&self, track_id: TrackId, volume: f32) {
+    fn set_volume(&self, track_id: TrackId, volume: f32) {
         let _ = self.cmd_tx.send(MixerCommand::SetVolume(track_id, volume));
     }
 
-    pub async fn has_source(&self, track_id: TrackId) -> bool {
+    async fn has_source(&self, track_id: TrackId) -> bool {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         let _ = self.cmd_tx.send(MixerCommand::HasSource(track_id, resp_tx));
         resp_rx.await.unwrap_or(false)

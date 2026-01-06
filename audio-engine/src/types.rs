@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::constant::BUFFER_SIZE;
 
+pub type BoxConsumer = Box<dyn ringbuf::traits::Consumer<Item = f32> + Send>;
+pub type BoxProducer = Box<dyn ringbuf::traits::Producer<Item = f32> + Send>;
+
 pub type AudioBuffer = [f32; BUFFER_SIZE];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Serialize, Deserialize)]
