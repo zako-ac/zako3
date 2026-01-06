@@ -11,6 +11,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "README.md"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,3 +26,11 @@ jobs:
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: olix0r/cargo-action-fmt/setup@v2
+      - uses: actions/checkout@v4
+      - name: Check
+        run: cargo check -q --message-format=json | cargo-action-fmt

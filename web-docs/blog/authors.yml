@@ -1,0 +1,8 @@
+minco:
+  name: Allen Han
+  title: Project Leader
+  image_url: https://github.com/mincomk.png
+  page:
+    # customize the url of the author page at /blog/authors/<permalink>
+  socials:
+    discord: minco_rl

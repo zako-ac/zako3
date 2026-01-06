@@ -1,0 +1,9 @@
+[package]
+name = "zako3-data"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+derive_more = { version = "2.1.1", features = ["from", "into", "from_str"] }
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.17"

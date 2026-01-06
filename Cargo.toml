@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [ "crates/discord-oauth2","hq/server"]
+members = ["audio-engine","crates/discord-oauth2", "crates/zako3-data"]
 
 [profile.dev]
 incremental = false
