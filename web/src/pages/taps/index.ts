@@ -1,0 +1,5 @@
+export { TapExplorePage } from './explore'
+export { MyTapsPage } from './my-taps'
+export { CreateTapPage } from './create'
+export { TapSettingsPage } from './settings'
+export { TapStatsPage } from './stats'

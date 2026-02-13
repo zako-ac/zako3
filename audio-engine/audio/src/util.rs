@@ -1,11 +1,9 @@
-use crate::{BoxConsumer, BoxProducer, PCMReceiver, PCMSender};
+use ringbuf::{HeapRb, traits::Split};
 
-pub fn create_boxed_ringbuf_pair() -> (BoxProducer, BoxConsumer) {
-    crossbeam::channel::unbounded()
-}
+use crate::{RINGBUFFER_SIZE, RingCons, RingProd};
 
-pub fn create_async_pcm_pair() -> (PCMSender, PCMReceiver) {
-    tokio::sync::mpsc::channel(16)
+pub fn create_ringbuf_pair() -> (RingProd, RingCons) {
+    HeapRb::new(RINGBUFFER_SIZE).split()
 }
 
 pub fn async_to_sync_read<T>(async_read: T) -> std::io::Result<impl std::io::Read>
@@ -35,9 +33,4 @@ where
     });
 
     Ok(reader)
-}
-
-pub fn frame_duration(sample_rate: u32, frame_size: usize) -> std::time::Duration {
-    let secs = frame_size as f64 / sample_rate as f64;
-    std::time::Duration::from_secs_f64(secs)
 }

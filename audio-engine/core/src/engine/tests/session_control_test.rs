@@ -228,6 +228,22 @@ async fn test_stop_success() {
         .times(1)
         .return_const(());
 
+    // Get session for queue name (metrics)
+    mock_state
+        .expect_get_session()
+        .times(1)
+        .returning(move |_| {
+            let mut s = SessionState {
+                guild_id,
+                channel_id: ChannelId::from(200),
+                queues: HashMap::new(),
+            };
+            s.queues.insert(
+                QueueName::from("music".to_string()),
+                vec![create_dummy_track(100, "music")],
+            );
+            Ok(Some(s))
+        });
     // Get session (has track)
     mock_state
         .expect_get_session()
@@ -285,6 +301,17 @@ async fn test_stop_non_existent() {
         .with(eq(track_id))
         .return_const(());
 
+    // Get session for queue name (metrics) - empty, track doesn't exist
+    mock_state
+        .expect_get_session()
+        .times(1)
+        .returning(move |_| {
+            Ok(Some(SessionState {
+                guild_id,
+                channel_id: ChannelId::from(200),
+                queues: HashMap::new(),
+            }))
+        });
     // Get session (empty)
     mock_state
         .expect_get_session()

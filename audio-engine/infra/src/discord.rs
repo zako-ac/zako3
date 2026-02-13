@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serenity::all::ChannelId as SerenityChannelId;
 use songbird::Songbird;
-use songbird::input::{AsyncAdapterStream, Input, RawAdapter};
+use songbird::input::Input;
 use tracing::instrument;
 use zako3_audio_engine_core::{
     error::ZakoResult,
@@ -47,11 +47,7 @@ impl DiscordService for SongbirdDiscordService {
     }
 
     #[instrument(skip(self, stream))]
-    async fn play_audio(
-        &self,
-        guild_id: GuildId,
-        stream: RawAdapter<AsyncAdapterStream>,
-    ) -> ZakoResult<()> {
+    async fn play_audio(&self, guild_id: GuildId, stream: Input) -> ZakoResult<()> {
         tracing::info!("Playing audio in guild {:?}", guild_id);
 
         let g_id = Self::to_songbird_guild_id(guild_id);
@@ -60,10 +56,7 @@ impl DiscordService for SongbirdDiscordService {
             let mut call = call_lock.lock().await;
 
             // Create a track from the raw adapter
-            let input = Input::from(stream);
-            let track = songbird::tracks::Track::new(input);
-
-            call.play(track);
+            call.play_input(stream);
         }
 
         Ok(())

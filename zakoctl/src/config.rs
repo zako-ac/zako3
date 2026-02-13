@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -9,12 +10,16 @@ pub struct Config {
     pub current_context: String,
     #[serde(default)]
     pub contexts: Vec<Context>,
+    #[serde(default)]
+    pub aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Context {
     pub name: String,
     pub ae_addr: String,
+    #[serde(default)]
+    pub default_guild_id: Option<String>,
 }
 
 fn default_current_context() -> String {
@@ -27,8 +32,10 @@ impl Default for Config {
             current_context: "default".to_string(),
             contexts: vec![Context {
                 name: "default".to_string(),
-                ae_addr: "http://[::1]:50051".to_string(),
+                ae_addr: "http://127.0.0.1:50051".to_string(),
+                default_guild_id: None,
             }],
+            aliases: HashMap::new(),
         }
     }
 }
@@ -69,12 +76,36 @@ impl Config {
         self.contexts.iter().find(|c| c.name == name)
     }
 
-    pub fn set_context(&mut self, name: String, ae_addr: String) {
+    pub fn set_context(&mut self, name: String, ae_addr: String, default_guild_id: Option<String>) {
         if let Some(ctx) = self.contexts.iter_mut().find(|c| c.name == name) {
             ctx.ae_addr = ae_addr;
+            ctx.default_guild_id = default_guild_id;
         } else {
-            self.contexts.push(Context { name, ae_addr });
+            self.contexts.push(Context {
+                name,
+                ae_addr,
+                default_guild_id,
+            });
         }
+    }
+
+    pub fn set_alias(&mut self, key: String, value: String) {
+        self.aliases.insert(key, value);
+    }
+
+    pub fn get_alias(&self, key: &str) -> Option<&String> {
+        self.aliases.get(key)
+    }
+
+    pub fn delete_alias(&mut self, key: &str) -> Option<String> {
+        self.aliases.remove(key)
+    }
+
+    pub fn resolve_alias(&self, input: &str) -> String {
+        self.aliases
+            .get(input)
+            .cloned()
+            .unwrap_or_else(|| input.to_string())
     }
 }
 

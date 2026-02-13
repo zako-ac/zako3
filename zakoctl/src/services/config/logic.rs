@@ -22,8 +22,12 @@ pub fn handle_command(cmd: ConfigCommands) -> Result<()> {
                 println!("{} Context \"{}\" not found.", "Error:".red(), name);
             }
         }
-        ConfigSubcommands::SetContext { name, ae_addr } => {
-            config.set_context(name.clone(), ae_addr);
+        ConfigSubcommands::SetContext {
+            name,
+            ae_addr,
+            default_guild_id,
+        } => {
+            config.set_context(name.clone(), ae_addr, default_guild_id);
             config.save()?;
             println!("Context \"{}\" set.", name.green());
         }
@@ -39,6 +43,35 @@ pub fn handle_command(cmd: ConfigCommands) -> Result<()> {
                 println!("Context \"{}\" deleted.", name.green());
             } else {
                 println!("{} Context \"{}\" not found.", "Error:".red(), name);
+            }
+        }
+        ConfigSubcommands::SetAlias { key, value } => {
+            config.set_alias(key.clone(), value.clone());
+            config.save()?;
+            println!("Alias \"{}\" -> \"{}\" set.", key.green(), value);
+        }
+        ConfigSubcommands::GetAlias { key } => {
+            if let Some(value) = config.get_alias(&key) {
+                println!("{}", value);
+            } else {
+                println!("{} Alias \"{}\" not found.", "Error:".red(), key);
+            }
+        }
+        ConfigSubcommands::DeleteAlias { key } => {
+            if config.delete_alias(&key).is_some() {
+                config.save()?;
+                println!("Alias \"{}\" deleted.", key.green());
+            } else {
+                println!("{} Alias \"{}\" not found.", "Error:".red(), key);
+            }
+        }
+        ConfigSubcommands::GetAliases => {
+            if config.aliases.is_empty() {
+                println!("No aliases found.");
+            } else {
+                for (key, value) in &config.aliases {
+                    println!("{} -> {}", key.green(), value);
+                }
             }
         }
     }

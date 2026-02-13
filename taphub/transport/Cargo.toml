@@ -1,0 +1,8 @@
+[package]
+name = "zako3-taphub-transport"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quicfish = { git = "https://github.com/zako-ac/protofish-rs", version = "0.1.0" }
+typed-builder = "0.23.2"

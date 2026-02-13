@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::mpsc::Sender;
 use tracing::instrument;
+use zako3_audio_engine_audio::metrics;
+use zako3_audio_engine_types::SessionState;
 
 use crate::{
     ArcStateService, ArcTapHubService,
@@ -46,7 +48,7 @@ impl SessionControl {
         }
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn play(
         &self,
         queue_name: QueueName,
@@ -54,13 +56,11 @@ impl SessionControl {
         request: AudioRequestString,
         volume: Volume,
     ) -> ZakoResult<TrackId> {
-        tracing::debug!(
-            "Playing audio in guild {:?}, queue {:?}, tap {:?}, request {:?}, volume {:?}",
-            self.guild_id,
-            queue_name,
-            tap_name,
-            request,
-            volume
+        tracing::info!(
+            queue_name = %queue_name,
+            tap_name = %tap_name,
+            volume = %volume,
+            "Playing audio"
         );
 
         let track_id: TrackId = id_gen::generate_id();
@@ -72,6 +72,7 @@ impl SessionControl {
 
         let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
 
+        let queue_name_for_metric = queue_name.clone();
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             let track = Track {
                 track_id,
@@ -89,13 +90,16 @@ impl SessionControl {
         })
         .await?;
 
+        metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
+
         self.reconcile().await?;
 
         Ok(track_id)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn set_volume(&self, track_id: TrackId, volume: Volume) -> ZakoResult<()> {
+        tracing::debug!(track_id = %track_id, volume = %volume, "Setting volume");
         self.mixer.set_volume(track_id, volume.into());
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             if let Some(track) = session.find_track_mut(track_id) {
@@ -106,21 +110,35 @@ impl SessionControl {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn stop(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Stopping track");
+
+        let queue_name = self
+            .state_service
+            .get_session(self.guild_id)
+            .await?
+            .and_then(|s| s.find_track(track_id).map(|t| t.queue_name.clone()));
+
         self.mixer.remove_source(track_id);
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             session.remove_track(track_id);
         })
         .await?;
 
+        if let Some(qn) = queue_name {
+            metrics::record_track_lifecycle("stop", &normalize_queue_name(&qn));
+        }
+
         self.reconcile().await?;
 
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn stop_many(&self, filter: AudioStopFilter) -> ZakoResult<()> {
+        tracing::info!(filter = ?filter, "Stopping multiple tracks");
+
         let mut session = self.state_service.get_session(self.guild_id).await?;
         let track_ids = session
             .as_ref()
@@ -133,10 +151,18 @@ impl SessionControl {
             })
             .unwrap_or_default();
 
+        let stop_count = track_ids.len();
+
         for track_id in track_ids {
             self.mixer.remove_source(track_id);
 
             if let Some(session) = session.as_mut() {
+                if let Some(track) = session.find_track(track_id) {
+                    metrics::record_track_lifecycle(
+                        "stop",
+                        &normalize_queue_name(&track.queue_name),
+                    );
+                }
                 session.remove_track(track_id);
             }
         }
@@ -145,12 +171,14 @@ impl SessionControl {
             self.state_service.save_session(&session).await?;
         }
 
+        tracing::info!(count = stop_count, "Stopped tracks");
+
         self.reconcile().await?;
 
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn next_music(&self) -> ZakoResult<()> {
         let music_tracks = self
             .state_service
@@ -164,25 +192,36 @@ impl SessionControl {
             })
             .unwrap_or_default();
 
-        // two tracks: current and next
         if music_tracks.len() < 2 {
+            tracing::debug!("No next track available");
             return Ok(());
         }
 
-        let current_track_id = music_tracks[0].track_id;
+        let current_track = &music_tracks[0];
+        let current_track_id = current_track.track_id;
+        let queue_name = current_track.queue_name.clone();
+
+        tracing::info!(track_id = %current_track_id, "Skipping to next track");
+
         self.mixer.remove_source(current_track_id);
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             session.remove_track(current_track_id);
         })
         .await?;
 
+        metrics::record_track_lifecycle("skip", &normalize_queue_name(&queue_name));
+
         self.reconcile().await?;
 
         Ok(())
     }
 
-    /// Reconcile the session state with the mixer state
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn session_state(&self) -> ZakoResult<Option<SessionState>> {
+        self.state_service.get_session(self.guild_id).await
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn reconcile(&self) -> ZakoResult<()> {
         let session = self.state_service.get_session(self.guild_id).await?;
 
@@ -199,12 +238,12 @@ impl SessionControl {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn play_now(&self, track: Track) -> ZakoResult<()> {
-        tracing::debug!(
-            "Starting playback for track {:?} in guild {:?}",
-            track.track_id,
-            self.guild_id
+        tracing::info!(
+            track_id = %track.track_id,
+            queue_name = %track.queue_name,
+            "Starting playback"
         );
 
         let response = self
@@ -221,23 +260,42 @@ impl SessionControl {
             .add_source(track.track_id, consumer, self.end_tx.clone());
         self.mixer.set_volume(track.track_id, track.volume.into());
 
+        metrics::record_track_lifecycle("start", &normalize_queue_name(&track.queue_name));
+
         Ok(())
     }
 
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn handle_ended_track(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Track ended naturally");
+
+        let queue_name = self
+            .state_service
+            .get_session(self.guild_id)
+            .await?
+            .and_then(|s| s.find_track(track_id).map(|t| t.queue_name.clone()));
+
+        if let Some(qn) = &queue_name {
+            metrics::record_track_lifecycle("end", &normalize_queue_name(qn));
+        }
+
         self.stop(track_id).await?;
         self.preload_if_possible(track_id).await?;
 
         Ok(())
     }
 
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn preload_if_possible(&self, track_id: TrackId) -> ZakoResult<()> {
         let session = self.state_service.get_session(self.guild_id).await?;
 
         if let Some(session) = session {
             let queue_name = match session.find_track(track_id) {
                 Some(track) => track.queue_name.clone(),
-                None => return Ok(()),
+                None => {
+                    metrics::record_preload("miss");
+                    return Ok(());
+                }
             };
 
             let track_ids = session.get_all_track_ids_by_queue_name(&queue_name);
@@ -245,14 +303,38 @@ impl SessionControl {
                 let next_track_id = track_ids[1];
                 let next_track = session.find_track(next_track_id);
                 if let Some(track) = next_track {
-                    self.taphub_service
+                    tracing::debug!(next_track_id = %next_track_id, "Preloading next track");
+                    match self
+                        .taphub_service
                         .preload_audio(track.request.clone())
-                        .await?;
+                        .await
+                    {
+                        Ok(_) => {
+                            metrics::record_preload("hit");
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Preload failed");
+                            metrics::record_preload("error");
+                        }
+                    }
+                    return Ok(());
                 }
             }
         }
 
+        metrics::record_preload("miss");
         Ok(())
+    }
+}
+
+fn normalize_queue_name(queue_name: &QueueName) -> String {
+    let qn: String = queue_name.clone().into();
+    if qn.starts_with("tts_") {
+        "tts".to_string()
+    } else if qn.starts_with("music") {
+        "music".to_string()
+    } else {
+        "other".to_string()
     }
 }
 
@@ -287,7 +369,7 @@ pub fn create_session_control(
         let mut end_rx = end_rx;
         while let Some(track_id) = end_rx.recv().await {
             if let Err(e) = sc_clone.handle_ended_track(track_id).await {
-                tracing::warn!("Failed to handle ended track {:?}: {:?}", track_id, e);
+                tracing::warn!(track_id = %track_id, error = %e, "Failed to handle ended track");
             }
         }
     });

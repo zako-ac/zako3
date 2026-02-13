@@ -12,5 +12,6 @@ serenity = { version = "0.12", default-features = false, features = ["client", "
 songbird = "0.5.0"
 tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
+zako3-audio-engine-audio.workspace = true
 zako3-audio-engine-core.workspace = true
 zako3-audio-engine-types.workspace = true

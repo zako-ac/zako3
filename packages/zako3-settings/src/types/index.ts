@@ -1,0 +1,126 @@
+/**
+ * @fileoverview Type exports for zako3-settings.
+ */
+
+// Brand utilities
+export {
+  type Brand,
+  type Unbrand,
+  type BrandOf,
+  type BrandResult,
+  brand,
+  unbrand,
+  isBrandable,
+  makeBrandFactory,
+  makeBrandConstructor,
+} from './brand';
+
+// Identifier types - these are both types AND values with same name
+// A single `export { Name }` exports both the type and value when they share a name
+export {
+  UserId,
+  GuildId,
+  ChannelId,
+  RoleId,
+  EmojiId,
+  StickerId,
+  KeyIdentifier,
+  TapRef,
+  parseUserId,
+  parseGuildId,
+  parseChannelId,
+  parseRoleId,
+  parseEmojiId,
+  parseStickerId,
+  parseKeyIdentifier,
+  parseTapRef,
+  getKeyTab,
+  getKeyCategory,
+  getKeyName,
+  composeKeyIdentifier,
+} from './identifiers';
+
+// Result type
+export {
+  type Result,
+  type Ok,
+  type Err,
+  ok,
+  err,
+  isOk,
+  isErr,
+  unwrap,
+  unwrapOr,
+  unwrapOrElse,
+  unwrapErr,
+  map,
+  mapErr,
+  flatMap,
+  andThen,
+  all,
+  any,
+  fromPromise,
+  toPromise,
+  match,
+} from './result';
+
+// Primitive value types
+export {
+  type ValueTypeDescriptor,
+  type BooleanTypeDescriptor,
+  type IntegerTypeDescriptor,
+  type IntegerRange,
+  type StringTypeDescriptor,
+  type StringPattern,
+  type SomeOrDefault,
+  type SomeOrDefaultTypeDescriptor,
+  type ListTypeDescriptor,
+  type AnyValueTypeDescriptor,
+  booleanType,
+  integerType,
+  stringType,
+  someOrDefaultType,
+  listType,
+  useDefault,
+  useSome,
+  isDefault,
+  isSome,
+  unwrapOrDefault,
+} from './primitives';
+
+// Special value types
+export {
+  type EnumDescribable,
+  type VoiceChannelFollowingRule,
+  type VoiceChannelFollowingRuleTypeDescriptor,
+  vcFollowManual,
+  vcFollowNonEmpty,
+  voiceChannelFollowingRuleType,
+  VOICE_CHANNEL_FOLLOWING_RULE_DESCRIPTIONS,
+  type MemberFilter,
+  type MemberFilterTypeDescriptor,
+  type PermissionFlag,
+  PermissionFlags,
+  memberFilterAnyone,
+  memberFilterWithPermission,
+  memberFilterType,
+  MEMBER_FILTER_DESCRIPTIONS,
+  type TextMapping,
+  type SimpleTextMapping,
+  type RegexTextMapping,
+  simpleTextMapping,
+  regexTextMapping,
+  type EmojiMapping,
+  emojiMapping,
+  type StickerMapping,
+  stickerMapping,
+  type MappingConfig,
+  type MappingConfigTypeDescriptor,
+  emptyMappingConfig,
+  mappingConfig,
+  mergeMappingConfigs,
+  mappingConfigType,
+  type TapRefTypeDescriptor,
+  tapRefType,
+  type AnySpecialValueTypeDescriptor,
+} from './specials';

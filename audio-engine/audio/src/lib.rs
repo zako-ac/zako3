@@ -12,3 +12,5 @@ pub mod error;
 pub mod util;
 pub use util::*;
 pub mod metrics;
+
+mod speed_control;

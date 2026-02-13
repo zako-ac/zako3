@@ -1,0 +1,7 @@
+export { AdminDashboardPage } from './dashboard'
+export { AdminUsersPage } from './users'
+export { AdminUserDetailPage } from './user-detail'
+export { AdminTapsPage } from './taps'
+export { AdminTapDetailPage } from './tap-detail'
+export { AdminNotificationsPage } from './notifications'
+export { AdminVerificationsPage } from './verifications'

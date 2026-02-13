@@ -1,0 +1,108 @@
+src/pages/admin/taps.tsx:    toast.success(t('taps.report.success'))
+src/pages/admin/taps.tsx:        <h1 className="text-2xl font-semibold">{t('admin.taps.title')}</h1>
+src/pages/admin/taps.tsx:        <p className="text-muted-foreground">{t('admin.taps.subtitle')}</p>
+src/pages/admin/users.tsx:    toast.success(t('admin.users.banSuccess'))
+src/pages/admin/users.tsx:    toast.success(t('admin.users.unbanSuccess'))
+src/pages/admin/users.tsx:        ? t('admin.users.removedAdminRole')
+src/pages/admin/users.tsx:        : t('admin.users.grantedAdminRole')
+src/pages/admin/users.tsx:        <h1 className="text-2xl font-semibold">{t('admin.users.title')}</h1>
+src/pages/admin/users.tsx:        <p className="text-muted-foreground">{t('admin.users.subtitle')}</p>
+src/pages/admin/users.tsx:          placeholder={t('admin.users.searchPlaceholder')}
+src/pages/admin/users.tsx:              <TableHead>{t('admin.users.user')}</TableHead>
+src/pages/admin/users.tsx:              <TableHead>{t('admin.users.email')}</TableHead>
+src/pages/admin/users.tsx:              <TableHead>{t('admin.users.role')}</TableHead>
+src/pages/admin/users.tsx:              <TableHead>{t('admin.users.status')}</TableHead>
+src/pages/admin/users.tsx:              <TableHead>{t('admin.users.lastActive')}</TableHead>
+src/pages/admin/users.tsx:                  {t('admin.users.noUsers')}
+src/pages/admin/users.tsx:                              {t('admin.users.removeAdmin')}
+src/pages/admin/users.tsx:                              {t('admin.users.makeAdmin')}
+src/pages/admin/users.tsx:                            {t('admin.users.unban')}
+src/pages/admin/users.tsx:                            {t('admin.users.ban')}
+src/pages/admin/users.tsx:        title={t('admin.users.banConfirmTitle')}
+src/pages/admin/users.tsx:        confirmLabel={t('admin.users.ban')}
+src/pages/admin/users.tsx:        title={t('admin.users.unbanConfirmTitle')}
+src/pages/admin/users.tsx:        confirmLabel={t('admin.users.unban')}
+src/pages/admin/dashboard.tsx:        <h1 className="text-2xl font-semibold">{t('admin.dashboard')}</h1>
+src/pages/admin/dashboard.tsx:        <p className="text-muted-foreground">{t('admin.dashboardSubtitle')}</p>
+src/pages/admin/dashboard.tsx:          title={t('admin.stats.totalUsers')}
+src/pages/admin/dashboard.tsx:          title={t('admin.stats.totalTaps')}
+src/pages/admin/dashboard.tsx:          title={t('admin.stats.pendingReports')}
+src/pages/admin/dashboard.tsx:          description={t('admin.stats.requiresAttention')}
+src/pages/admin/dashboard.tsx:          title={t('admin.stats.systemHealth')}
+src/pages/admin/dashboard.tsx:          description={t('admin.stats.allSystemsOperational')}
+src/pages/admin/dashboard.tsx:            <CardTitle>{t('admin.quickActions')}</CardTitle>
+src/pages/admin/dashboard.tsx:            <CardTitle>{t('admin.recentActivity')}</CardTitle>
+src/pages/auth/login.tsx:                <CardTitle className="text-2xl">{t('auth.welcome')}</CardTitle>
+src/pages/auth/login.tsx:                <CardDescription>{t('auth.signInDescription')}</CardDescription>
+src/pages/auth/login.tsx:                    {t('auth.continueWithDiscord')}
+src/pages/auth/login.tsx:                        {t('auth.redirectAfterLogin')}
+src/components/common/confirm-dialog.tsx:            {cancelLabel || t('common.cancel')}
+src/components/common/confirm-dialog.tsx:            {isLoading ? t('common.loading') : confirmLabel || t('common.confirm')}
+src/pages/taps/explore.tsx:        toast.success(t('taps.report.success'))
+src/pages/taps/explore.tsx:                <h1 className="text-2xl font-semibold">{t('taps.explore')}</h1>
+src/pages/taps/explore.tsx:                <p className="text-muted-foreground">{t('taps.exploreDescription')}</p>
+src/components/common/search-input.tsx:        placeholder={placeholder || t('common.search')}
+src/pages/taps/my-taps.tsx:    toast.success(t('taps.deleteSuccess'))
+src/pages/taps/my-taps.tsx:            <h1 className="text-2xl font-semibold">{t('taps.myTaps')}</h1>
+src/pages/taps/my-taps.tsx:            <p className="text-muted-foreground">{t('taps.myTapsDescription')}</p>
+src/pages/taps/my-taps.tsx:          <h1 className="text-2xl font-semibold">{t('taps.myTaps')}</h1>
+src/pages/taps/my-taps.tsx:          <p className="text-muted-foreground">{t('taps.myTapsDescription')}</p>
+src/pages/taps/my-taps.tsx:            {t('taps.create')}
+src/pages/taps/my-taps.tsx:          <h3 className="text-lg font-semibold">{t('taps.noTapsOwned')}</h3>
+src/pages/taps/my-taps.tsx:          <p className="text-muted-foreground mb-4">{t('taps.createFirstDescription')}</p>
+src/pages/taps/my-taps.tsx:              {t('taps.createFirst')}
+src/pages/taps/my-taps.tsx:                    {tap.description || t('taps.noDescription')}
+src/pages/taps/my-taps.tsx:        title={t('taps.deleteConfirmTitle')}
+src/pages/taps/my-taps.tsx:        confirmLabel={t('common.delete')}
+src/pages/dashboard/index.tsx:        <p className="text-muted-foreground">{t('dashboard.subtitle')}</p>
+src/pages/dashboard/index.tsx:          title={t('dashboard.stats.myTaps')}
+src/pages/dashboard/index.tsx:          description={t('dashboard.stats.tapsOwned')}
+src/pages/dashboard/index.tsx:          title={t('dashboard.stats.totalUses')}
+src/pages/dashboard/index.tsx:          description={t('dashboard.stats.acrossTaps')}
+src/pages/dashboard/index.tsx:          title={t('dashboard.stats.activeUsers')}
+src/pages/dashboard/index.tsx:          description={t('dashboard.stats.last24h')}
+src/pages/dashboard/index.tsx:          title={t('dashboard.stats.uptime')}
+src/pages/dashboard/index.tsx:          description={t('dashboard.stats.lastMonth')}
+src/pages/dashboard/index.tsx:              <CardTitle>{t('dashboard.myTaps')}</CardTitle>
+src/pages/dashboard/index.tsx:              <CardDescription>{t('dashboard.recentTaps')}</CardDescription>
+src/pages/dashboard/index.tsx:                {t('taps.create')}
+src/pages/dashboard/index.tsx:                  {t('dashboard.noTapsYet')}
+src/pages/dashboard/index.tsx:                    {t('taps.createFirst')}
+src/pages/dashboard/index.tsx:                  <Link to={ROUTES.TAPS_MINE}>{t('common.viewAll')}</Link>
+src/pages/dashboard/index.tsx:          title={t('dashboard.recentActivity')}
+src/components/dashboard/notification-bell.tsx:          {t('notifications.title')}
+src/components/dashboard/notification-bell.tsx:              {t('notifications.noNotifications')}
+src/components/tap/report-modal.tsx:                    <DialogTitle>{t('taps.report.title')}</DialogTitle>
+src/components/tap/report-modal.tsx:                                    <FormLabel>{t('taps.report.reason')}</FormLabel>
+src/components/tap/report-modal.tsx:                                    <FormLabel>{t('taps.report.description')}</FormLabel>
+src/components/tap/report-modal.tsx:                                {t('common.cancel')}
+src/components/tap/report-modal.tsx:                                {isSubmitting ? t('common.loading') : t('taps.report.submit')}
+src/components/tap/tap-card.tsx:                                {copied ? t('common.copied') : t('common.copyToClipboard')}
+src/components/tap/tap-filters.tsx:        { value: 'music' as const, label: t('taps.roleLabels.music') },
+src/components/tap/tap-filters.tsx:        { value: 'tts' as const, label: t('taps.roleLabels.tts') },
+src/components/tap/tap-filters.tsx:        { value: 'mostUsed' as const, label: t('taps.sort.mostUsed') },
+src/components/tap/tap-filters.tsx:        { value: 'recentlyCreated' as const, label: t('taps.sort.recentlyCreated') },
+src/components/tap/tap-filters.tsx:        { value: 'alphabetical' as const, label: t('taps.sort.alphabetical') },
+src/components/tap/tap-filters.tsx:                    label={t('taps.filters.byRole')}
+src/components/tap/tap-filters.tsx:                        {t('taps.filters.accessible')}
+src/components/tap/tap-list.tsx:        title={emptyMessage || t('taps.noTaps')}
+src/components/layout/app-sidebar.tsx:      title: t('nav.dashboard'),
+src/components/layout/app-sidebar.tsx:      title: t('nav.taps'),
+src/components/layout/app-sidebar.tsx:        { title: t('nav.explore'), url: ROUTES.TAPS },
+src/components/layout/app-sidebar.tsx:        { title: t('nav.myTaps'), url: ROUTES.TAPS_MINE },
+src/components/layout/app-sidebar.tsx:        { title: t('nav.createTap'), url: ROUTES.TAPS_CREATE },
+src/components/layout/app-sidebar.tsx:          <SidebarGroupLabel>{t('nav.dashboard')}</SidebarGroupLabel>
+src/components/layout/app-sidebar.tsx:                    {t('nav.settings')}
+src/components/layout/app-sidebar.tsx:                  {t('nav.logout')}
+src/components/layout/admin-sidebar.tsx:      title: t('admin.overview'),
+src/components/layout/admin-sidebar.tsx:      title: t('nav.users'),
+src/components/layout/admin-sidebar.tsx:      title: t('nav.taps'),
+src/components/layout/admin-sidebar.tsx:      title: t('nav.notifications'),
+src/components/layout/admin-sidebar.tsx:      title: t('nav.dashboard'),
+src/components/layout/admin-sidebar.tsx:      title: t('nav.taps'),
+src/components/layout/admin-sidebar.tsx:        { title: t('nav.explore'), url: ROUTES.TAPS },
+src/components/layout/admin-sidebar.tsx:        { title: t('nav.myTaps'), url: ROUTES.TAPS_MINE },
+src/components/layout/admin-sidebar.tsx:          <SidebarGroupLabel>{t('nav.admin')}</SidebarGroupLabel>
+src/components/layout/admin-sidebar.tsx:          <SidebarGroupLabel>{t('nav.dashboard')}</SidebarGroupLabel>
+src/components/layout/admin-sidebar.tsx:                    {t('nav.settings')}
+src/components/layout/admin-sidebar.tsx:                  {t('nav.logout')}

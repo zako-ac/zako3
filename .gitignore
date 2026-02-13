@@ -200,3 +200,4 @@ cabal.project.local~
 
 .direnv
 
+*-prompt.md

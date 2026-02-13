@@ -3,14 +3,11 @@
 
 # 3rd-gen Zako system implementation.
 
-[**English**](/README.md) | [**한국어**](/docs/ko/README.md)
+[**English**](/README.md)
 
 [![CI](https://github.com/zako-ac/zako3/actions/workflows/ci.yml/badge.svg)](https://github.com/zako-ac/zako3/actions/workflows/ci.yml)
 
 ---
-
-## Extra Documents
-- [Project Plan](/docs/en/project.md)
 
 ## What is Zako?
 **Zako** is basically a combination of Discord music bot and TTS bot. It serves various audio tracks to Discord voice channels.
@@ -23,8 +20,6 @@ There are a lot of people refusing to reveal one's voice(i.e. no-mic users) in D
 
 ## Contributors
 Contributors listed in the main `README.md` are the ones who influenced signifiacnt things to the growth of Zako3.
-The project is mainly developed by Minco alone nowadays. Thus, not only big code change but also just having interest in Zako provides strong motivation to Minco, which ultimately leads to active development.
-Also, it is intentional that this section is not automated. I want to show that I care every single contributors by manually updating the list every time it changes.
 - MincoMK (Discord: `@minco_rl`) - Zako
 - Kanowara Sinoka (Discord: `@u_sinokadev`) - Devised a lot of features. The one made Zako3 exist.
 - ridanit_ruma (Discord: `@ruma0607`) - Translator

@@ -1,0 +1,366 @@
+{
+  "translation": {
+    "admin": {
+      "actions": {
+        "manageTaps": "Manage Taps",
+        "openGrafana": "Open Grafana",
+        "review": "Review",
+        "viewNotifications": "View Notifications"
+      },
+      "dashboard": "Dashboard",
+      "dashboardSubtitle": "Here's an overview of the system.",
+      "noRecentActivity": "No recent activity.",
+      "notifications": {
+        "subtitle": "Manage system notifications",
+        "title": "Notifications"
+      },
+      "overview": "Overview",
+      "pendingVerifications": "Pending Verifications",
+      "quickActions": "Quick Actions",
+      "recentActivity": "Recent Activity",
+      "stats": {
+        "allSystemsOperational": "All systems operational",
+        "pendingVerifications": "Pending Verifications",
+        "requiresReview": "Requires review",
+        "systemHealth": "System Health",
+        "totalTaps": "Total Taps",
+        "totalUsers": "Total Users"
+      },
+      "taps": {
+        "occupations": {
+            "verified": "Verified",
+            "official": "Official",
+            "base": "Base"
+        },
+        "permissions": {
+            "public": "Public",
+            "blacklisted": "Blacklisted Users",
+            "whitelisted": "Whitelisted Users",
+            "owner_only": "Owner Only"
+        },
+        "actions": {
+          "delete": ""
+        },
+        "deleteConfirm": {
+          "description": "",
+          "title": ""
+        },
+        "deleteSuccess": "",
+        "information": "",
+        "manageTap": "",
+        "owner": "",
+        "subtitle": "Manage all taps in the system",
+        "tapDetails": "Tap Details",
+        "title": "Taps"
+      },
+      "users": {
+        "actions": {
+          "ban": "",
+          "makeAdmin": "",
+          "removeAdmin": "",
+          "unban": ""
+        },
+        "ban": "Ban",
+        "banConfirm": {
+          "description": "",
+          "title": ""
+        },
+        "banConfirmDescription": "Are you sure you want to ban this user? They will not be able to log in.",
+        "banConfirmTitle": "Confirm Ban",
+        "banSuccess": "User has been banned.",
+        "createdAt": "",
+        "email": "Email",
+        "grantedAdminRole": "Granted admin role.",
+        "lastActive": "Last Active",
+        "makeAdmin": "Make Admin",
+        "makeAdminConfirm": {
+          "description": "",
+          "title": ""
+        },
+        "manageUser": "",
+        "noTaps": "",
+        "noUsers": "No users found.",
+        "ownedTaps": "",
+        "profile": "",
+        "removeAdmin": "Remove Admin",
+        "removeAdminConfirm": {
+          "description": "",
+          "title": ""
+        },
+        "removedAdminRole": "Removed admin role.",
+        "role": "Role",
+        "roles": {
+          "admin": ""
+        },
+        "searchPlaceholder": "Search users...",
+        "status": "Status",
+        "subtitle": "Manage all users in the system.",
+        "title": "Users",
+        "unban": "Unban",
+        "unbanConfirm": {
+          "description": "",
+          "title": ""
+        },
+        "unbanConfirmDescription": "Are you sure you want to unban this user?",
+        "unbanConfirmTitle": "Confirm Unban",
+        "unbanSuccess": "User has been unbanned.",
+        "user": "User",
+        "userDetails": "",
+        "userId": ""
+      },
+      "verifications": {
+        "approve": "Approve",
+        "approveConfirmDescription": "This will verify the tap \"{name}\". The owner will be notified.",
+        "approveConfirmTitle": "Approve Verification",
+        "approveSuccess": "Verification approved successfully",
+        "filterByStatus": "Filter by status",
+        "noRequests": "No verification requests",
+        "noRequestsDescription": "All verification requests have been reviewed",
+        "owner": "Owner",
+        "reason": "Reason",
+        "reject": "Reject",
+        "rejectConfirmDescription": "Please provide a reason for rejecting \"{name}\".",
+        "rejectConfirmTitle": "Reject Verification",
+        "rejectionReasonLabel": "Rejection Reason",
+        "rejectionReasonPlaceholder": "Explain why this verification request is being rejected...",
+        "rejectionReasonRequired": "Rejection reason is required",
+        "rejectSuccess": "Verification rejected",
+        "requestedAt": "Requested At",
+        "sidebarTitle": "",
+        "status": "Status",
+        "statusAll": "All",
+        "statusApproved": "Approved",
+        "statusPending": "Pending",
+        "statusRejected": "Rejected",
+        "subtitle": "Review and manage tap verification requests",
+        "tapName": "Tap Name",
+        "title": "Verification Requests",
+        "viewEvidence": "View Evidence"
+      }
+    },
+    "admin.users.status.banned": "",
+    "auth": {
+      "continueWithDiscord": "Continue with Discord",
+      "loginRequired": "",
+      "redirectAfterLogin": "Redirecting you now...",
+      "signInDescription": "Sign in to continue to the dashboard.",
+      "welcome": "Welcome"
+    },
+    "common": {
+      "actions": "",
+      "back": "",
+      "cancel": "Cancel",
+      "close": "Close",
+      "confirm": "Confirm",
+      "copied": "Copied to clipboard!",
+      "copyToClipboard": "Copy to clipboard",
+      "delete": "Delete",
+      "loading": "Loading...",
+      "role": "Role",
+      "search": "Search",
+      "timestamp": "",
+      "viewAll": "View All"
+    },
+    "dashboard": {
+      "myTaps": "My Taps",
+      "noTapsYet": "You haven't created any Taps yet.",
+      "recentActivity": "Recent Activity",
+      "recentTaps": "Recent Taps",
+      "stats": {
+        "acrossTaps": "Across all taps",
+        "activeUsers": "Active Users",
+        "last24h": "Last 24 hours",
+        "lastMonth": "Last month",
+        "myTaps": "My Taps",
+        "tapsOwned": "Taps Owned",
+        "totalUses": "Total Uses",
+        "uptime": "Uptime"
+      },
+      "subtitle": "Welcome to your dashboard.",
+      "welcome": "Welcome, {{name}}!"
+    },
+    "errors": {
+      "ownerNotFound": "",
+      "tapNotFound": "",
+      "userNotFound": ""
+    },
+    "nav": {
+      "admin": "Admin",
+      "adminPanel": "Admin Panel",
+      "backToApp": "Back to App",
+      "createTap": "Create Tap",
+      "dashboard": "Dashboard",
+      "explore": "Explore",
+      "logout": "Logout",
+      "myTaps": "My Taps",
+      "notifications": "Notifications",
+      "settings": "Settings",
+      "taps": "Taps",
+      "users": "Users"
+    },
+    "notifications": {
+      "all": "",
+      "category": "",
+      "deleteConfirm": {
+        "description": "",
+        "title": ""
+      },
+      "deleted": "",
+      "level": "",
+      "levels": {
+        "error": "",
+        "info": "",
+        "success": "",
+        "warning": ""
+      },
+      "markAllAsRead": "",
+      "markedAllAsRead": "",
+      "markedAsRead": "",
+      "message": "",
+      "noNotifications": "No new notifications.",
+      "read": "",
+      "status": "",
+      "title": "Notifications",
+      "unread": ""
+    },
+    "settings": {
+      "account": "Account",
+      "accountSubtitle": "Manage your account settings",
+      "appearance": "Appearance",
+      "appearanceSubtitle": "Customize the look and feel",
+      "darkMode": "Dark Mode",
+      "darkModeSubtitle": "Toggle dark mode on or off",
+      "deleteAccount": "Delete Account",
+      "deleteAccountWarning": "This will permanently delete your account and all associated data.",
+      "language": "Language",
+      "languageSubtitle": "Select your preferred language",
+      "notifications": "Notifications",
+      "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
+      "notificationsSubtitle": "Manage how you receive notifications",
+      "profile": "Profile",
+      "profileSubtitle": "Your personal information",
+      "subtitle": "Manage your account settings and preferences",
+      "title": "Settings"
+    },
+    "taps": {
+      "create": "Create Tap",
+      "createdAt": "",
+      "createFirst": "Create your first Tap",
+      "createFirstDescription": "Get started by creating a new Tap.",
+      "createSuccess": "Tap created successfully!",
+      "deleteConfirmDescription": "Are you sure you want to delete this Tap? This cannot be undone.",
+      "deleteConfirmTitle": "Delete Tap",
+      "deleteSuccess": "Tap deleted successfully.",
+      "explore": "Explore Taps",
+      "exploreDescription": "Find and use Taps created by the community.",
+      "filters": {
+        "accessible": "Accessible",
+        "byRole": "By Role"
+      },
+      "form": {
+        "addBlacklistedUsers": "",
+        "addWhitelistedUsers": "",
+        "blacklistedUsers": "",
+        "blacklistedUsersHelp": "",
+        "description": "Description",
+        "descriptionPlaceholder": "Describe what this tap does...",
+        "id": "Tap ID",
+        "idHelp": "Lowercase letters, numbers, underscores, and periods only",
+        "idPlaceholder": "my_awesome_tap",
+        "idWarning": "Changing the ID will change the tap's URL. Use with caution.",
+        "name": "Name",
+        "namePlaceholder": "My Awesome Tap",
+        "permission": "Permission",
+        "roles": "Roles",
+        "rolesHelp": "Select at least one role",
+        "whitelistedUsers": "",
+        "whitelistedUsersHelp": ""
+      },
+      "myTaps": "My Taps",
+      "myTapsDescription": "Taps you own or have access to.",
+      "noTaps": "No Taps found.",
+      "noTapsOwned": "You do not own any Taps.",
+      "permission": "",
+      "report": {
+        "description": "Why are you reporting this Tap?",
+        "reason": "Reason",
+        "submit": "Submit Report",
+        "success": "Report submitted successfully.",
+        "title": "Report Tap"
+      },
+      "roleLabels": {
+        "music": "Music",
+        "tts": "Text-to-Speech"
+      },
+      "roles": {
+        "label": ""
+      },
+      "settings": {
+        "apiAccess": "API Access",
+        "apiAccessDescription": "Manage API tokens for programmatic access to your tap",
+        "basic": "Basic Information",
+        "copied": "Copied",
+        "copy": "Copy",
+        "copyTokenWarning": "Copy this token now. You won't be able to see it again.",
+        "createToken": "Create New Token",
+        "createTokenDescription": "Create a new API token for programmatic access",
+        "createTokenSuccess": "Token created! Copy it now, you won't see it again.",
+        "dangerZone": "Danger Zone",
+        "deleteToken": "Delete Token",
+        "deleteTokenConfirm": "Are you sure you want to delete this token? Applications using this token will stop working.",
+        "deleteWarning": "This will permanently delete the tap and all associated data.",
+        "expiry": {
+          "1_month": "1 Month",
+          "1_year": "1 Year",
+          "3_months": "3 Months",
+          "6_months": "6 Months",
+          "never": "Never"
+        },
+        "noTokens": "No API tokens yet",
+        "noTokensDescription": "Create a token to access your tap programmatically",
+        "regenerate": "Regenerate",
+        "regenerateConfirm": "Are you sure you want to regenerate this token? The old token will stop working immediately.",
+        "regenerateToken": "Regenerate Token",
+        "rolesAndPermissions": "Roles & Permissions",
+        "subtitle": "Manage your tap settings",
+        "title": "Tap Settings",
+        "tokenCopied": "Token copied to clipboard",
+        "tokenCreated": "Token created successfully",
+        "tokenCreatedAt": "Created",
+        "tokenDeleted": "Token deleted successfully",
+        "tokenExpired": "Expired",
+        "tokenExpires": "Expires",
+        "tokenExpiry": "Expiry",
+        "tokenLabel": "Token Label",
+        "tokenLabelPlaceholder": "e.g., Production Bot, Development",
+        "tokenLastUsed": "Last used",
+        "tokenNeverExpires": "Never expires",
+        "tokenNeverUsed": "Never used",
+        "tokenRegenerated": "Token regenerated successfully",
+        "updateSuccess": "Tap updated successfully!",
+        "yourNewToken": "Your New Token"
+      },
+      "sort": {
+        "alphabetical": "Alphabetical",
+        "mostUsed": "Most Used",
+        "recentlyCreated": "Recently Created"
+      },
+      "stats": {
+        "activeNow": "Active Now",
+        "auditLog": "Audit Log",
+        "cacheHitRate": "Cache Hit Rate",
+        "cacheHits": "Cache Hits",
+        "currentlyActive": "",
+        "noAuditLogs": "No audit logs found.",
+        "subtitle": "View statistics and activity for your tap",
+        "title": "Tap Statistics",
+        "totalUses": "",
+        "uniqueUsers": "Unique Users",
+        "useRate": "Use Rate"
+      },
+      "tapId": "",
+      "totalUses": "",
+      "updatedAt": ""
+    }
+  }
+}

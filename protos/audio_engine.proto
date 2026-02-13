@@ -18,8 +18,14 @@ message Track {
   string queue_name = 2;
   string description = 3;
   string audio_request_string = 4;
-  string tap_name = 5;
-  float volume = 6;
+  string cache_key = 5;
+  string tap_name = 6;
+  float volume = 7;
+}
+
+message Queue {
+  string name = 1;
+  repeated Track tracks = 2;
 }
 
 message GetSessionStateRequest { uint64 guild_id = 1; }
@@ -27,7 +33,7 @@ message GetSessionStateRequest { uint64 guild_id = 1; }
 message SessionState {
   uint64 guild_id = 1;
   uint64 channel_id = 2;
-  repeated Track tracks = 3;
+  repeated Queue queues = 3;
 }
 
 message SessionStateResponse {

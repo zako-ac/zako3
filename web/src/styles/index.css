@@ -1,0 +1,125 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@theme {
+  /* Discord brand colors - using hex */
+  --color-discord-1: #171717;
+  --color-discord-2: #272727;
+  --color-discord-3: #2e2e2e;
+  --color-discord-4: #3c3c3c;
+
+  /* Primary color - using RGB space-separated values */
+  --color-primary: #eb3489;
+  --color-primary-foreground: #fdfdfd;
+
+  /* Semantic colors - using OKLCH */
+  --color-background: oklch(0.98 0 0);
+  --color-foreground: oklch(0.2 0 0);
+  --color-card: oklch(0.96 0 0);
+  --color-card-foreground: oklch(0.15 0 0);
+  --color-popover: oklch(0.98 0 0);
+  --color-popover-foreground: oklch(0.15 0 0);
+  --color-secondary: oklch(0.92 0.01 340);
+  --color-secondary-foreground: oklch(0.2 0 0);
+  --color-muted: oklch(0.94 0 0);
+  --color-muted-foreground: oklch(0.55 0 0);
+  --color-accent: oklch(0.62 0.25 340);
+  --color-accent-foreground: oklch(0.98 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-success: oklch(0.6 0.18 145);
+  --color-success-foreground: oklch(0.985 0 0);
+  --color-warning: oklch(0.75 0.18 85);
+  --color-warning-foreground: oklch(0.15 0 0);
+  --color-info: oklch(0.6 0.15 240);
+  --color-info-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.88 0 0);
+  --color-input: oklch(0.88 0 0);
+  --color-ring: oklch(0.62 0.25 340);
+
+  /* Chart colors - using OKLCH */
+  --color-chart-1: oklch(0.62 0.25 340);
+  --color-chart-2: oklch(0.55 0.2 280);
+  --color-chart-3: oklch(0.7 0.15 200);
+  --color-chart-4: oklch(0.65 0.2 60);
+  --color-chart-5: oklch(0.6 0.18 160);
+
+  /* Sidebar colors - using OKLCH */
+  --color-sidebar: oklch(0.985 0 0);
+  --color-sidebar-foreground: oklch(0.145 0 0);
+  --color-sidebar-primary: oklch(0.205 0 0);
+  --color-sidebar-primary-foreground: oklch(0.985 0 0);
+  --color-sidebar-accent: oklch(0.97 0 0);
+  --color-sidebar-accent-foreground: oklch(0.205 0 0);
+  --color-sidebar-border: oklch(0.922 0 0);
+  --color-sidebar-ring: oklch(0.708 0 0);
+
+  /* Border radius */
+  --radius: 0.75rem;
+}
+
+@layer base {
+  .dark {
+    --color-background: oklch(0.12 0.01 270);
+    --color-foreground: oklch(0.96 0 0);
+    --color-card: oklch(0.16 0.01 270);
+    --color-card-foreground: oklch(0.96 0 0);
+    --color-popover: oklch(0.14 0.01 270);
+    --color-popover-foreground: oklch(0.96 0 0);
+    --color-primary-foreground: #fdfdfd;
+    --color-secondary: oklch(0.22 0.02 270);
+    --color-secondary-foreground: oklch(0.96 0 0);
+    --color-muted: oklch(0.2 0.01 270);
+    --color-muted-foreground: oklch(0.65 0.01 270);
+    --color-accent: oklch(0.65 0.27 340);
+    --color-accent-foreground: oklch(0.98 0 0);
+    --color-destructive: oklch(0.5 0.2 25);
+    --color-destructive-foreground: oklch(0.98 0 0);
+    --color-success: oklch(0.55 0.2 145);
+    --color-success-foreground: oklch(0.98 0 0);
+    --color-warning: oklch(0.7 0.2 85);
+    --color-warning-foreground: oklch(0.15 0 0);
+    --color-info: oklch(0.55 0.18 240);
+    --color-info-foreground: oklch(0.98 0 0);
+    --color-border: oklch(0.24 0.02 270);
+    --color-input: oklch(0.24 0.02 270);
+    --color-ring: oklch(0.65 0.27 340);
+    --color-chart-1: oklch(0.65 0.27 340);
+    --color-chart-2: oklch(0.58 0.22 280);
+    --color-chart-3: oklch(0.72 0.18 200);
+    --color-chart-4: oklch(0.68 0.23 60);
+    --color-chart-5: oklch(0.63 0.2 160);
+    --color-sidebar: oklch(0.205 0 0);
+    --color-sidebar-foreground: oklch(0.985 0 0);
+    --color-sidebar-primary: oklch(0.488 0.243 264.376);
+    --color-sidebar-primary-foreground: oklch(0.985 0 0);
+    --color-sidebar-accent: oklch(0.269 0 0);
+    --color-sidebar-accent-foreground: oklch(0.985 0 0);
+    --color-sidebar-border: oklch(0.269 0 0);
+    --color-sidebar-ring: oklch(0.439 0 0);
+  }
+
+  .hero {
+    background: #eb3489;
+    background-image: linear-gradient(
+      111deg,
+      rgba(235, 52, 137, 1) 24%,
+      rgba(255, 255, 255, 1) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}

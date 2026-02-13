@@ -1,4 +1,4 @@
-use derive_more::{From, FromStr, Into};
+use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncRead;
 
@@ -8,40 +8,54 @@ pub use error::*;
 pub mod session_state;
 pub use session_state::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
+#[display("{_0}")]
 pub struct GuildId(u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
+#[display("{_0}")]
 pub struct ChannelId(u64);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+)]
+#[display("{_0}")]
 pub struct QueueName(String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
+#[display("{_0}")]
 pub struct TrackId(u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
+#[display("{_0}")]
 pub struct UserId(u64);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+)]
+#[display("{_0}")]
 pub struct TapName(String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Into, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Into, From, Display, Serialize, Deserialize)]
+#[display("{_0}")]
 pub struct Volume(f32);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+)]
+#[display("{_0}")]
 pub struct AudioRequestString(String);
 
-impl std::fmt::Display for AudioRequestString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+)]
+#[display("{_0}")]
 pub struct StreamCacheKey(String);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+)]
+#[display("{_0}")]
 pub struct TrackDescription(String);
 
 pub struct AudioResponse {

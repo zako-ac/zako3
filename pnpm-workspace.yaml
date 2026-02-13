@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+  - hq
+  - web
+
+onlyBuiltDependencies:
+  - '@swc/core'
+  - cpu-features
+  - esbuild
+  - msw
+  - protobufjs
+  - ssh2
+  - unrs-resolver

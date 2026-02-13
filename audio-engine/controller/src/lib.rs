@@ -2,6 +2,7 @@ use std::result::Result;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
+use tracing::instrument;
 use zako3_audio_engine_protos as proto;
 use zako3_audio_engine_protos::audio_engine_server::AudioEngine;
 
@@ -25,6 +26,7 @@ impl AudioEngineServer {
 
 #[tonic::async_trait]
 impl AudioEngine for AudioEngineServer {
+    #[instrument(skip(self))]
     async fn join(
         &self,
         request: Request<proto::JoinRequest>,
@@ -43,6 +45,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn leave(
         &self,
         request: Request<proto::LeaveRequest>,
@@ -60,6 +63,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn play(
         &self,
         request: Request<proto::PlayRequest>,
@@ -88,6 +92,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn set_volume(
         &self,
         request: Request<proto::SetVolumeRequest>,
@@ -110,6 +115,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn stop(
         &self,
         request: Request<proto::StopRequest>,
@@ -137,6 +143,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn stop_many(
         &self,
         request: Request<proto::StopManyRequest>,
@@ -172,6 +179,7 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn next_music(
         &self,
         request: Request<proto::NextMusicRequest>,
@@ -194,19 +202,53 @@ impl AudioEngine for AudioEngineServer {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn get_session_state(
         &self,
         request: Request<proto::GetSessionStateRequest>,
     ) -> Result<Response<proto::SessionStateResponse>, Status> {
-        // Implement stub response for now
+        let session = self
+            .session_manager
+            .get_session(request.get_ref().guild_id.into())
+            .ok_or_else(|| Status::not_found("Session not found"))?;
+        let state = session
+            .session_state()
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?
+            .ok_or_else(|| Status::not_found("Session state not found"))?;
+
+        let queues = state
+            .queues
+            .into_iter()
+            .map(|(name, tracks)| proto::Queue {
+                name: name.into(),
+                tracks: tracks
+                    .into_iter()
+                    .map(|track| track_to_proto(track))
+                    .collect(),
+            })
+            .collect();
+
         Ok(Response::new(proto::SessionStateResponse {
             result: Some(proto::session_state_response::Result::State(
                 proto::SessionState {
                     guild_id: request.into_inner().guild_id,
-                    channel_id: 0,
-                    tracks: vec![],
+                    channel_id: state.channel_id.into(),
+                    queues,
                 },
             )),
         }))
+    }
+}
+
+fn track_to_proto(track: zako3_audio_engine_core::types::Track) -> proto::Track {
+    proto::Track {
+        track_id: track.track_id.into(),
+        description: track.description.into(),
+        queue_name: track.queue_name.into(),
+        audio_request_string: track.request.audio_request.into(),
+        cache_key: track.request.cache_key.into(),
+        tap_name: track.request.tap_name.into(),
+        volume: track.volume.into(),
     }
 }
