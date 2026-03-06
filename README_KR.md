@@ -21,7 +21,7 @@
 ## 기여자
 메인 `README.md`에 나열된 기여자들은 Zako3의 성장에 중요한 영향을 미친 사람들입니다.
 - MincoMK (Discord: `@minco_rl`) - 허접
-- Kanowara Sinoka (Discord: `@u_sinokadev`) - 많은 기능을 고안했습니다. 그중 하나가 Zako3를 탄생시킨 기능입니다.
+- Kanowara Sinoka (Discord: `@u_sinokadev`) - 많은 기능을 고안했으며, Zako3를 탄생시킨 장본인입니다.
 - ridanit_ruma (Discord: `@ruma0607`) - 번역가
 - 200mill (Discord: `@200mill`) - 번역가
 - NYANI (NYANI) - 번역가
