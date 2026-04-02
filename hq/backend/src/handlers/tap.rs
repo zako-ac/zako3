@@ -1,7 +1,7 @@
 use crate::middleware::auth::AuthUser;
-use axum::{Json, extract::State};
+use axum::{extract::State, Json};
 use hq_core::{CoreError, Service};
-use hq_types::{CreateTapDto, Tap};
+use hq_types::hq::{CreateTapDto, Tap};
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {

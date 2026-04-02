@@ -108,3 +108,5 @@ pub enum SessionControlCommand {
     NextMusic,
     SetPaused(bool),
 }
+
+pub mod hq;

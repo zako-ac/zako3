@@ -13,3 +13,8 @@ thiserror.workspace = true
 songbird.workspace = true
 tokio = { workspace = true, features = ["full"] }
 symphonia = { version = "0.5.5", features = ["all"] }
+
+uuid = { workspace = true, features = ["serde", "v4"] }
+chrono = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, features = ["uuid", "chrono"] }
+

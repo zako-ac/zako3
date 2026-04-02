@@ -1,10 +1,10 @@
-use crate::{ResourceTimestamp, UserId};
+use super::{ResourceTimestamp, UserId};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash)]
 pub struct TapId(pub Uuid);
 
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]

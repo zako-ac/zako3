@@ -1,4 +1,4 @@
-use crate::ResourceTimestamp;
+use super::ResourceTimestamp;
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

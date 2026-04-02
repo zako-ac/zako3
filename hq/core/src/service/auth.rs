@@ -1,7 +1,7 @@
 use crate::repo::UserRepository;
 use crate::{AppConfig, CoreError, CoreResult};
-use hq_types::User;
-use jsonwebtoken::{EncodingKey, Header, encode};
+use hq_types::hq::User;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

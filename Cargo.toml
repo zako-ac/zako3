@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "hq/types", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "types", "zakoctl", "zakofish"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "types", "zakoctl", "zakofish"]
 
 [workspace.dependencies]
 zako3-audio-engine-core = { path = "audio-engine/core" }
@@ -12,7 +12,7 @@ zako3-audio-engine-audio = { path = "audio-engine/audio", features = ["telemetry
 zako3-types = { path = "types" }
 
 # HQ Dependencies
-hq-types = { path = "hq/types" }
+hq-types = { path = "types", package = "zako3-types" }
 hq-core = { path = "hq/core" }
 hq-backend = { path = "hq/backend" }
 hq-bot = { path = "hq/bot" }
@@ -34,7 +34,6 @@ serenity = { version = "0.12", default-features = false, features = ["client", "
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 jsonwebtoken = "9.2"
 oauth2 = "4.4"
-derive_more = { version = "1.0.0-beta.6", features = ["full"] }
 utoipa = { version = "4.2", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
 dotenvy = "0.15"

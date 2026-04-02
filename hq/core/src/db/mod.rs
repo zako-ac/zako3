@@ -1,5 +1,5 @@
 use crate::CoreResult;
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 
 pub async fn get_pool(database_url: &str) -> CoreResult<PgPool> {
     let pool = PgPoolOptions::new()

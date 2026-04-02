@@ -1,6 +1,6 @@
-use crate::CoreResult;
 use crate::repo::TapRepository;
-use hq_types::{CreateTapDto, Tap};
+use crate::CoreResult;
+use hq_types::hq::{CreateTapDto, Tap};
 use std::sync::Arc;
 use uuid::Uuid;
 

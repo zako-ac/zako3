@@ -1,6 +1,6 @@
 use crate::CoreResult;
 use async_trait::async_trait;
-use hq_types::{DiscordUserId, User, UserId, Username};
+use hq_types::hq::{DiscordUserId, User, UserId, Username};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -46,7 +46,7 @@ impl UserRepository for PgUserRepository {
                 username: Username(username),
                 avatar_url,
                 email,
-                timestamp: hq_types::ResourceTimestamp {
+                timestamp: hq_types::hq::ResourceTimestamp {
                     created_at,
                     updated_at,
                 },
@@ -105,7 +105,7 @@ impl UserRepository for PgUserRepository {
                 username: Username(username),
                 avatar_url,
                 email,
-                timestamp: hq_types::ResourceTimestamp {
+                timestamp: hq_types::hq::ResourceTimestamp {
                     created_at,
                     updated_at,
                 },

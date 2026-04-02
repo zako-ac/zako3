@@ -1,6 +1,6 @@
 use crate::CoreResult;
 use async_trait::async_trait;
-use hq_types::{Tap, TapId, TapName, UserId};
+use hq_types::hq::{Tap, TapId, TapName, UserId};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -102,7 +102,7 @@ impl TapRepository for PgTapRepository {
                     occupation,
                     permission,
                     role,
-                    timestamp: hq_types::ResourceTimestamp {
+                    timestamp: hq_types::hq::ResourceTimestamp {
                         created_at,
                         updated_at,
                     },

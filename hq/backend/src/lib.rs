@@ -1,4 +1,4 @@
-use axum::{Router, routing::post};
+use axum::{routing::post, Router};
 use hq_core::Service;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -21,17 +21,17 @@ use handlers::tap;
     ),
     components(
         schemas(
-            hq_types::CreateTapDto,
-            hq_types::AuthCallbackDto,
-            hq_types::AuthResponseDto,
-            hq_types::Tap,
-            hq_types::TapId,
-            hq_types::TapName,
-            hq_types::TapOccupation,
-            hq_types::TapPermission,
-            hq_types::TapRole,
-            hq_types::UserId,
-            hq_types::ResourceTimestamp,
+            hq_types::hq::CreateTapDto,
+            hq_types::hq::AuthCallbackDto,
+            hq_types::hq::AuthResponseDto,
+            hq_types::hq::Tap,
+            hq_types::hq::TapId,
+            hq_types::hq::TapName,
+            hq_types::hq::TapOccupation,
+            hq_types::hq::TapPermission,
+            hq_types::hq::TapRole,
+            hq_types::hq::UserId,
+            hq_types::hq::ResourceTimestamp,
         )
     ),
     tags(

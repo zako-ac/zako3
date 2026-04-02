@@ -1,5 +1,5 @@
 use crate::{Context, Error};
-use hq_types::CreateTapDto;
+use hq_types::hq::CreateTapDto;
 
 #[poise::command(slash_command, subcommands("create", "list"))]
 pub async fn tap(_: Context<'_>) -> Result<(), Error> {

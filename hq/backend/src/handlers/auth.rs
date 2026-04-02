@@ -1,6 +1,6 @@
-use axum::{Json, extract::State};
+use axum::{extract::State, Json};
 use hq_core::Service;
-use hq_types::{AuthCallbackDto, AuthResponseDto};
+use hq_types::hq::{AuthCallbackDto, AuthResponseDto};
 use std::sync::Arc;
 use utoipa;
 

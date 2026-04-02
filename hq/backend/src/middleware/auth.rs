@@ -1,10 +1,10 @@
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    http::{StatusCode, request::Parts},
+    http::{request::Parts, StatusCode},
 };
 use hq_core::{Claims, Service};
-use jsonwebtoken::{DecodingKey, Validation, decode};
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use std::sync::Arc;
 use uuid::Uuid;
 

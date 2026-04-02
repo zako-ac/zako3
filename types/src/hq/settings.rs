@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::TapId;
+use super::TapId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextMappingRule {
