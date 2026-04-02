@@ -1,6 +1,6 @@
 use crossbeam::channel::{Receiver, Sender};
 use ringbuf::{HeapCons, HeapProd};
-pub use zako3_audio_engine_types::*;
+pub use zako3_types::*;
 
 use crate::BUFFER_SIZE;
 

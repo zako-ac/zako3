@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use ringbuf::traits::Consumer;
 use songbird::input::RawAdapter;
 use symphonia::core::io::ReadOnlySource;
-use zako3_audio_engine_types::ZakoResult;
+use zako3_types::ZakoResult;
 
 use crate::{BUFFER_SIZE, CHANNELS, RingCons, SAMPLE_RATE};
 

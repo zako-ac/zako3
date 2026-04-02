@@ -1,1 +1,1 @@
-pub use zako3_audio_engine_types::error::*;
+pub use zako3_types::error::*;

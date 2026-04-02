@@ -15,6 +15,7 @@ use zako3_audio_engine_core::{
 pub struct StubTapHubService;
 
 static SPEAKY_DATA: &[u8] = include_bytes!("../good.mp3");
+static SINE_DATA: &[u8] = include_bytes!("../sine.mp3");
 
 #[async_trait]
 impl TapHubService for StubTapHubService {
@@ -22,7 +23,11 @@ impl TapHubService for StubTapHubService {
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let start = std::time::Instant::now();
 
-        let cursor = Cursor::new(SPEAKY_DATA.to_vec());
+        let cursor = if request.audio_request.to_string().contains("sine") {
+            Cursor::new(SINE_DATA.to_vec())
+        } else {
+            Cursor::new(SPEAKY_DATA.to_vec())
+        };
 
         let duration = start.elapsed();
         metrics::record_taphub_request_duration(duration.as_secs_f64());

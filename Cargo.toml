@@ -1,14 +1,15 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/types", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "hq/types", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "zakoctl"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "hq/types", "taphub/core", "taphub/infra", "taphub/transport", "taphub/types", "types", "zakoctl", "zakofish"]
 
 [workspace.dependencies]
-zako3-audio-engine-types = { path = "audio-engine/types" }
 zako3-audio-engine-core = { path = "audio-engine/core" }
 zako3-audio-engine-infra = { path = "audio-engine/infra" }
 zako3-audio-engine-protos = { path = "audio-engine/protos" }
 zako3-audio-engine-telemetry = { path = "audio-engine/telemetry" }
 zako3-audio-engine-audio = { path = "audio-engine/audio", features = ["telemetry"] }
+
+zako3-types = { path = "types" }
 
 # HQ Dependencies
 hq-types = { path = "hq/types" }
@@ -40,6 +41,7 @@ dotenvy = "0.15"
 config = "0.13"
 anyhow = "1.0"
 mockall = "0.12"
+songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 
 [profile.dev]
 incremental = false

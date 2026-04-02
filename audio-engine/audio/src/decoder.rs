@@ -10,7 +10,7 @@ use symphonia::core::{audio::SampleBuffer, io::ReadOnlySource};
 use tokio::io::AsyncRead;
 use tokio::sync::oneshot::Sender;
 use tracing::instrument;
-use zako3_audio_engine_types::ZakoError;
+use zako3_types::ZakoError;
 
 use crate::{RingCons, RingProd, async_to_sync_read, create_ringbuf_pair, speed_control};
 use crate::{error::ZakoResult, metrics, types::TrackId};

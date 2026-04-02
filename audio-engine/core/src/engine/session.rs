@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc::Sender;
 use tracing::instrument;
 use zako3_audio_engine_audio::metrics;
-use zako3_audio_engine_types::SessionState;
+use zako3_types::SessionState;
 
 use crate::{
     ArcStateService, ArcTapHubService,
