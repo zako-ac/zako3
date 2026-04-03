@@ -5,5 +5,4 @@ refer hq todo
 
 - [ ] Document backend features
 
-- [ ] Cache, TapHub
-- [ ] Multiple bots
+- [ ] Track proto handling (todo!)

@@ -1,9 +1,14 @@
+use bytes::Bytes;
 use ringbuf::{HeapRb, traits::Split};
 
-use crate::{RINGBUFFER_SIZE, RingCons, RingProd};
+use crate::{OpusCons, OpusProd, RINGBUFFER_SIZE, RingCons, RingProd};
 
 pub fn create_ringbuf_pair() -> (RingProd, RingCons) {
     HeapRb::new(RINGBUFFER_SIZE).split()
+}
+
+pub fn create_opus_ringbuf_pair() -> (OpusProd, OpusCons) {
+    HeapRb::new(400).split()
 }
 
 pub fn async_to_sync_read<T>(async_read: T) -> std::io::Result<impl std::io::Read>

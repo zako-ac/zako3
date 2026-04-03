@@ -1,6 +1,5 @@
 use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncRead;
 
 pub mod taphub;
 pub use taphub::*;
@@ -52,7 +51,7 @@ pub struct AudioRequestString(String);
 pub struct AudioResponse {
     pub cache_key: Option<AudioCachePolicy>,
     pub metadatas: Vec<AudioMetadata>,
-    pub stream: Box<dyn AsyncRead + Send + Unpin + Sync>,
+    pub stream: tokio::sync::mpsc::Receiver<Vec<i16>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,7 +92,7 @@ pub struct AudioCachePolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", content = "value")]
 pub enum AudioMetadata {
     Title(String),
     Description(String),
