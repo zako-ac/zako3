@@ -9,3 +9,7 @@ mockall.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 zako3-types = { path = "../../types" }
+tokio = { workspace = true, features = ["full"] }
+zako3-taphub-transport-server = { path = "../transport/server" }
+protofish2 = "0.4"
+bytes = "1"

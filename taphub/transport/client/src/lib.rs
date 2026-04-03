@@ -20,20 +20,13 @@ pub struct TransportClient {
     server_name: String,
 }
 
-fn get_dummy_certs() -> Vec<CertificateDer<'static>> {
-    let subject_alt_names = vec!["localhost".to_string()];
-    let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
-    let der_cert = cert.cert.der().to_vec();
-    vec![CertificateDer::from(der_cert)]
-}
-
 impl TransportClient {
     pub fn new(
         bind_addr: SocketAddr,
         server_addr: SocketAddr,
         server_name: String,
+        root_certificates: Vec<CertificateDer<'static>>,
     ) -> std::io::Result<Self> {
-        let root_certificates = get_dummy_certs();
         let config = ClientConfig {
             bind_address: bind_addr,
             root_certificates,

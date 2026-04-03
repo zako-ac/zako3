@@ -33,23 +33,13 @@ pub struct TransportServer {
     handler: Arc<dyn TapHubBridgeHandler>,
 }
 
-fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
-    let subject_alt_names = vec!["localhost".to_string()];
-    let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
-    let der_cert = cert.cert.der().to_vec();
-    let der_key = cert.key_pair.serialize_der();
-    (
-        vec![CertificateDer::from(der_cert)],
-        PrivateKeyDer::Pkcs8(der_key.into()),
-    )
-}
-
 impl TransportServer {
     pub fn new(
         bind_addr: SocketAddr,
+        cert_chain: Vec<CertificateDer<'static>>,
+        private_key: PrivateKeyDer<'static>,
         handler: Arc<dyn TapHubBridgeHandler>,
     ) -> std::io::Result<Self> {
-        let (cert_chain, private_key) = generate_cert();
         let config = ServerConfig {
             bind_address: bind_addr,
             cert_chain,

@@ -1,3 +1,4 @@
 pub mod app;
 pub mod repository;
-mod service;
+pub mod transport;
+pub mod service;
