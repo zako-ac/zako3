@@ -22,6 +22,9 @@ pub enum ZakoError {
 
     #[error("Crossbeam recv error: {0}")]
     CrossbeamRecv(#[from] crossbeam::channel::RecvError),
+
+    #[error("TapHub error: {0}")]
+    TapHub(String),
 }
 
 pub type ZakoResult<T> = Result<T, ZakoError>;

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest, AudioMetadata, AudioCachePolicy};
+use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TapHubRequest {

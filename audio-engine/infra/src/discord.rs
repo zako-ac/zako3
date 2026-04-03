@@ -53,7 +53,7 @@ impl DiscordService for SongbirdDiscordService {
         let g_id = Self::to_songbird_guild_id(guild_id);
 
         if let Some(call_lock) = self.manager.get(g_id) {
-            let mut call = call_lock.lock().await;
+            let call = call_lock.lock().await;
 
             // Play direct opus stream
             call.play_direct_opus(stream);

@@ -52,7 +52,7 @@ impl SessionState {
         self.queues
             .get(queue_name)
             .map(|queue| queue.iter().map(|track| track.track_id).collect())
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
     }
 
     pub fn find_track(&self, track_id: TrackId) -> Option<&Track> {

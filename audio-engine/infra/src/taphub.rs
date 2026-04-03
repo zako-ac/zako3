@@ -8,6 +8,86 @@ use zako3_audio_engine_core::{
 };
 use zako3_types::{AudioCachePolicy, AudioCacheType, AudioMetadata};
 
+use std::sync::Arc;
+use zako3_audio_engine_core::error::ZakoError;
+use zako3_taphub_transport_client::TransportClient;
+
+pub struct RealTapHubService {
+    client: Arc<TransportClient>,
+}
+
+impl RealTapHubService {
+    pub fn new(client: Arc<TransportClient>) -> Self {
+        Self { client }
+    }
+}
+
+#[async_trait]
+impl TapHubService for RealTapHubService {
+    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
+        let start = std::time::Instant::now();
+
+        let result = self
+            .client
+            .request_audio(request)
+            .await
+            .map_err(ZakoError::TapHub);
+
+        let duration = start.elapsed();
+        metrics::record_taphub_request_duration(duration.as_secs_f64());
+
+        tracing::debug!(
+            duration_ms = duration.as_millis(),
+            "Audio stream requested (real)"
+        );
+
+        result
+    }
+
+    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
+    async fn preload_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
+        let start = std::time::Instant::now();
+
+        let result = self
+            .client
+            .preload_audio(request)
+            .await
+            .map_err(ZakoError::TapHub);
+
+        let duration = start.elapsed();
+        metrics::record_taphub_request_duration(duration.as_secs_f64());
+
+        tracing::debug!(
+            duration_ms = duration.as_millis(),
+            "Preload requested (real)"
+        );
+
+        result
+    }
+
+    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
+    async fn request_audio_meta(&self, request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
+        let start = std::time::Instant::now();
+
+        let result = self
+            .client
+            .request_audio_meta(request)
+            .await
+            .map_err(ZakoError::TapHub);
+
+        let duration = start.elapsed();
+        metrics::record_taphub_request_duration(duration.as_secs_f64());
+
+        tracing::debug!(
+            duration_ms = duration.as_millis(),
+            "Audio meta requested (real)"
+        );
+
+        result
+    }
+}
+
 pub struct StubTapHubService;
 
 #[async_trait]

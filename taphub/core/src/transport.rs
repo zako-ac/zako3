@@ -3,7 +3,10 @@ use bytes::Bytes;
 use protofish2::Timestamp;
 use tokio::sync::mpsc;
 use zako3_taphub_transport_server::TapHubBridgeHandler;
-use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest};
+use zako3_types::{
+    AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
+    CachedAudioRequest,
+};
 
 use crate::app::App;
 
@@ -11,22 +14,100 @@ use crate::app::App;
 impl TapHubBridgeHandler for App {
     async fn handle_request_audio(
         &self,
-        _req: CachedAudioRequest,
+        request: CachedAudioRequest,
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
-        todo!("Implement request_audio business logic");
+        let (tx, rx) = mpsc::channel(100);
+        let is_sine = request.audio_request.to_string().contains("sine");
+
+        tokio::spawn(async move {
+            let mut phase: f32 = 0.0;
+            let sample_rate = 48000.0;
+            let frequency = 440.0;
+            let chunk_size = 960; // 20ms at 48kHz
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_millis(20));
+            let start = std::time::Instant::now();
+
+            let mut encoder = opus::Encoder::new(
+                sample_rate as u32,
+                opus::Channels::Stereo,
+                opus::Application::Audio,
+            )
+            .expect("failed to create opus encoder");
+
+            loop {
+                interval.tick().await;
+
+                let mut chunk = Vec::with_capacity(chunk_size * 2);
+                for _ in 0..chunk_size {
+                    let sample = if is_sine {
+                        (phase * std::f32::consts::TAU).sin() * 10000.0
+                    } else {
+                        0.0
+                    };
+                    let sample_i16 = sample as i16;
+                    chunk.push(sample_i16); // Left
+                    chunk.push(sample_i16); // Right
+
+                    if is_sine {
+                        phase += frequency / sample_rate;
+                        if phase > 1.0 {
+                            phase -= 1.0;
+                        }
+                    }
+                }
+
+                let mut out_opus = vec![0u8; 4000];
+                match encoder.encode(&chunk, &mut out_opus) {
+                    Ok(len) => {
+                        let bytes = Bytes::copy_from_slice(&out_opus[..len]);
+                        let ts = Timestamp(start.elapsed().as_millis() as u64);
+                        if tx.send((ts, bytes)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Opus encode error: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        let meta = AudioMetaResponse {
+            metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::None,
+                ttl_seconds: None,
+            },
+        };
+
+        Ok((meta, rx))
     }
 
     async fn handle_preload_audio(
         &self,
         _req: CachedAudioRequest,
     ) -> Result<AudioMetaResponse, String> {
-        todo!("Implement preload_audio business logic");
+        Ok(AudioMetaResponse {
+            metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::None,
+                ttl_seconds: None,
+            },
+        })
     }
 
     async fn handle_request_audio_meta(
         &self,
         _req: AudioRequest,
     ) -> Result<AudioMetaResponse, String> {
-        todo!("Implement request_audio_meta business logic");
+        Ok(AudioMetaResponse {
+            metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::None,
+                ttl_seconds: None,
+            },
+        })
     }
 }

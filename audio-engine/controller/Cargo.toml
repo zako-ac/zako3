@@ -17,4 +17,5 @@ zako3-audio-engine-core.workspace = true
 zako3-audio-engine-infra.workspace = true
 zako3-audio-engine-protos.workspace = true
 zako3-audio-engine-telemetry.workspace = true
+zako3-taphub-transport-client.workspace = true
 tracing = "0.1.44"

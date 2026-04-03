@@ -48,9 +48,15 @@ impl TransportServer {
             keepalive_interval: Duration::from_secs(5),
             protofish_config: Default::default(),
         };
-        let server = ProtofishServer::bind(config)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let server =
+            ProtofishServer::bind(config).map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(Self { server, handler })
+    }
+
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.server
+            .local_addr()
+            .map_err(|e| std::io::Error::other(e.to_string()))
     }
 
     pub async fn run(&mut self) {

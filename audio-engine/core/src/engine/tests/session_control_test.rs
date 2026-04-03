@@ -9,8 +9,9 @@ use zako3_audio_engine_audio::{MockDecoder, MockMixer, create_ringbuf_pair};
 use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
-    AudioMetaResponse, AudioRequestString, AudioResponse, CachedAudioRequest, ChannelId, GuildId,
-    QueueName, SessionState, TapName, Track, TrackId, Volume, AudioCachePolicy, AudioCacheType, AudioMetadata,
+    AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
+    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, TapName, Track,
+    TrackId, Volume,
 };
 
 // Helper to create a dummy track
@@ -21,7 +22,10 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
         request: CachedAudioRequest {
             tap_name: TapName::from("yt".to_string()),
             audio_request: AudioRequestString::from("req".to_string()),
-            cache_key: AudioCachePolicy { cache_type: AudioCacheType::CacheKey("key".to_string()), ttl_seconds: None },
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("key".to_string()),
+                ttl_seconds: None,
+            },
         },
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
@@ -43,7 +47,10 @@ async fn test_play_success() {
         .returning(|_| {
             Ok(AudioMetaResponse {
                 metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
-                cache_key: AudioCachePolicy { cache_type: AudioCacheType::CacheKey("test_key".to_string()), ttl_seconds: None },
+                cache_key: AudioCachePolicy {
+                    cache_type: AudioCacheType::CacheKey("test_key".to_string()),
+                    ttl_seconds: None,
+                },
             })
         });
 
@@ -93,7 +100,10 @@ async fn test_play_success() {
     mock_taphub.expect_request_audio().times(1).returning(|_| {
         Ok(AudioResponse {
             metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
-            cache_key: Some(AudioCachePolicy { cache_type: AudioCacheType::CacheKey("test_key".to_string()), ttl_seconds: None }),
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("test_key".to_string()),
+                ttl_seconds: None,
+            }),
             stream: tokio::sync::mpsc::channel(1).1,
         })
     });
@@ -143,7 +153,10 @@ async fn test_play_queued() {
     mock_taphub.expect_request_audio_meta().returning(|_| {
         Ok(AudioMetaResponse {
             metadatas: vec![AudioMetadata::Title("T2".to_string())],
-            cache_key: AudioCachePolicy { cache_type: AudioCacheType::CacheKey("k2".to_string()), ttl_seconds: None },
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("k2".to_string()),
+                ttl_seconds: None,
+            },
         })
     });
 
@@ -484,7 +497,10 @@ async fn test_next_music_success() {
     mock_taphub.expect_request_audio().returning(|_| {
         Ok(AudioResponse {
             metadatas: vec![AudioMetadata::Title("T2".to_string())],
-            cache_key: Some(AudioCachePolicy { cache_type: AudioCacheType::CacheKey("k2".to_string()), ttl_seconds: None }),
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("k2".to_string()),
+                ttl_seconds: None,
+            }),
             stream: tokio::sync::mpsc::channel(1).1,
         })
     });
@@ -590,7 +606,10 @@ async fn test_end_of_track_handling_and_preload() {
     mock_taphub.expect_request_audio_meta().returning(|_| {
         Ok(AudioMetaResponse {
             metadatas: vec![AudioMetadata::Title("".to_string())],
-            cache_key: AudioCachePolicy { cache_type: AudioCacheType::CacheKey("".to_string()), ttl_seconds: None },
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("".to_string()),
+                ttl_seconds: None,
+            },
         })
     });
 
@@ -615,7 +634,10 @@ async fn test_end_of_track_handling_and_preload() {
     mock_taphub.expect_request_audio().returning(|_| {
         Ok(AudioResponse {
             metadatas: vec![AudioMetadata::Title("".to_string())],
-            cache_key: Some(AudioCachePolicy { cache_type: AudioCacheType::CacheKey("".to_string()), ttl_seconds: None }),
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("".to_string()),
+                ttl_seconds: None,
+            }),
             stream: tokio::sync::mpsc::channel(1).1,
         })
     });
@@ -658,7 +680,15 @@ async fn test_end_of_track_handling_and_preload() {
         .expect_preload_audio()
         .withf(|req| req.audio_request == AudioRequestString::from("t".to_string()))
         .times(0)
-        .returning(|_| Ok(AudioMetaResponse { metadatas: vec![], cache_key: AudioCachePolicy { cache_type: AudioCacheType::None, ttl_seconds: None } }));
+        .returning(|_| {
+            Ok(AudioMetaResponse {
+                metadatas: vec![],
+                cache_key: AudioCachePolicy {
+                    cache_type: AudioCacheType::None,
+                    ttl_seconds: None,
+                },
+            })
+        });
 
     let control = create_session_control(
         guild_id,

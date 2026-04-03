@@ -14,6 +14,7 @@ use zako3_audio_engine_infra::{
 
 use tonic::transport::Server;
 use zako3_audio_engine_telemetry::TelemetryConfig;
+use zako3_taphub_transport_client::TransportClient;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

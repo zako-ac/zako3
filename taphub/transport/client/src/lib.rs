@@ -1,4 +1,3 @@
-use protofish2::TransferMode;
 use protofish2::compression::CompressionType;
 use protofish2::connection::{ClientConfig, ProtofishClient};
 use protofish2::mani::transfer::jitter::OpusJitterBuffer;
