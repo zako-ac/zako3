@@ -1,3 +1,5 @@
+- [ ] TapHub - AE comms
+
 refer hq todo
 
 - [ ] Implement settings UI `~/projects/zako3/docs/en/settings.md`
@@ -5,4 +7,4 @@ refer hq todo
 
 - [ ] Document backend features
 
-- [ ] Track proto handling (todo!)
+- [ ] AE Track proto handling (todo!)
