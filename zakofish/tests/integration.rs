@@ -9,12 +9,13 @@ use std::time::Duration;
 use tokio::sync::{Notify, mpsc};
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
+use zako3_types::{AudioCachePolicy, AudioCacheType};
 use zakofish::hub::{HubHandler, ZakofishHub};
 use zakofish::tap::{TapHandler, ZakofishTap};
 use zakofish::types::message::{
-    AudioRequestFailureMessage, AudioRequestSuccessMessage, TapClientHello, TapServerReject,
+    AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
+    TapClientHello, TapServerReject,
 };
-use zakofish::types::{AudioCachePolicy, AudioCacheType};
 
 fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
     let subject_alt_names = vec!["localhost".to_string()];
@@ -77,6 +78,21 @@ impl TapHandler for TestTapHandler {
         });
 
         Ok((success_msg, rx))
+    }
+
+    async fn handle_audio_metadata_request(
+        &self,
+        ars: AudioRequestString,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage> {
+        if ars.to_string() == "test:metadata" {
+            Ok(AudioMetadataSuccessMessage { metadatas: vec![] })
+        } else {
+            Err(AudioRequestFailureMessage {
+                reason: "Not found".to_string(),
+                try_others: true,
+            })
+        }
     }
 }
 

@@ -11,9 +11,21 @@ pub struct AudioRequestMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioMetadataRequestMessage {
+    pub ars: AudioRequestString,
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioRequestSuccessMessage {
     pub cache: AudioCachePolicy,
     pub duration_secs: Option<f32>,
+    pub metadatas: Vec<AudioMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioMetadataSuccessMessage {
     pub metadatas: Vec<AudioMetadata>,
 }
 
@@ -44,6 +56,7 @@ pub enum HubToTapMessage {
     Accept,
     Reject(TapServerReject),
     AudioRequest(AudioRequestMessage),
+    AudioMetadataRequest(AudioMetadataRequestMessage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,4 +66,5 @@ pub enum TapToHubMessage {
     ClientHello(TapClientHello),
     AudioRequestSuccess(AudioRequestSuccessMessage),
     AudioRequestFailure(AudioRequestFailureMessage),
+    AudioMetadataSuccess(AudioMetadataSuccessMessage),
 }

@@ -8,8 +8,8 @@ use tokio::sync::mpsc;
 
 use crate::error::{Result, ZakofishError};
 use crate::types::message::{
-    AudioRequestFailureMessage, AudioRequestSuccessMessage, HubToTapMessage, TapClientHello,
-    TapToHubMessage,
+    AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
+    HubToTapMessage, TapClientHello, TapToHubMessage,
 };
 use zako3_types::AudioRequestString;
 
@@ -29,6 +29,15 @@ pub trait TapHandler: Send + Sync {
         ),
         AudioRequestFailureMessage,
     >;
+
+    /// Handle an incoming audio metadata request.
+    /// If successful, returns the success message with metadata.
+    /// If failed, returns the failure message.
+    async fn handle_audio_metadata_request(
+        &self,
+        ars: AudioRequestString,
+        headers: HashMap<String, String>,
+    ) -> std::result::Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage>;
 }
 
 pub struct ZakofishTap {
@@ -147,6 +156,25 @@ async fn handle_incoming_stream(
 
                     // End transfer
                     send_stream.end().await?;
+                }
+                Err(failure_msg) => {
+                    let response_msg = TapToHubMessage::AudioRequestFailure(failure_msg);
+                    mani_stream
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .await?;
+                }
+            }
+        }
+        HubToTapMessage::AudioMetadataRequest(request) => {
+            match handler
+                .handle_audio_metadata_request(request.ars, request.headers)
+                .await
+            {
+                Ok(success_msg) => {
+                    let response_msg = TapToHubMessage::AudioMetadataSuccess(success_msg);
+                    mani_stream
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .await?;
                 }
                 Err(failure_msg) => {
                     let response_msg = TapToHubMessage::AudioRequestFailure(failure_msg);

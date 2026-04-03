@@ -7,7 +7,8 @@ use tokio::sync::Mutex;
 
 use crate::error::{Result, ZakofishError};
 use crate::types::message::{
-    AudioRequestMessage, AudioRequestSuccessMessage, TapClientHello, TapServerReject,
+    AudioMetadataRequestMessage, AudioMetadataSuccessMessage, AudioRequestMessage,
+    AudioRequestSuccessMessage, TapClientHello, TapServerReject,
 };
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
@@ -102,6 +103,45 @@ impl ZakofishHub {
             crate::types::message::TapToHubMessage::AudioRequestFailure(failure) => Err(
                 ZakofishError::ProtocolError(format!("Audio request failed: {:?}", failure)),
             ),
+            _ => Err(ZakofishError::ProtocolError(
+                "Unexpected response type".to_string(),
+            )),
+        }
+    }
+
+    pub async fn request_audio_metadata(
+        &self,
+        tap_id: TapId,
+        ars: AudioRequestString,
+        headers: HashMap<String, String>,
+    ) -> Result<AudioMetadataSuccessMessage> {
+        let conn_arc = {
+            let sessions = self.sessions.lock().await;
+            sessions.get(&tap_id).cloned().ok_or_else(|| {
+                ZakofishError::ProtocolError(format!("Tap {} not connected", tap_id.0))
+            })?
+        };
+
+        let mut conn = conn_arc.lock().await;
+        let mut stream = conn.open_mani().await?;
+
+        let request = AudioMetadataRequestMessage { ars, headers };
+        let payload = crate::types::message::HubToTapMessage::AudioMetadataRequest(request);
+        let encoded = crate::protocol::codec::encode_msgpack(&payload)?;
+        stream.send_payload(encoded.into()).await?;
+
+        let response_bytes = stream.recv_payload().await?;
+        let response: crate::types::message::TapToHubMessage =
+            crate::protocol::codec::decode_msgpack(&response_bytes)?;
+
+        match response {
+            crate::types::message::TapToHubMessage::AudioMetadataSuccess(success) => Ok(success),
+            crate::types::message::TapToHubMessage::AudioRequestFailure(failure) => {
+                Err(ZakofishError::ProtocolError(format!(
+                    "Audio metadata request failed: {:?}",
+                    failure
+                )))
+            }
             _ => Err(ZakofishError::ProtocolError(
                 "Unexpected response type".to_string(),
             )),

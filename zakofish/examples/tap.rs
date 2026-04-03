@@ -12,11 +12,12 @@ use uuid::Uuid;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
 
+use zako3_types::{AudioCachePolicy, AudioCacheType};
 use zakofish::tap::{TapHandler, ZakofishTap};
 use zakofish::types::message::{
-    AudioRequestFailureMessage, AudioRequestSuccessMessage, TapClientHello,
+    AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
+    TapClientHello,
 };
-use zakofish::types::{AudioCachePolicy, AudioCacheType};
 
 struct SimpleTapHandler;
 
@@ -61,6 +62,18 @@ impl TapHandler for SimpleTapHandler {
             },
             rx,
         ))
+    }
+
+    async fn handle_audio_metadata_request(
+        &self,
+        ars: AudioRequestString,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage> {
+        println!("Tap: Received audio metadata request for: {}", ars);
+        Err(AudioRequestFailureMessage {
+            reason: "Not implemented in example".to_string(),
+            try_others: true,
+        })
     }
 }
 
