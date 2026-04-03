@@ -1,7 +1,7 @@
 use bytes::Bytes;
-use protofish2::Timestamp;
 use protofish2::compression::CompressionType;
 use protofish2::connection::{ClientConfig, ProtofishClient};
+use protofish2::{Timestamp, TransferMode};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -132,7 +132,12 @@ async fn handle_incoming_stream(
 
                     // Start transfer
                     let mut send_stream = mani_stream
-                        .start_transfer(CompressionType::None, protofish2::SequenceNumber(0), None)
+                        .start_transfer(
+                            TransferMode::Dual,
+                            CompressionType::None,
+                            protofish2::SequenceNumber(0),
+                            None,
+                        )
                         .await?;
 
                     // Stream chunks

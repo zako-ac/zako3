@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 1. Send the audio request
         match hub.request_audio(tap_id, ars, headers).await {
-            Ok((success_msg, mut recv_stream)) => {
+            Ok((success_msg, mut recv_stream, _)) => {
                 println!(
                     "Hub: Received success response! Duration: {:?}s",
                     success_msg.duration_secs

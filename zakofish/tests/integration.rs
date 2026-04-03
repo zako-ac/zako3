@@ -147,7 +147,7 @@ async fn test_zakofish_flow() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let ars = AudioRequestString::from("test:audio".to_string());
-    let (success_msg, mut rx) = hub
+    let (success_msg, mut rx, _) = hub
         .request_audio(tap_id, ars, HashMap::new())
         .await
         .expect("Failed to request audio");

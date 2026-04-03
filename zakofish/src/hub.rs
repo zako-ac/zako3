@@ -1,5 +1,6 @@
+use protofish2::ManiTransferRecvStreams;
 use protofish2::connection::{ProtofishServer, ServerConfig};
-use protofish2::mani::transfer::recv::TransferReliableRecvStream;
+use protofish2::mani::transfer::recv::{TransferReliableRecvStream, TransferUnreliableRecvStream};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -62,7 +63,11 @@ impl ZakofishHub {
         tap_id: TapId,
         ars: AudioRequestString,
         headers: HashMap<String, String>,
-    ) -> Result<(AudioRequestSuccessMessage, TransferReliableRecvStream)> {
+    ) -> Result<(
+        AudioRequestSuccessMessage,
+        TransferReliableRecvStream,
+        TransferUnreliableRecvStream,
+    )> {
         let conn_arc = {
             let sessions = self.sessions.lock().await;
             sessions.get(&tap_id).cloned().ok_or_else(|| {
@@ -84,9 +89,15 @@ impl ZakofishHub {
 
         match response {
             crate::types::message::TapToHubMessage::AudioRequestSuccess(success) => {
-                let (receiver, _) = stream.accept_transfer().await?;
-
-                Ok((success, receiver))
+                match stream.accept_transfer().await? {
+                    ManiTransferRecvStreams::Dual {
+                        reliable,
+                        unreliable,
+                    } => Ok((success, reliable, unreliable)),
+                    _ => Err(ZakofishError::ProtocolError(
+                        "Expected Dual transfer stream".to_string(),
+                    )),
+                }
             }
             crate::types::message::TapToHubMessage::AudioRequestFailure(failure) => Err(
                 ZakofishError::ProtocolError(format!("Audio request failed: {:?}", failure)),
