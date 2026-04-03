@@ -1,5 +1,5 @@
 [package]
-name = "zako3-taphub-types"
+name = "zako3-taphub-transport-client"
 version = "0.1.0"
 edition = "2024"
 

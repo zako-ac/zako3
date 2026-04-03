@@ -244,10 +244,10 @@ impl AudioEngine for AudioEngineServer {
 fn track_to_proto(track: zako3_audio_engine_core::types::Track) -> proto::Track {
     proto::Track {
         track_id: track.track_id.into(),
-        description: track.description.into(),
+        description: todo!(), // TODO implement track description
         queue_name: track.queue_name.into(),
         audio_request_string: track.request.audio_request.into(),
-        cache_key: track.request.cache_key.into(),
+        cache_key: todo!(), // TODO remove cache key from proto
         tap_name: track.request.tap_name.into(),
         volume: track.volume.into(),
     }

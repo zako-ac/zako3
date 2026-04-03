@@ -2,6 +2,9 @@ use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncRead;
 
+pub mod taphub;
+pub use taphub::*;
+
 pub mod error;
 pub use error::*;
 
@@ -46,21 +49,9 @@ pub struct Volume(f32);
 #[display("{_0}")]
 pub struct AudioRequestString(String);
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
-)]
-#[display("{_0}")]
-pub struct StreamCacheKey(String);
-
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
-)]
-#[display("{_0}")]
-pub struct TrackDescription(String);
-
 pub struct AudioResponse {
-    pub cache_key: Option<StreamCacheKey>,
-    pub description: TrackDescription,
+    pub cache_key: Option<AudioCachePolicy>,
+    pub metadatas: Vec<AudioMetadata>,
     pub stream: Box<dyn AsyncRead + Send + Unpin + Sync>,
 }
 
@@ -81,13 +72,40 @@ pub struct AudioRequest {
 pub struct CachedAudioRequest {
     pub tap_name: TapName,
     pub audio_request: AudioRequestString,
-    pub cache_key: StreamCacheKey,
+    pub cache_key: AudioCachePolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AudioCacheType {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "ar_hash")]
+    ARHash,
+    #[serde(rename = "key")]
+    CacheKey(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCachePolicy {
+    pub cache_type: AudioCacheType,
+    pub ttl_seconds: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum AudioMetadata {
+    Title(String),
+    Description(String),
+    Artist(String),
+    Album(String),
+    ImageUrl(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     pub track_id: TrackId,
-    pub description: TrackDescription,
+    pub metadatas: Vec<AudioMetadata>,
     pub request: CachedAudioRequest,
     pub volume: Volume,
     pub queue_name: QueueName,
@@ -95,8 +113,8 @@ pub struct Track {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioMetaResponse {
-    pub description: TrackDescription,
-    pub cache_key: StreamCacheKey,
+    pub metadatas: Vec<AudioMetadata>,
+    pub cache_key: AudioCachePolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

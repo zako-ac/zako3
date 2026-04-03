@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use zako3_types::{AudioRequestString, hq::TapId};
+use zako3_types::{AudioCachePolicy, AudioMetadata, AudioRequestString, hq::TapId};
 
-use crate::types::{AudioCachePolicy, AudioMetadata, HubRejectReasonType};
+use crate::types::HubRejectReasonType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioRequestMessage {

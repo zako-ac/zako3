@@ -1,7 +1,6 @@
 [package]
-name = "zako3-taphub-transport"
+name = "zako3-taphub-transport-lib"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-typed-builder = "0.23.2"

@@ -76,7 +76,7 @@ impl SessionControl {
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             let track = Track {
                 track_id,
-                description: meta.description,
+                metadatas: meta.metadatas,
                 request: CachedAudioRequest {
                     tap_name,
                     audio_request: request,

@@ -6,11 +6,9 @@ use zako3_audio_engine_audio::metrics;
 use zako3_audio_engine_core::{
     error::ZakoResult,
     service::taphub::TapHubService,
-    types::{
-        AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, StreamCacheKey,
-        TrackDescription,
-    },
+    types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest},
 };
+use zako3_types::{AudioCachePolicy, AudioCacheType, AudioMetadata};
 
 pub struct StubTapHubService;
 
@@ -19,7 +17,7 @@ static SINE_DATA: &[u8] = include_bytes!("../sine.mp3");
 
 #[async_trait]
 impl TapHubService for StubTapHubService {
-    #[instrument(skip(self), fields(tap_name = %request.tap_name, cache_key = %request.cache_key))]
+    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let start = std::time::Instant::now();
 
@@ -36,7 +34,7 @@ impl TapHubService for StubTapHubService {
 
         Ok(AudioResponse {
             cache_key: Some(request.cache_key),
-            description: TrackDescription::from("Dummy Track".to_string()),
+            metadatas: vec![AudioMetadata::Title("Dumym Title".to_string())],
             stream: Box::new(cursor),
         })
     }
@@ -53,16 +51,16 @@ impl TapHubService for StubTapHubService {
         Ok(())
     }
 
-    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
-    async fn request_audio_meta(&self, request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
+    #[instrument(skip(self), fields(tap_name = %_request.tap_name))]
+    async fn request_audio_meta(&self, _request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
         let start = std::time::Instant::now();
 
         let result = AudioMetaResponse {
-            description: TrackDescription::from(format!(
-                "Dummy Title for {}",
-                request.request.to_string()
-            )),
-            cache_key: StreamCacheKey::from("dummy_cache_key".to_string()),
+            metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::None,
+                ttl_seconds: None,
+            },
         };
 
         let duration = start.elapsed();
@@ -86,7 +84,7 @@ impl<T: TapHubService> InstrumentedTapHubService<T> {
 
 #[async_trait]
 impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
-    #[instrument(skip(self), fields(tap_name = %request.tap_name, cache_key = %request.cache_key))]
+    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let start = std::time::Instant::now();
 
@@ -108,7 +106,7 @@ impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
         result
     }
 
-    #[instrument(skip(self), fields(cache_key = %request.cache_key))]
+    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
     async fn preload_audio(&self, request: CachedAudioRequest) -> ZakoResult<()> {
         let start = std::time::Instant::now();
 
@@ -130,7 +128,7 @@ impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
         result
     }
 
-    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
     async fn request_audio_meta(&self, request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
         let start = std::time::Instant::now();
 

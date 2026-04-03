@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
-derive_more = { version = "2.1.1", features = ["from", "into", "from_str", "display"] }
+derive_more = { version = "2.1.1", features = ["from", "into", "from_str", "display", "default", "add"] }
 redis = "1.1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json.workspace = true
