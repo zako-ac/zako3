@@ -1,5 +1,6 @@
 use thiserror::Error;
-use zako3_types::{OnlineTapState, OnlineTapStates, hq::TapId};
+use uuid::Uuid;
+use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId};
 
 use crate::repository::CacheRepositoryRef;
 
@@ -19,6 +20,21 @@ pub struct StateService {
 impl StateService {
     pub fn new(cache_repository: CacheRepositoryRef) -> Self {
         Self { cache_repository }
+    }
+
+    pub async fn get_tap_id_by_name(&self, tap_name: &TapName) -> Result<Option<TapId>> {
+        let name_key = format!("tap_name:{}", tap_name.0);
+        let id_str = self.cache_repository.get(&name_key).await;
+        match id_str {
+            Some(id) => {
+                if let Ok(uuid) = Uuid::parse_str(&id) {
+                    Ok(Some(TapId(uuid)))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     pub async fn get_tap_states(&self, tap_id: &TapId) -> Result<OnlineTapStates> {
@@ -45,6 +61,11 @@ impl StateService {
 
     pub async fn set_connection_state(&self, state: OnlineTapState) -> Result<()> {
         let tap_id = state.tap_id.clone();
+
+        let name_key = format!("tap_name:{}", state.tap_name.0);
+        self.cache_repository
+            .set(&name_key, &tap_id.0.to_string())
+            .await;
 
         let mut states = self.get_tap_states(&state.tap_id).await?;
 

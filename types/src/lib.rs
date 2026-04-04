@@ -38,7 +38,7 @@ pub struct UserId(u64);
     Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
 )]
 #[display("{_0}")]
-pub struct TapName(String);
+pub struct TapName(pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Into, From, Display, Serialize, Deserialize)]
 #[display("{_0}")]
@@ -65,13 +65,13 @@ pub enum AudioStopFilter {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioRequest {
-    pub tap_id: TapId,
+    pub tap_name: TapName,
     pub request: AudioRequestString,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedAudioRequest {
-    pub tap_id: TapId,
+    pub tap_name: TapName,
     pub audio_request: AudioRequestString,
     pub cache_key: AudioCachePolicy,
 }

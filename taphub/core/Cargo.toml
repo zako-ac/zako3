@@ -24,3 +24,4 @@ serde.workspace = true
 rustls-pemfile = "2.2.0"
 zakofish.workspace = true
 parking_lot = "0.12.5"
+uuid.workspace = true

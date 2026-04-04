@@ -18,9 +18,16 @@ impl TapHubBridgeHandler for TapHub {
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
         let (tx, rx) = mpsc::channel(100);
 
+        let tap_id_opt = self
+            .state_service
+            .get_tap_id_by_name(&request.tap_name)
+            .await
+            .map_err(|e| format!("Failed to get tap id: {}", e))?;
+        let tap_id = tap_id_opt.ok_or_else(|| "Tap disconnected or not found".to_string())?;
+
         let states = &self
             .state_service
-            .get_tap_states(&request.tap_id)
+            .get_tap_states(&tap_id)
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
@@ -33,7 +40,7 @@ impl TapHubBridgeHandler for TapHub {
         let (succ, rel, mut unrel) = self
             .zf_hub
             .request_audio(
-                request.tap_id.clone(),
+                tap_id.clone(),
                 connection_id,
                 request.audio_request,
                 Default::default(),

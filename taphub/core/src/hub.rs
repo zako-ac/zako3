@@ -39,6 +39,7 @@ impl HubHandler for TapHubConnectionHandler {
 
                 let online_tap = OnlineTapState {
                     tap_id: tap.id.clone(),
+                    tap_name: zako3_types::TapName(tap.name.0.clone()),
                     connection_id,
                     friendly_name: hello.friendly_name,
                     selection_weight: hello.selection_weight,
