@@ -1,32 +1,61 @@
 use async_trait::async_trait;
+use dashmap::DashMap;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
+use tracing::Level;
+use uuid::Uuid;
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
+use zako3_taphub_core::hub::TapHub;
 use zako3_taphub_core::repository::{CacheRepository, HqRepository};
 use zako3_taphub_transport_server::TransportServer;
-use zako3_types::hq::Tap;
+use zako3_types::hq::{ResourceTimestamp, Tap, TapOccupation, TapPermission};
 
 struct StubHqRepository;
 
 #[async_trait]
 impl HqRepository for StubHqRepository {
     async fn authenticate_tap(&self, _token: &str) -> Option<Tap> {
-        None
+        Tap {
+            id: Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into(),
+            name: "mytap".to_string().into(),
+            description: "This is a stub tap for testing".to_string().into(),
+            owner_id: Uuid::new_v4().into(),
+            occupation: TapOccupation::Base,
+            permission: TapPermission::OwnerOnly,
+            role: None,
+            timestamp: ResourceTimestamp::now(),
+        }
+        .into()
     }
     async fn get_tap(&self, _tap_id: &str) -> Option<Tap> {
-        None
+        Tap {
+            id: Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into(),
+            name: "mytap".to_string().into(),
+            description: "This is a stub tap for testing".to_string().into(),
+            owner_id: Uuid::new_v4().into(),
+            occupation: TapOccupation::Base,
+            permission: TapPermission::OwnerOnly,
+            role: None,
+            timestamp: ResourceTimestamp::now(),
+        }
+        .into()
     }
 }
 
-struct StubCacheRepository;
+#[derive(Default)]
+struct StubCacheRepository {
+    data: DashMap<String, String>,
+}
 
 #[async_trait]
 impl CacheRepository for StubCacheRepository {
-    async fn get(&self, _key: &str) -> Option<String> {
-        None
+    async fn get(&self, key: &str) -> Option<String> {
+        self.data.get(key).map(|v| v.value().clone())
     }
-    async fn set(&self, _key: &str, _value: &str) {}
+    async fn set(&self, key: &str, value: &str) {
+        self.data.insert(key.to_string(), value.to_string());
+    }
 }
 
 use std::fs::File;
@@ -51,7 +80,7 @@ fn load_certs(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
@@ -62,12 +91,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cert_chain, private_key) = load_certs(&config)?;
 
-    let app = Arc::new(App {
+    let app = App {
         hq_repository: Arc::new(StubHqRepository),
-        cache_repository: Arc::new(StubCacheRepository),
+        cache_repository: Arc::new(StubCacheRepository::default()),
+    };
+
+    let tap_hub = TapHub::new(
+        app.clone(),
+        &config.zakofish_bind_addr,
+        &config.cert_file,
+        &config.key_file,
+    )?;
+    let tap_hub = Arc::new(tap_hub);
+
+    let tap_hub_clone = tap_hub.clone();
+    tokio::spawn(async move {
+        tracing::info!("Starting TapHub...");
+        if let Err(e) = tap_hub_clone.run().await {
+            tracing::error!(%e, "Error running TapHub");
+        }
     });
 
-    let mut server = TransportServer::new(bind_addr, cert_chain, private_key, app)?;
+    let mut server = TransportServer::new(bind_addr, cert_chain, private_key, tap_hub)?;
 
     tracing::info!("Listening on {}", server.local_addr()?);
     server.run().await;

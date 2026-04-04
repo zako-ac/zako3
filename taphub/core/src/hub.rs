@@ -32,8 +32,9 @@ impl HubHandler for TapHubConnectionHandler {
         if let Some(tap) = tap {
             if hello.tap_id == tap.id {
                 tracing::info!(
-                    "Hub: Tap authenticated! ID: {:?}, Connection: {}",
+                    "Hub: Tap authenticated! ID: {:?}, Name: {}, Connection: {}",
                     tap.id,
+                    tap.name.0,
                     connection_id
                 );
 
@@ -120,5 +121,9 @@ impl TapHub {
             sampler: Arc::new(DynamicSampler::new().into()),
             state_service: StateService::new(app.cache_repository.clone()),
         })
+    }
+
+    pub async fn run(&self) -> Result<(), ZakofishError> {
+        self.zf_hub.run().await
     }
 }

@@ -16,6 +16,13 @@ impl TapHubBridgeHandler for TapHub {
         &self,
         request: CachedAudioRequest,
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+        let states = &self
+            .state_service
+            .get_tap_states(&uuid::Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into())
+            .await
+            .map_err(|e| format!("Failed to get tap states: {}", e))?;
+        tracing::info!("Got tap states: {:?}", states);
+
         let (tx, rx) = mpsc::channel(100);
 
         let tap_id_opt = self
