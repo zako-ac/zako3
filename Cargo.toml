@@ -13,6 +13,8 @@ zako3-taphub-transport-client = { path = "taphub/transport/client" }
 
 zako3-types = { path = "types" }
 
+zakofish = { path = "zakofish" }
+
 # HQ Dependencies
 hq-types = { path = "types", package = "zako3-types" }
 hq-core = { path = "hq/core" }

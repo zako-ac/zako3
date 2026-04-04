@@ -22,22 +22,34 @@ fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
 }
 
 struct SimpleHubHandler {
-    tap_connected_tx: mpsc::Sender<TapId>,
+    tap_connected_tx: mpsc::Sender<(TapId, u64)>,
 }
 
 #[async_trait::async_trait]
 impl HubHandler for SimpleHubHandler {
-    async fn on_tap_authenticate(&self, hello: TapClientHello) -> Result<(), TapServerReject> {
-        println!("Hub: Tap connected! ID: {:?}", hello.tap_id);
-        let _ = self.tap_connected_tx.send(hello.tap_id).await;
+    async fn on_tap_authenticate(
+        &self,
+        connection_id: u64,
+        hello: TapClientHello,
+    ) -> Result<(), TapServerReject> {
+        println!(
+            "Hub: Tap connected! ID: {:?}, Connection: {}",
+            hello.tap_id, connection_id
+        );
+        let _ = self
+            .tap_connected_tx
+            .send((hello.tap_id, connection_id))
+            .await;
         Ok(())
     }
 
-    async fn on_tap_disconnected(&self, tap_id: TapId) {
-        println!("Hub: Tap disconnected! ID: {:?}", tap_id);
+    async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64) {
+        println!(
+            "Hub: Tap disconnected! ID: {:?}, Connection: {}",
+            tap_id, connection_id
+        );
     }
 }
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -76,8 +88,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Wait for a Tap to connect
     println!("Hub: Waiting for a Tap to connect...");
-    if let Some(tap_id) = tap_connected_rx.recv().await {
-        println!("Hub: Triggering a single transfer to Tap {:?}", tap_id);
+    if let Some((tap_id, connection_id)) = tap_connected_rx.recv().await {
+        println!(
+            "Hub: Triggering a single transfer to Tap {:?} (conn: {})",
+            tap_id, connection_id
+        );
 
         // Give the hub a moment to finish registering the session in its internal map
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -86,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let headers = HashMap::new();
 
         // 1. Send the audio request
-        match hub.request_audio(tap_id, ars, headers).await {
+        match hub.request_audio(tap_id, connection_id, ars, headers).await {
             Ok((success_msg, mut recv_stream, _)) => {
                 println!(
                     "Hub: Received success response! Duration: {:?}s",

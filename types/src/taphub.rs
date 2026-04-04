@@ -5,6 +5,7 @@ use crate::hq::TapId;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OnlineTapState {
     pub tap_id: TapId,
+    pub connection_id: u64,
     pub friendly_name: String,
     pub selection_weight: f32,
 }

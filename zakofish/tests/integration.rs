@@ -29,16 +29,20 @@ fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
 }
 
 struct TestHubHandler {
-    tap_connected: Arc<Notify>,
+    tap_connected: mpsc::Sender<u64>,
 }
 
 #[async_trait::async_trait]
 impl HubHandler for TestHubHandler {
-    async fn on_tap_authenticate(&self, _hello: TapClientHello) -> Result<(), TapServerReject> {
-        self.tap_connected.notify_one();
+    async fn on_tap_authenticate(
+        &self,
+        connection_id: u64,
+        _hello: TapClientHello,
+    ) -> Result<(), TapServerReject> {
+        let _ = self.tap_connected.send(connection_id).await;
         Ok(())
     }
-    async fn on_tap_disconnected(&self, _tap_id: TapId) {}
+    async fn on_tap_disconnected(&self, _tap_id: TapId, _connection_id: u64) {}
 }
 
 struct TestTapHandler;
@@ -115,9 +119,9 @@ async fn test_zakofish_flow() {
         protofish_config: Default::default(),
     };
 
-    let tap_connected = Arc::new(Notify::new());
+    let (tap_connected_tx, mut tap_connected_rx) = mpsc::channel(1);
     let hub_handler = Arc::new(TestHubHandler {
-        tap_connected: tap_connected.clone(),
+        tap_connected: tap_connected_tx,
     });
 
     let hub = Arc::new(ZakofishHub::new(server_config, hub_handler).unwrap());
@@ -157,14 +161,17 @@ async fn test_zakofish_flow() {
             .unwrap();
     });
 
-    tap_connected.notified().await;
+    let connection_id = tap_connected_rx
+        .recv()
+        .await
+        .expect("Failed to get connection_id");
 
     // Small delay to let Hub insert the tap into its sessions
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let ars = AudioRequestString::from("test:audio".to_string());
     let (success_msg, mut rx, _) = hub
-        .request_audio(tap_id, ars, HashMap::new())
+        .request_audio(tap_id, connection_id, ars, HashMap::new())
         .await
         .expect("Failed to request audio");
 
