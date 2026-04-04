@@ -1,12 +1,15 @@
+use std::{path::Path, sync::Arc};
+
 use async_trait::async_trait;
-use protofish2::connection::ServerConfig;
+use parking_lot::Mutex;
 use zako3_types::{OnlineTapState, hq::TapId};
 use zakofish::{
+    ZakofishError, create_server_config,
     hub::{HubHandler, ZakofishHub},
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
 
-use crate::{app::App, service::state::StateService};
+use crate::{app::App, routing::DynamicSampler, service::state::StateService};
 
 pub struct TapHubConnectionHandler {
     app: App,
@@ -84,9 +87,37 @@ impl HubHandler for TapHubConnectionHandler {
 }
 
 pub struct TapHub {
-    zf_hub: ZakofishHub,
+    pub zf_hub: ZakofishHub,
+    pub sampler: Arc<Mutex<DynamicSampler>>,
+    pub state_service: StateService,
 }
 
 impl TapHub {
-    pub fn new(app: App) -> Self {}
+    pub fn new(
+        app: App,
+        bind_address: &str,
+        cert_file: impl AsRef<Path>,
+        key_file: impl AsRef<Path>,
+    ) -> Result<Self, ZakofishError> {
+        let server_config = create_server_config(
+            bind_address.parse().map_err(|_| {
+                ZakofishError::ProtocolError("Invalid bind address is provided".to_string())
+            })?,
+            cert_file,
+            key_file,
+        )?;
+
+        let handler = TapHubConnectionHandler {
+            app: app.clone(),
+            state_service: StateService::new(app.cache_repository.clone()),
+        };
+
+        let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
+
+        Ok(Self {
+            zf_hub,
+            sampler: Arc::new(DynamicSampler::new().into()),
+            state_service: StateService::new(app.cache_repository.clone()),
+        })
+    }
 }

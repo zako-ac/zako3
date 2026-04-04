@@ -1,24 +1,19 @@
-use protofish2::compression::CompressionType;
-use protofish2::connection::ServerConfig;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
+use zakofish::config::create_server_config;
 use zakofish::hub::{HubHandler, ZakofishHub};
 use zakofish::types::message::{TapClientHello, TapServerReject};
 
-fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
+fn generate_cert() -> (String, String) {
     let subject_alt_names = vec!["localhost".to_string()];
     let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
-    let der_cert = cert.cert.der().to_vec();
-    let der_key = cert.signing_key.serialize_der();
-    (
-        vec![CertificateDer::from(der_cert)],
-        PrivateKeyDer::Pkcs8(der_key.into()),
-    )
+    let pem_cert = cert.cert.pem();
+    let pem_key = cert.signing_key.serialize_pem();
+    (pem_cert, pem_key)
 }
 
 struct SimpleHubHandler {
@@ -57,19 +52,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize rustls crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let (cert_chain, private_key) = generate_cert();
+    let (pem_cert, pem_key) = generate_cert();
 
     // Save cert to file so tap can use it to trust us
-    std::fs::write("hub.crt", &cert_chain[0])?;
+    std::fs::write("hub.crt", pem_cert)?;
+    std::fs::write("hub.key", pem_key)?;
 
-    let server_config = ServerConfig {
-        bind_address: "127.0.0.1:4433".parse()?,
-        cert_chain,
-        private_key,
-        supported_compression_types: vec![CompressionType::None],
-        keepalive_interval: Duration::from_secs(5),
-        protofish_config: Default::default(),
-    };
+    let server_config = create_server_config("127.0.0.1:4433".parse()?, "hub.crt", "hub.key")?;
 
     let (tap_connected_tx, mut tap_connected_rx) = mpsc::channel(1);
     let handler = Arc::new(SimpleHubHandler { tap_connected_tx });

@@ -10,6 +10,8 @@ pub use error::*;
 pub mod session_state;
 pub use session_state::*;
 
+use crate::hq::TapId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
 #[display("{_0}")]
 pub struct GuildId(u64);
@@ -63,13 +65,13 @@ pub enum AudioStopFilter {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioRequest {
-    pub tap_name: TapName,
+    pub tap_id: TapId,
     pub request: AudioRequestString,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedAudioRequest {
-    pub tap_name: TapName,
+    pub tap_id: TapId,
     pub audio_request: AudioRequestString,
     pub cache_key: AudioCachePolicy,
 }
