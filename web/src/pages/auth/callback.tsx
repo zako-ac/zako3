@@ -1,48 +1,41 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuthStore } from '@/features/auth'
+import { useAuthCallback } from '@/features/auth/hooks'
 import { ROUTES } from '@/lib/constants'
 import { Spinner } from '@/components/ui/spinner'
+import { toast } from 'sonner'
 
 export const AuthCallbackPage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { login } = useAuthStore()
+  const { mutate: handleCallback } = useAuthCallback()
+  const hasAttempted = useRef(false)
 
   useEffect(() => {
+    if (hasAttempted.current) return
+    hasAttempted.current = true
+
     const code = searchParams.get('code')
     const error = searchParams.get('error')
 
     if (error) {
       console.error('OAuth error:', error)
+      toast.error('Authentication failed')
       navigate(ROUTES.LOGIN, { replace: true })
       return
     }
 
     if (code) {
-      // In a real app, we'd exchange the code for tokens via API
-      // For now with MSW, we simulate this by calling the mock endpoint
-      fetch('/api/auth/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.user && data.token) {
-            login(data.token, data.user)
-            navigate(ROUTES.DASHBOARD, { replace: true })
-          } else {
-            navigate(ROUTES.LOGIN, { replace: true })
-          }
-        })
-        .catch(() => {
+      handleCallback(code, {
+        onError: () => {
+          toast.error('Failed to verify authentication code')
           navigate(ROUTES.LOGIN, { replace: true })
-        })
+        }
+      })
     } else {
       navigate(ROUTES.LOGIN, { replace: true })
     }
-  }, [searchParams, navigate, login])
+  }, [searchParams, navigate, handleCallback])
 
   return (
     <div className="flex min-h-svh items-center justify-center">

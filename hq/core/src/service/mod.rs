@@ -25,7 +25,7 @@ impl Service {
         Ok(Self {
             config: config.clone(),
             auth: AuthService::new(config.clone(), user_repo.clone()),
-            tap: TapService::new(tap_repo),
+            tap: TapService::new(tap_repo, user_repo),
         })
     }
 }

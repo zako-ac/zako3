@@ -93,13 +93,13 @@ export const tapsApi = {
 
   getMyTaps: async (
     params: Partial<PaginationParams> = {}
-  ): Promise<PaginatedResponse<Tap>> => {
+  ): Promise<PaginatedResponse<TapWithAccess>> => {
     const query = buildQueryString({
       page: params.page,
       perPage: params.perPage,
     })
     return apiCall(
-      apiClient.get<PaginatedResponse<Tap>>(`/users/me/taps${query}`)
+      apiClient.get<PaginatedResponse<TapWithAccess>>(`/users/me/taps${query}`)
     )
   },
 

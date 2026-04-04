@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub trait TapRepository: Send + Sync {
     async fn create(&self, tap: &Tap) -> CoreResult<Tap>;
     async fn list_by_owner(&self, owner_id: Uuid) -> CoreResult<Vec<Tap>>;
+    async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<Tap>>;
 }
 
 pub struct PgTapRepository {
@@ -111,5 +112,57 @@ impl TapRepository for PgTapRepository {
             .collect::<CoreResult<Vec<Tap>>>()?;
 
         Ok(taps)
+    }
+
+    async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<Tap>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, role, created_at, updated_at
+            FROM taps
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let id: Uuid = row.try_get("id")?;
+            let owner_id: Uuid = row.try_get("owner_id")?;
+            let name: String = row.try_get("name")?;
+            let description: Option<String> = row.try_get("description")?;
+
+            let occupation_str: String = row.try_get("occupation")?;
+            let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+            let permission_val: serde_json::Value = row.try_get("permission")?;
+            let permission = serde_json::from_value(permission_val)?;
+
+            let role_str: Option<String> = row.try_get("role")?;
+            let role = if let Some(r) = role_str {
+                Some(serde_json::from_str(&format!("\"{}\"", r))?)
+            } else {
+                None
+            };
+
+            let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+            let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+            Ok(Some(Tap {
+                id: TapId(id),
+                name: TapName(name),
+                description,
+                owner_id: UserId(owner_id),
+                occupation,
+                permission,
+                role,
+                timestamp: hq_types::hq::ResourceTimestamp {
+                    created_at,
+                    updated_at,
+                },
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }

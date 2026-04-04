@@ -58,6 +58,7 @@ class ApiClient {
 
       if (response.status === 401) {
         localStorage.removeItem(AUTH_TOKEN_KEY)
+        localStorage.removeItem('zako_auth_user') // Clear Zustand persist store
         window.location.href = '/login'
       }
 

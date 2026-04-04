@@ -1,8 +1,12 @@
 use crate::middleware::auth::AuthUser;
-use axum::{extract::State, Json};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 use hq_core::{CoreError, Service};
-use hq_types::hq::{CreateTapDto, Tap};
+use hq_types::hq::{CreateTapDto, PaginatedResponseDto, Tap, TapStatsDto, TapWithAccessDto};
 use std::sync::Arc;
+use uuid::Uuid;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     match e {
@@ -44,7 +48,7 @@ pub async fn create_tap(
     get,
     path = "/api/v1/taps",
     responses(
-        (status = 200, description = "List of taps", body = Vec<Tap>)
+        (status = 200, description = "List of taps", body = PaginatedResponseDto<TapWithAccessDto>)
     ),
     security(
         ("bearer_auth" = [])
@@ -53,8 +57,62 @@ pub async fn create_tap(
 pub async fn list_taps(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-) -> Result<Json<Vec<Tap>>, (axum::http::StatusCode, String)> {
+) -> Result<Json<PaginatedResponseDto<TapWithAccessDto>>, (axum::http::StatusCode, String)> {
     let taps = service.tap.list_by_user(user_id).await.map_err(map_error)?;
 
     Ok(Json(taps))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/taps/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Tap ID")
+    ),
+    responses(
+        (status = 200, description = "Tap details", body = TapWithAccessDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_tap(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Path(tap_id): Path<Uuid>,
+) -> Result<Json<TapWithAccessDto>, (axum::http::StatusCode, String)> {
+    let tap = service
+        .tap
+        .get_tap_with_access(tap_id, user_id)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(tap))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/taps/{id}/stats",
+    params(
+        ("id" = Uuid, Path, description = "Tap ID")
+    ),
+    responses(
+        (status = 200, description = "Tap statistics", body = TapStatsDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_tap_stats(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Path(tap_id): Path<Uuid>,
+) -> Result<Json<TapStatsDto>, (axum::http::StatusCode, String)> {
+    let stats = service
+        .tap
+        .get_tap_stats(tap_id, user_id)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(stats))
 }

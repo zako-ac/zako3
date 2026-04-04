@@ -20,7 +20,7 @@ pub async fn create(
     // For now assuming AuthService has get_or_create_user
     let user = service
         .auth
-        .get_or_create_user(&discord_id, username)
+        .get_or_create_user(&discord_id, username, None, None)
         .await?;
 
     let dto = CreateTapDto {
@@ -42,13 +42,16 @@ pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
 
     let user = service
         .auth
-        .get_or_create_user(&discord_id, username)
+        .get_or_create_user(&discord_id, username, None, None)
         .await?;
     let taps = service.tap.list_by_user(user.id.0).await?;
 
     let mut response = String::from("Your Taps:\n");
-    for tap in taps {
-        response.push_str(&format!("- {} (ID: {})\n", tap.name.0, tap.id.0));
+    for tap_item in taps.data {
+        response.push_str(&format!(
+            "- {} (ID: {})\n",
+            tap_item.tap.name, tap_item.tap.id
+        ));
     }
 
     ctx.say(response).await?;

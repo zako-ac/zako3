@@ -21,3 +21,4 @@ config = { workspace = true }
 dotenvy = { workspace = true }
 anyhow = { workspace = true }
 mockall = { workspace = true }
+urlencoding = "2.1.3"

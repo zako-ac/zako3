@@ -1,26 +1,42 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::Query, extract::State};
 use hq_core::Service;
-use hq_types::hq::{AuthCallbackDto, AuthResponseDto};
+use hq_types::hq::{AuthCallbackDto, AuthResponseDto, LoginResponseDto};
 use std::sync::Arc;
 use utoipa;
 
 #[utoipa::path(
-    post,
+    get,
     path = "/api/v1/auth/login",
-    request_body = AuthCallbackDto,
     responses(
-        (status = 200, description = "Login successful", body = AuthResponseDto)
+        (status = 200, description = "Get discord login url", body = LoginResponseDto)
     )
 )]
 pub async fn login_handler(
     State(service): State<Arc<Service>>,
-    Json(payload): Json<AuthCallbackDto>,
+) -> Result<Json<LoginResponseDto>, (axum::http::StatusCode, String)> {
+    let url = service.auth.get_login_url();
+    Ok(Json(url))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/callback",
+    params(
+        ("code" = String, Query, description = "Discord OAuth2 code")
+    ),
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponseDto)
+    )
+)]
+pub async fn callback_handler(
+    State(service): State<Arc<Service>>,
+    Query(payload): Query<AuthCallbackDto>,
 ) -> Result<Json<AuthResponseDto>, (axum::http::StatusCode, String)> {
-    let token = service
+    let response = service
         .auth
         .authenticate(&payload.code)
         .await
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(AuthResponseDto { token }))
+    Ok(Json(response))
 }

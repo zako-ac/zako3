@@ -199,11 +199,10 @@ export const TapSettingsPage = () => {
                   <FormItem>
                     <FormLabel>{t('taps.form.id')}</FormLabel>
                     <FormControl>
-                      <Input {...field} className="font-mono" />
+                      <Input {...field} className="font-mono bg-muted text-muted-foreground" disabled />
                     </FormControl>
-                    <FormDescription className="text-warning flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4" />
-                      {t('taps.form.idWarning')}
+                    <FormDescription className="text-muted-foreground">
+                      The Tap ID cannot be changed.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
