@@ -5,10 +5,9 @@ use mockall::automock;
 use ringbuf::traits::{Observer, Producer};
 use serenity::async_trait;
 use tracing::instrument;
-use zako3_types::ZakoError;
 
 use crate::{RingCons, RingProd, create_ringbuf_pair, speed_control};
-use crate::{error::ZakoResult, metrics, types::TrackId};
+use crate::{error::ZakoResult, types::TrackId};
 
 pub type ArcDecoder = Arc<dyn Decoder>;
 
@@ -78,9 +77,11 @@ async fn spawn_decode_task(
             }
 
             let take = vacant.min(chunk.len() - idx);
+
             for _ in 0..take {
                 let sample = chunk[idx];
-                if producer.try_push(sample).is_err() {
+                let sample_f32 = sample as f32 / 32768.0;
+                if producer.try_push(sample_f32).is_err() {
                     tracing::debug!(track_id = %track_id, "Producer push failed, consumer likely dropped");
                     return Ok(());
                 }

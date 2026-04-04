@@ -8,3 +8,4 @@ refer hq todo
 - [ ] Document backend features
 
 - [ ] AE Track proto handling (todo!)
+- [ ] Make AE work without TH (atleast no crash)

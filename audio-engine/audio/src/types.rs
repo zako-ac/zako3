@@ -5,13 +5,13 @@ pub use zako3_types::*;
 
 use crate::BUFFER_SIZE;
 
-pub type PCMSample = [i16; BUFFER_SIZE];
+pub type PCMSample = [f32; BUFFER_SIZE];
 
 pub type BoxConsumer = Receiver<PCMSample>;
 pub type BoxProducer = Sender<PCMSample>;
 
-pub type RingProd = HeapProd<i16>;
-pub type RingCons = HeapCons<i16>;
+pub type RingProd = HeapProd<f32>;
+pub type RingCons = HeapCons<f32>;
 
 pub type OpusProd = HeapProd<Bytes>;
 pub type OpusCons = HeapCons<Bytes>;

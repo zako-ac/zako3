@@ -1,4 +1,4 @@
-use ringbuf::traits::Consumer;
+use ringbuf::traits::consumer::Consumer;
 use std::time::Duration;
 
 use crate::types::TrackId;

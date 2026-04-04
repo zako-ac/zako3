@@ -1,4 +1,5 @@
 use protofish2::compression::CompressionType;
+use protofish2::config::ProtofishConfig;
 use protofish2::connection::{ProtofishConnection, ProtofishServer, ServerConfig};
 use protofish2::{Timestamp, TransferMode};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -43,13 +44,16 @@ impl TransportServer {
         private_key: PrivateKeyDer<'static>,
         handler: Arc<dyn TapHubBridgeHandler>,
     ) -> std::io::Result<Self> {
+        let mut protofish_config = ProtofishConfig::default();
+        protofish_config.mani_config.backpressure_credit_batch_size = 100;
+
         let config = ServerConfig {
             bind_address: bind_addr,
             cert_chain,
             private_key,
             supported_compression_types: vec![CompressionType::None],
             keepalive_interval: Duration::from_secs(5),
-            protofish_config: Default::default(),
+            protofish_config,
         };
         let server =
             ProtofishServer::bind(config).map_err(|e| std::io::Error::other(e.to_string()))?;

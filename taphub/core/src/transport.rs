@@ -16,7 +16,7 @@ impl TapHubBridgeHandler for App {
         &self,
         request: CachedAudioRequest,
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
-        let (tx, rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::channel(1000);
         let is_sine = request.audio_request.to_string().contains("sine");
 
         tokio::spawn(async move {
@@ -26,7 +26,7 @@ impl TapHubBridgeHandler for App {
             let chunk_size = 960; // 20ms at 48kHz
 
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(20));
-            let start = std::time::Instant::now();
+            let mut frame_count: u64 = 0;
 
             let mut encoder = opus::Encoder::new(
                 sample_rate as u32,
@@ -61,7 +61,8 @@ impl TapHubBridgeHandler for App {
                 match encoder.encode(&chunk, &mut out_opus) {
                     Ok(len) => {
                         let bytes = Bytes::copy_from_slice(&out_opus[..len]);
-                        let ts = Timestamp(start.elapsed().as_millis() as u64);
+                        let ts = Timestamp(frame_count * 20);
+                        frame_count += 1;
                         if tx.send((ts, bytes)).await.is_err() {
                             break;
                         }

@@ -1,4 +1,5 @@
 use protofish2::compression::CompressionType;
+use protofish2::config::ProtofishConfig;
 use protofish2::connection::{ClientConfig, ProtofishClient};
 use protofish2::mani::transfer::jitter::OpusJitterBuffer;
 use rustls::pki_types::CertificateDer;
@@ -29,12 +30,14 @@ impl TransportClient {
         server_name: String,
         root_certificates: Vec<CertificateDer<'static>>,
     ) -> std::io::Result<Self> {
+        let protofish_config = ProtofishConfig::default();
+
         let config = ClientConfig {
             bind_address: bind_addr,
             root_certificates,
             supported_compression_types: vec![CompressionType::None],
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
-            protofish_config: Default::default(),
+            protofish_config,
         };
         let client = ProtofishClient::bind(config)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;

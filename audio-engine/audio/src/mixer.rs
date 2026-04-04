@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use crossbeam::channel::{Receiver, Sender};
@@ -82,7 +82,7 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
         let mut mixed_buffer = [0f32; BUFFER_SIZE];
         let mut ended_sources: Vec<TrackId> = Vec::new();
 
-        let mut source_buffer = [0i16; BUFFER_SIZE];
+        let mut source_buffer = [0f32; BUFFER_SIZE];
 
         for source in sources.iter_mut() {
             if !source.consumer.write_is_held() {
@@ -91,20 +91,24 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
                 continue;
             }
 
-            source_buffer.fill(0);
             let c = source.consumer.pop_slice(&mut source_buffer);
 
-            // Simple linear volume ramping
-            if source.current_volume != source.target_volume {
-                let step = (source.target_volume - source.current_volume) * 0.1;
-                source.current_volume += step;
-                if (source.target_volume - source.current_volume).abs() < 0.01 {
-                    source.current_volume = source.target_volume;
-                }
-            }
+            let start_vol = source.current_volume;
+            let end_vol = source.target_volume;
 
-            for i in 0..c {
-                mixed_buffer[i] += source_buffer[i] as f32 * source.current_volume;
+            if start_vol == end_vol {
+                // Fast path: Constant volume (easy to vectorize)
+                for i in 0..c {
+                    mixed_buffer[i] += source_buffer[i] * start_vol;
+                }
+            } else {
+                // Ramp path: Linearly interpolate
+                let diff = (end_vol - start_vol) / c as f32;
+                for i in 0..c {
+                    let current_v = start_vol + (diff * i as f32);
+                    mixed_buffer[i] += source_buffer[i] * current_v;
+                }
+                source.current_volume = end_vol;
             }
         }
 
@@ -118,13 +122,13 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
             break;
         }
 
-        let mut final_buffer = [0i16; BUFFER_SIZE];
+        let mut final_buffer = [0f32; BUFFER_SIZE];
         for i in 0..BUFFER_SIZE {
-            final_buffer[i] = mixed_buffer[i].clamp(-32768.0, 32767.0) as i16;
+            final_buffer[i] = mixed_buffer[i].clamp(-1.0, 1.0);
         }
 
         let mut out_buf = [0u8; 4000];
-        match encoder.encode(&final_buffer, &mut out_buf) {
+        match encoder.encode_float(&final_buffer, &mut out_buf) {
             Ok(len) => {
                 let _ = output.try_push(bytes::Bytes::copy_from_slice(&out_buf[..len]));
             }
