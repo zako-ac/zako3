@@ -29,12 +29,24 @@ impl CacheRepository for StubCacheRepository {
     async fn set(&self, _key: &str, _value: &str) {}
 }
 
-fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
-    let cert =
-        rcgen::generate_simple_self_signed(vec!["localhost".into(), "127.0.0.1".into()]).unwrap();
-    let cert_der = CertificateDer::from(cert.cert.der().to_vec());
-    let key_der = PrivateKeyDer::try_from(cert.key_pair.serialize_der()).unwrap();
-    (vec![cert_der], key_der)
+use std::fs::File;
+use std::io::BufReader;
+
+fn load_certs(
+    config: &AppConfig,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
+    let cert_path = &config.cert_file;
+    let key_path = &config.key_file;
+
+    let cert_file = &mut BufReader::new(File::open(&cert_path)?);
+    let key_file = &mut BufReader::new(File::open(&key_path)?);
+
+    let cert_chain = rustls_pemfile::certs(cert_file).collect::<Result<Vec<_>, _>>()?;
+
+    let private_key =
+        rustls_pemfile::private_key(key_file)?.ok_or("No private key found in file")?;
+
+    Ok((cert_chain, private_key))
 }
 
 #[tokio::main]
@@ -48,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load()?;
     let bind_addr = config.bind_addr.parse()?;
 
-    let (cert_chain, private_key) = generate_cert();
+    let (cert_chain, private_key) = load_certs(&config)?;
 
     let app = Arc::new(App {
         hq_repository: Arc::new(StubHqRepository),

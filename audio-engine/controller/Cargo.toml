@@ -19,3 +19,4 @@ zako3-audio-engine-protos.workspace = true
 zako3-audio-engine-telemetry.workspace = true
 zako3-taphub-transport-client.workspace = true
 tracing = "0.1.44"
+rustls = { version = "0.23.37", features = ["aws-lc-rs"] }

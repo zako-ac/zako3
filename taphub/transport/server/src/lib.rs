@@ -2,7 +2,10 @@ use protofish2::compression::CompressionType;
 use protofish2::connection::{ProtofishConnection, ProtofishServer, ServerConfig};
 use protofish2::{Timestamp, TransferMode};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use std::fs::File;
+use std::io::BufReader;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -161,4 +164,24 @@ async fn handle_stream(
     }
 
     Ok(())
+}
+
+pub fn load_certs_and_key<P: AsRef<Path>>(
+    cert_path: P,
+    key_path: P,
+) -> std::io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+    let cert_file = File::open(cert_path)?;
+    let mut cert_reader = BufReader::new(cert_file);
+    let cert_chain = rustls_pemfile::certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()?;
+
+    let key_file = File::open(key_path)?;
+    let mut key_reader = BufReader::new(key_file);
+    let private_key = rustls_pemfile::private_key(&mut key_reader)?.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "No private key found in file",
+        )
+    })?;
+
+    Ok((cert_chain, private_key))
 }

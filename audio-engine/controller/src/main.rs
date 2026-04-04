@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use serenity::Client;
 use serenity::all::GatewayIntents;
@@ -9,12 +12,14 @@ use zako3_audio_engine_protos::audio_engine_server::AudioEngineServer as GrpcSer
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
-    discord::SongbirdDiscordService, state::RedisStateService, taphub::StubTapHubService,
+    discord::SongbirdDiscordService,
+    state::RedisStateService,
+    taphub::{RealTapHubService, StubTapHubService},
 };
 
 use tonic::transport::Server;
 use zako3_audio_engine_telemetry::TelemetryConfig;
-use zako3_taphub_transport_client::TransportClient;
+use zako3_taphub_transport_client::{TransportClient, load_certs};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,6 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = config.addr();
 
     println!("Starting zako3 audio engine...");
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let telem_config = TelemetryConfig {
         service_name: config.service_name.clone(),
@@ -51,9 +58,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     });
 
+    let certs = load_certs("cert.pem")?;
+
+    let taphub_transport = TransportClient::new(
+        "0.0.0.0:0".parse()?,
+        "127.0.0.1:4000".parse()?,
+        "localhost".to_string(),
+        certs,
+    )?;
+
+    taphub_transport.connect().await?;
+
+    let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
+
     let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager));
     let state_service = Arc::new(RedisStateService::new(&config.redis_url)?);
-    let taphub_service = Arc::new(StubTapHubService);
 
     let session_manager = Arc::new(SessionManager::new(
         discord_service,

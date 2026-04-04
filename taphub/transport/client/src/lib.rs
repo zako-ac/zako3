@@ -3,7 +3,10 @@ use protofish2::connection::{ClientConfig, ProtofishClient};
 use protofish2::mani::transfer::jitter::OpusJitterBuffer;
 use rustls::pki_types::CertificateDer;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -163,4 +166,11 @@ impl TransportClient {
             _ => Err("Unexpected response".to_string()),
         }
     }
+}
+
+pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer<'static>>> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
+    Ok(certs)
 }
