@@ -42,6 +42,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/common'
 import { UserListSelector } from '@/components/tap/user-list-selector'
+import { OccupationBadge } from '@/components/tap'
 import type { TapRole } from '@zako-ac/zako3-data'
 
 export const TapSettingsPage = () => {
@@ -121,7 +122,10 @@ export const TapSettingsPage = () => {
     return (
         <div className="mx-auto max-w-2xl space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold">{t('taps.settings.title')}</h1>
+                <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold">{t('taps.settings.title')}</h1>
+                    <OccupationBadge occupation={tap.occupation} />
+                </div>
                 <p className="text-muted-foreground">{t('taps.settings.subtitle')}</p>
             </div>
 

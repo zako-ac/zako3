@@ -11,6 +11,7 @@ pub trait TapRepository: Send + Sync {
     async fn update(&self, tap: &Tap) -> CoreResult<Tap>;
     async fn delete(&self, id: TapId) -> CoreResult<()>;
     async fn list_all(&self) -> CoreResult<Vec<Tap>>;
+    async fn find_by_ids(&self, ids: Vec<TapId>) -> CoreResult<Vec<Tap>>;
 }
 
 pub struct PgTapRepository {
@@ -230,6 +231,58 @@ impl TapRepository for PgTapRepository {
                     name: hq_types::hq::TapName(name),
                     description,
                     owner_id: hq_types::hq::UserId(owner_id),
+                    occupation,
+                    permission,
+                    roles,
+                    timestamp: hq_types::hq::ResourceTimestamp {
+                        created_at,
+                        updated_at,
+                    },
+                })
+            })
+            .collect::<CoreResult<Vec<Tap>>>()?;
+
+        Ok(taps)
+    }
+
+    async fn find_by_ids(&self, ids: Vec<TapId>) -> CoreResult<Vec<Tap>> {
+        let ids_str: Vec<String> = ids.into_iter().map(|id| id.0).collect();
+        let rows = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            FROM taps
+            WHERE id = ANY($1)
+            "#,
+        )
+        .bind(&ids_str)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let taps = rows
+            .into_iter()
+            .map(|row| {
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
+
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
+
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
+
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+                Ok(Tap {
+                    id: TapId(id),
+                    name: TapName(name),
+                    description,
+                    owner_id: UserId(owner_id),
                     occupation,
                     permission,
                     roles,

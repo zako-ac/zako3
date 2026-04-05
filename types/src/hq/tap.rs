@@ -22,7 +22,9 @@ pub struct TapId(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]
 pub struct TapName(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum TapOccupation {
     Official,

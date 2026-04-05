@@ -11,6 +11,7 @@ import {
     Globe,
     Activity,
     Key,
+    ShieldCheck,
 } from 'lucide-react'
 
 import { ROUTES } from '@/lib/constants'
@@ -107,14 +108,20 @@ export const AppSidebar = () => {
                                 url: ROUTES.TAP_SETTINGS(activeTapId),
                                 icon: Settings,
                             },
-                            {
-                                title: t('taps.settings.apiAccess'),
-                                url: ROUTES.TAP_API_KEYS(activeTapId),
-                                icon: Key,
-                            },
-                        ],
-                    },
-                ]
+                             {
+                                 title: t('taps.settings.apiAccess'),
+                                 url: ROUTES.TAP_API_KEYS(activeTapId),
+                                 icon: Key,
+                             },
+                             {
+                                 title: t('nav.verification'),
+                                 url: ROUTES.TAP_VERIFICATION(activeTapId),
+                                 icon: ShieldCheck,
+                             },
+                         ],
+                     },
+                 ]
+
                 : []),
         ]
 

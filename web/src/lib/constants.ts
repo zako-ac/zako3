@@ -23,6 +23,7 @@ export const ROUTES = {
   TAP_SETTINGS: (tapId: string) => `/taps/${tapId}/settings`,
   TAP_STATS: (tapId: string) => `/taps/${tapId}/stats`,
   TAP_API_KEYS: (tapId: string) => `/taps/${tapId}/api-keys`,
+  TAP_VERIFICATION: (tapId: string) => `/taps/${tapId}/verification`,
   ADMIN: '/admin',
   ADMIN_USERS: '/admin/users',
   ADMIN_USER: (userId: string) => `/admin/users/${userId}`,

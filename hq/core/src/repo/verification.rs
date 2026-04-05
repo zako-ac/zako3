@@ -207,6 +207,7 @@ impl PgVerificationRepository {
         Ok(VerificationRequest {
             id: VerificationRequestId(id),
             tap_id: TapId(tap_id),
+            tap: None,
             requester_id: UserId(requester_id),
             title,
             description,

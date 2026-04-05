@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Activity, Users, TrendingUp, Database, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTap, useTapStats, useTapAuditLog } from '@/features/taps'
+import { OccupationBadge } from '@/components/tap'
 import { usePagination } from '@/hooks'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { TimeSeriesChart, DataPagination } from '@/components/common'
@@ -97,7 +98,10 @@ export const TapStatsPage = () => {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">{tap.name}</h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-semibold">{tap.name}</h1>
+                        <OccupationBadge occupation={tap.occupation} />
+                    </div>
                     <div className="flex items-center gap-2">
                         <p className="text-muted-foreground font-mono text-sm">
                             {tap.id}

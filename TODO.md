@@ -35,3 +35,5 @@ refer hq todo
 - [ ] Make all cards in settings as component
 - [ ] Add "load failed" 
 - [ ] Dashboard status (my taps, total uses, active users, uptime)
+- [ ] Add admin UI/API to change tap settings
+- [ ] Make admin tap details UI use StatsCard component instead of manual impl

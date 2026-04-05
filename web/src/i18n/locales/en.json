@@ -31,7 +31,7 @@
           "delete": "Delete"
         },
         "deleteConfirm": {
-          "description": "Are you sure you want to delete the tap \"{name}\"? This action cannot be undone.",
+          "description": "Are you sure you want to delete the tap {{name}}? This action cannot be undone.",
           "title": "Delete Tap"
         },
         "deleteSuccess": "Tap deleted successfully.",
@@ -51,7 +51,7 @@
         },
         "ban": "Ban",
         "banConfirm": {
-          "description": "Are you sure you want to ban user \"{username}\"? They will not be able to log in.",
+          "description": "Are you sure you want to ban user {{username}}? They will not be able to log in.",
           "title": "Confirm Ban"
         },
         "banSuccess": "User has been banned.",
@@ -61,7 +61,7 @@
         "lastActive": "Last Active",
         "makeAdmin": "Make Admin",
         "makeAdminConfirm": {
-          "description": "Are you sure you want to grant admin role to user \"{username}\"? They will have full access to the admin panel.",
+          "description": "Are you sure you want to grant admin role to user {{username}}? They will have full access to the admin panel.",
           "title": "Confirm Make Admin"
         },
         "manageUser": "",
@@ -71,7 +71,7 @@
         "profile": "",
         "removeAdmin": "Remove Admin",
         "removeAdminConfirm": {
-          "description": "Are you sure you want to remove admin role from user \"{username}\"? They will lose access to the admin panel.",
+          "description": "Are you sure you want to remove admin role from user {{username}}? They will lose access to the admin panel.",
           "title": "Confirm Remove Admin"
         },
         "removedAdminRole": "Removed admin role.",
@@ -85,7 +85,7 @@
         "title": "Users",
         "unban": "Unban",
         "unbanConfirm": {
-          "description": "Are you sure you want to unban user \"{username}\"? They will be able to log in again.",
+          "description": "Are you sure you want to unban user {{username}}? They will be able to log in again.",
           "title": "Confirm Unban"
         },
         "unbanSuccess": "User has been unbanned.",
@@ -95,14 +95,14 @@
       },
       "verifications": {
         "approve": "Approve",
-        "approveConfirmDescription": "This will verify the tap \"{name}\". The owner will be notified.",
+        "approveConfirmDescription": "This will verify the tap {{name}}. The owner will be notified.",
         "approveConfirmTitle": "Approve Verification",
         "approveSuccess": "Verification approved successfully",
         "filterByStatus": "Filter by status",
         "noRequests": "No verification requests",
         "noRequestsDescription": "All verification requests have been reviewed",
         "reject": "Reject",
-        "rejectConfirmDescription": "Please provide a reason for rejecting \"{name}\".",
+        "rejectConfirmDescription": "Please provide a reason for rejecting {{name}}.",
         "rejectConfirmTitle": "Reject Verification",
         "rejectionReasonLabel": "Rejection Reason",
         "rejectionReasonPlaceholder": "Explain why this verification request is being rejected...",
@@ -117,7 +117,9 @@
         "statusRejected": "Rejected",
         "subtitle": "Review and manage tap verification requests",
         "tapName": "Tap Name",
-        "title": "Verification Requests"
+        "title": "Verification Requests",
+        "view": "View",
+        "viewDetails": "Verification Request Details"
       }
     },
     "auth": {
@@ -180,7 +182,8 @@
       "notifications": "Notifications",
       "settings": "Settings",
       "taps": "Taps",
-      "users": "Users"
+      "users": "Users",
+      "verification": "Verification"
     },
     "notifications": {
       "all": "",
@@ -356,7 +359,24 @@
       },
       "tapId": "Tap ID",
       "totalUses": "Total Uses",
-      "updatedAt": "Updated At"
+      "updatedAt": "Updated At",
+      "verification": {
+        "description": "Verification Description",
+        "descriptionHelp": "Explain why your tap should be verified. Mention any official affiliations or public use cases.",
+        "descriptionPlaceholder": "e.g. This is the official tap for the XYZ community...",
+        "formTitle": "Request Verification",
+        "requestSuccess": "Verification request submitted successfully!",
+        "status": {
+          "approved": "Your tap is verified.",
+          "none": "Your tap is not verified. Verified taps get a badge and better visibility.",
+          "pending": "Your verification request is under review.",
+          "rejected": "Your verification request was rejected."
+        },
+        "subtitle": "Get your tap verified for better visibility and trust",
+        "title": "Tap Verification",
+        "titleLabel": "Request Title",
+        "titlePlaceholder": "e.g. Official verification for XYZ"
+      }
     }
   }
 }

@@ -1,17 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import {
     Flag,
-    Music,
-    MessageSquare,
     Settings,
-    Copy,
-    Check,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
-import { toast } from 'sonner'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
     Tooltip,
@@ -21,29 +14,12 @@ import {
 } from '@/components/ui/tooltip'
 import { formatRelativeTime } from '@/lib/date'
 import { cn } from '@/lib/utils'
-import type { TapWithAccess, TapOccupation, TapRole } from '@zako-ac/zako3-data'
+import type { TapWithAccess } from '@zako-ac/zako3-data'
 import { PermissionBadge } from './permission-badge'
 import { UserBadge } from './user-badge'
-
-const occupationVariants: Record<
-    TapOccupation,
-    { label: string; className: string }
-> = {
-    official: {
-        label: 'Official',
-        className: 'bg-primary text-primary-foreground',
-    },
-    verified: {
-        label: 'Verified',
-        className: 'bg-success text-success-foreground',
-    },
-    base: { label: 'Base', className: 'bg-secondary text-secondary-foreground' },
-}
-
-const roleIcons: Record<TapRole, React.ReactNode> = {
-    music: <Music className="h-3 w-3" />,
-    tts: <MessageSquare className="h-3 w-3" />,
-}
+import { OccupationBadge } from './occupation-badge'
+import { CopyableId } from './copyable-id'
+import { TapRolesBadge } from './tap-roles-badge'
 
 interface TapCardProps {
     tap: TapWithAccess
@@ -59,16 +35,6 @@ export const TapCard = ({
     onSettingsClick,
 }: TapCardProps) => {
     const { t, i18n } = useTranslation()
-    const [copied, setCopied] = useState(false)
-    const occupation = occupationVariants[tap.occupation]
-
-    const handleCopyId = (e: React.MouseEvent) => {
-        e.stopPropagation()
-        navigator.clipboard.writeText(tap.id)
-        setCopied(true)
-        toast.success(t('common.copied'))
-        setTimeout(() => setCopied(false), 2000)
-    }
 
     const handleReport = (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -98,27 +64,9 @@ export const TapCard = ({
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                                 <h3 className="truncate font-semibold">{tap.name}</h3>
-                                <Badge className={cn('shrink-0', occupation.className)}>
-                                    {t(`taps.occupations.${tap.occupation}`)}
-                                </Badge>
+                                <OccupationBadge occupation={tap.occupation} />
                             </div>
-                            <div className="flex items-center gap-1.5">
-                                <p className="text-muted-foreground mt-0.5 font-mono text-xs">
-                                    {tap.id}
-                                </p>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-4 w-4 shrink-0 hover:bg-transparent"
-                                    onClick={handleCopyId}
-                                >
-                                    {copied ? (
-                                        <Check className="text-success h-3 w-3" />
-                                    ) : (
-                                        <Copy className="h-3 w-3" />
-                                    )}
-                                </Button>
-                            </div>
+                            <CopyableId id={tap.id} />
                         </div>
                         {onSettingsClick && (
                             <TooltipProvider>
@@ -146,12 +94,7 @@ export const TapCard = ({
                     </p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {tap.roles.map((role) => (
-                            <Badge key={role} variant="outline" className="gap-1">
-                                {roleIcons[role]}
-                                {t(`taps.roleLabels.${role}`)}
-                            </Badge>
-                        ))}
+                        <TapRolesBadge roles={tap.roles} />
 
                         <PermissionBadge hasAccess={tap.hasAccess} permission={tap.permission} />
                     </div>

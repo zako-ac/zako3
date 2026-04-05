@@ -1,4 +1,4 @@
-use super::{TapId, UserId};
+use super::{Tap, TapId, UserId};
 use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -30,9 +30,11 @@ pub enum VerificationStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct VerificationRequest {
     pub id: VerificationRequestId,
     pub tap_id: TapId,
+    pub tap: Option<Tap>,
     pub requester_id: UserId,
     pub title: String,
     pub description: String,

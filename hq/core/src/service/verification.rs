@@ -1,10 +1,10 @@
 use crate::repo::{TapRepository, VerificationRepository};
-use crate::service::AuditLogService;
 use crate::service::validation::validate_verification_request;
+use crate::service::AuditLogService;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
-    CreateVerificationRequestDto, TapId, TapOccupation, UserId, VerificationRequest,
-    VerificationRequestId, VerificationStatus,
+    CreateVerificationRequestDto, TapId, UserId, VerificationRequest, VerificationRequestId,
+    VerificationStatus,
 };
 use std::sync::Arc;
 
@@ -59,11 +59,18 @@ impl VerificationService {
             ));
         }
 
+        if tap.occupation != hq_types::hq::TapOccupation::Base {
+            return Err(CoreError::InvalidInput(
+                "Congrats! Your tap is already verified!".to_string(),
+            ));
+        }
+
         let id = hq_types::hq::next_id().to_string();
         let now = chrono::Utc::now();
         let request = VerificationRequest {
             id: VerificationRequestId(id),
             tap_id: tap_id.clone(),
+            tap: Some(tap),
             requester_id: user_id.clone(),
             title: dto.title,
             description: dto.description,
@@ -94,9 +101,30 @@ impl VerificationService {
         page: u32,
         per_page: u32,
     ) -> CoreResult<(Vec<VerificationRequest>, u64)> {
-        self.verification_repo
+        let (mut requests, total) = self
+            .verification_repo
             .list_all(status, page, per_page)
-            .await
+            .await?;
+
+        // Attach taps
+        let tap_ids: Vec<TapId> = requests
+            .iter()
+            .map(|r| r.tap_id.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        if !tap_ids.is_empty() {
+            let taps = self.tap_repo.find_by_ids(tap_ids).await?;
+            let tap_map: std::collections::HashMap<TapId, hq_types::hq::Tap> =
+                taps.into_iter().map(|t| (t.id.clone(), t)).collect();
+
+            for request in &mut requests {
+                request.tap = tap_map.get(&request.tap_id).cloned();
+            }
+        }
+
+        Ok((requests, total))
     }
 
     pub async fn approve_verification(
@@ -117,7 +145,7 @@ impl VerificationService {
         }
 
         // 1. Update request status
-        let updated_request = self
+        let mut updated_request = self
             .verification_repo
             .update_status(request_id, VerificationStatus::Approved, None)
             .await?;
@@ -129,9 +157,12 @@ impl VerificationService {
             .await?
             .ok_or_else(|| CoreError::NotFound("Tap not found".to_string()))?;
 
-        tap.occupation = TapOccupation::Verified;
+        tap.occupation = hq_types::hq::TapOccupation::Verified;
         tap.timestamp.updated_at = chrono::Utc::now();
         self.tap_repo.update(&tap).await?;
+
+        // Attach tap to response
+        updated_request.tap = Some(tap);
 
         // 3. Log
         let _ = self
@@ -165,7 +196,7 @@ impl VerificationService {
             ));
         }
 
-        let updated_request = self
+        let mut updated_request = self
             .verification_repo
             .update_status(
                 request_id,
@@ -173,6 +204,10 @@ impl VerificationService {
                 Some(reason.clone()),
             )
             .await?;
+
+        // Fetch and attach tap
+        let tap = self.tap_repo.find_by_id(request.tap_id.clone()).await?;
+        updated_request.tap = tap;
 
         let _ = self
             .audit_log

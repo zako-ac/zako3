@@ -7,6 +7,7 @@ export {
   TapSettingsPage,
   TapStatsPage,
   TapApiKeysPage,
+  TapVerificationPage,
 } from './taps'
 export { SettingsPage } from './settings'
 export {

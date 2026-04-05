@@ -2,19 +2,18 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Trash2, Users, Activity, MousePointer2, Database } from 'lucide-react'
 import { useTap, useTapStats, useDeleteTap } from '@/features/taps'
-import { useUserPublic } from '@/features/users'
-import { PermissionBadge, OccupationBadge } from '@/components/tap'
+import { PermissionBadge, OccupationBadge, TapRolesBadge, CopyableId } from '@/components/tap'
 import { TimeSeriesChart } from '@/components/common'
 import { ConfirmDialog } from '@/components/common'
 import { formatRelativeTime } from '@/lib/date'
 import { ROUTES } from '@/lib/constants'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { UserBadge } from '@/components/tap/user-badge'
+import { StatsCard } from '@/components/dashboard/stats-card'
 
 export const AdminTapDetailPage = () => {
     const { tapId } = useParams<{ tapId: string }>()
@@ -25,7 +24,8 @@ export const AdminTapDetailPage = () => {
 
     const { data: tap, isLoading: isLoadingTap } = useTap(tapId)
     const { data: stats, isLoading: isLoadingStats } = useTapStats(tapId)
-    const { data: owner, isLoading: isLoadingOwner } = useUserPublic(tap?.ownerId)
+
+    const owner = tap?.owner;
 
     const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
 
@@ -111,46 +111,48 @@ export const AdminTapDetailPage = () => {
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.tapId')}:
                             </span>{' '}
-                            <code className="bg-muted rounded px-1 text-sm">{tap.id}</code>
+                            <CopyableId id={tap.id} className="mt-1" />
                         </div>
                         <div>
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.permission')}:
                             </span>{' '}
-                            <PermissionBadge
-                                permission={tap.permission}
-                                hasAccess={tap.hasAccess}
-                            />
+                            <div className="mt-1">
+                                <PermissionBadge
+                                    permission={tap.permission}
+                                    hasAccess={tap.hasAccess}
+                                />
+                            </div>
                         </div>
                         <div>
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.roles.label')}:
                             </span>{' '}
-                            <div className="mt-1 flex gap-2">
-                                {tap.roles.map((role) => (
-                                    <Badge key={role} variant="outline">
-                                        {t(`taps.roles.${role}`)}
-                                    </Badge>
-                                ))}
-                            </div>
+                            <TapRolesBadge roles={tap.roles} className="mt-1" />
                         </div>
                         <div>
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.totalUses')}:
                             </span>{' '}
-                            {tap.totalUses.toLocaleString()}
+                            <div className="text-sm font-medium">
+                                {tap.totalUses.toLocaleString()}
+                            </div>
                         </div>
                         <div>
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.createdAt')}:
                             </span>{' '}
-                            {formatRelativeTime(tap.createdAt, i18n.language)}
+                            <div className="text-sm">
+                                {formatRelativeTime(tap.createdAt, i18n.language)}
+                            </div>
                         </div>
                         <div>
                             <span className="text-muted-foreground text-sm">
                                 {t('taps.updatedAt')}:
                             </span>{' '}
-                            {formatRelativeTime(tap.updatedAt, i18n.language)}
+                            <div className="text-sm">
+                                {formatRelativeTime(tap.updatedAt, i18n.language)}
+                            </div>
                         </div>
                     </div>
 
@@ -159,24 +161,10 @@ export const AdminTapDetailPage = () => {
                         <h3 className="mb-3 text-sm font-medium">
                             {t('admin.taps.owner')}
                         </h3>
-                        {isLoadingOwner ? (
+                        {isLoadingTap ? (
                             <Skeleton className="h-12 w-full" />
                         ) : owner ? (
-                            <Link
-                                to={ROUTES.ADMIN_USER(owner.id)}
-                                className="hover:bg-accent flex items-center gap-3 rounded-lg border p-3 transition-colors"
-                            >
-                                <Avatar className="h-10 w-10">
-                                    <AvatarImage src={owner.avatar} alt={owner.username} />
-                                    <AvatarFallback>
-                                        {owner.username[0].toUpperCase()}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className="font-medium">{owner.username}</p>
-                                    <p className="text-muted-foreground text-sm">{owner.id}</p>
-                                </div>
-                            </Link>
+                            <UserBadge user={owner} />
                         ) : (
                             <p className="text-muted-foreground text-sm">
                                 {t('errors.ownerNotFound')}
@@ -190,54 +178,26 @@ export const AdminTapDetailPage = () => {
             {stats && (
                 <>
                     <div className="grid gap-4 md:grid-cols-4">
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-muted-foreground text-sm font-medium">
-                                    {t('taps.stats.currentlyActive')}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.currentlyActive}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-muted-foreground text-sm font-medium">
-                                    {t('taps.stats.totalUses')}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.totalUses.toLocaleString()}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-muted-foreground text-sm font-medium">
-                                    {t('taps.stats.uniqueUsers')}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.uniqueUsers.toLocaleString()}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-muted-foreground text-sm font-medium">
-                                    {t('taps.stats.cacheHits')}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats.cacheHits.toLocaleString()}
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <StatsCard
+                            title={t('taps.stats.activeNow')}
+                            value={stats.currentlyActive}
+                            icon={<Activity className="h-4 w-4" />}
+                        />
+                        <StatsCard
+                            title={t('dashboard.stats.totalUses')}
+                            value={stats.totalUses.toLocaleString()}
+                            icon={<MousePointer2 className="h-4 w-4" />}
+                        />
+                        <StatsCard
+                            title={t('taps.stats.uniqueUsers')}
+                            value={stats.uniqueUsers.toLocaleString()}
+                            icon={<Users className="h-4 w-4" />}
+                        />
+                        <StatsCard
+                            title={t('taps.stats.cacheHits')}
+                            value={stats.cacheHits.toLocaleString()}
+                            icon={<Database className="h-4 w-4" />}
+                        />
                     </div>
 
                     {/* Charts */}

@@ -11,6 +11,7 @@ import {
   TapSettingsPage,
   TapStatsPage,
   TapApiKeysPage,
+  TapVerificationPage,
   SettingsPage,
   AdminDashboardPage,
   AdminUsersPage,
@@ -63,6 +64,7 @@ export const AppRouter = () => {
           <Route element={<TapLayout />}>
             <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
             <Route path="/taps/:tapId/api-keys" element={<TapApiKeysPage />} />
+            <Route path="/taps/:tapId/verification" element={<TapVerificationPage />} />
           </Route>
         </Route>
 
