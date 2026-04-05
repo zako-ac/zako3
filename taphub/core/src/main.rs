@@ -3,14 +3,17 @@ use dashmap::DashMap;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
 use tracing::Level;
-use zako3_states::CacheRepository;
+use zako3_states::{CacheRepository, TapHubStateService, TapMetricsStateService};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
 use zako3_taphub_core::infra::hq::RpcHqRepository;
 use zako3_taphub_core::repository::HqRepository;
 use zako3_taphub_transport_server::TransportServer;
-use zako3_types::hq::{ResourceTimestamp, Tap, TapId, TapOccupation, TapPermission, UserId};
+use zako3_types::hq::{
+    DiscordUserId, ResourceTimestamp, Tap, TapId, TapOccupation, TapPermission, User, UserId,
+    Username,
+};
 
 #[allow(dead_code)]
 struct StubHqRepository;
@@ -30,7 +33,7 @@ impl HqRepository for StubHqRepository {
         }
         .into()
     }
-    async fn get_tap(&self, _tap_id: &str) -> Option<Tap> {
+    async fn get_tap_by_id(&self, _tap_id: &str) -> Option<Tap> {
         Tap {
             id: TapId(0x67e55044_10b1_426f),
             name: "mytap".to_string().into(),
@@ -42,6 +45,18 @@ impl HqRepository for StubHqRepository {
             timestamp: ResourceTimestamp::now(),
         }
         .into()
+    }
+
+    async fn get_user_by_discord_id(&self, discord_id: &DiscordUserId) -> Option<User> {
+        Some(User {
+            id: UserId(1),
+            discord_user_id: discord_id.clone(),
+            username: Username("stubuser".to_string()),
+            avatar_url: None,
+            email: None,
+            permissions: vec![],
+            timestamp: ResourceTimestamp::now(),
+        })
     }
 }
 
@@ -127,9 +142,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let hq_repository = RpcHqRepository::new(&config.hq_rpc_url)?;
 
+    let cache_repo = Arc::new(StubCacheRepository::default());
     let app = App {
         hq_repository: Arc::new(hq_repository),
-        cache_repository: Arc::new(StubCacheRepository::default()),
+        cache_repository: cache_repo.clone(),
+        tap_state_service: TapHubStateService::new(cache_repo.clone()),
+        tap_metrics_service: TapMetricsStateService::new(cache_repo.clone()),
     };
 
     let tap_hub = TapHub::new(

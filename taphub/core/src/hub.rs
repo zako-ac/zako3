@@ -10,11 +10,12 @@ use zakofish::{
 };
 
 use crate::{app::App, routing::DynamicSampler};
-use zako3_states::TapHubStateService;
+use zako3_states::{TapHubStateService, TapMetricsStateService};
 
 pub struct TapHubConnectionHandler {
     app: App,
     state_service: TapHubStateService,
+    metrics_service: TapMetricsStateService,
 }
 
 #[async_trait]
@@ -46,6 +47,12 @@ impl HubHandler for TapHubConnectionHandler {
                     friendly_name: hello.friendly_name,
                     selection_weight: hello.selection_weight,
                 };
+
+                let tap_id = tap.id.clone();
+                if let Err(e) = self.metrics_service.inc_active_now(tap_id).await {
+                    tracing::warn!(%e, "Failed to increment active_now metric");
+                }
+
                 self.state_service
                     .set_connection_state(online_tap)
                     .await
@@ -79,6 +86,10 @@ impl HubHandler for TapHubConnectionHandler {
             connection_id
         );
 
+        if let Err(e) = self.metrics_service.dec_active_now(tap_id.clone()).await {
+            tracing::warn!(%e, "Failed to decrement active_now metric");
+        }
+
         if let Err(e) = self
             .state_service
             .remove_connection_state(&tap_id, connection_id)
@@ -93,6 +104,8 @@ pub struct TapHub {
     pub zf_hub: ZakofishHub,
     pub sampler: Arc<Mutex<DynamicSampler>>,
     pub state_service: TapHubStateService,
+    pub metrics_service: TapMetricsStateService,
+    pub app: App,
 }
 
 impl TapHub {
@@ -112,15 +125,18 @@ impl TapHub {
 
         let handler = TapHubConnectionHandler {
             app: app.clone(),
-            state_service: TapHubStateService::new(app.cache_repository.clone()),
+            state_service: app.tap_state_service.clone(),
+            metrics_service: app.tap_metrics_service.clone(),
         };
 
         let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
 
         Ok(Self {
             zf_hub,
-            sampler: Arc::new(DynamicSampler::new().into()),
-            state_service: TapHubStateService::new(app.cache_repository.clone()),
+            sampler: Arc::new(Mutex::new(DynamicSampler::new())),
+            state_service: app.tap_state_service.clone(),
+            metrics_service: app.tap_metrics_service.clone(),
+            app,
         })
     }
 

@@ -42,6 +42,17 @@ impl HqRpcServer for HqRpcImpl {
             Err(e) => Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
         }
     }
+
+    async fn get_user_by_discord_id(
+        &self,
+        discord_id: String,
+    ) -> RpcResult<Option<hq_types::hq::User>> {
+        let res = self.tap_service.get_user_by_discord_id(&discord_id).await;
+        match res {
+            Ok(user) => Ok(user),
+            Err(e) => Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
+        }
+    }
 }
 
 pub async fn start_rpc_server(

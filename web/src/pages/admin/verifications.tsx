@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ShieldCheck, ExternalLink, CheckCircle, XCircle } from 'lucide-react'
+import { ShieldCheck, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useVerificationRequests,
@@ -215,8 +215,7 @@ export const AdminVerificationsPage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('admin.verifications.tapName')}</TableHead>
-                  <TableHead>{t('admin.verifications.owner')}</TableHead>
-                  <TableHead>{t('admin.verifications.reason')}</TableHead>
+                  <TableHead>{t('admin.verifications.title')}</TableHead>
                   <TableHead>{t('admin.verifications.status')}</TableHead>
                   <TableHead>{t('admin.verifications.requestedAt')}</TableHead>
                   <TableHead className="text-right">
@@ -232,36 +231,20 @@ export const AdminVerificationsPage = () => {
                         to={ROUTES.ADMIN_TAP(request.tapId)}
                         className="font-medium hover:underline"
                       >
-                        {request.tap.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        to={ROUTES.ADMIN_USER(request.tap.owner.id)}
-                        className="text-muted-foreground font-mono text-sm hover:underline"
-                      >
-                        {request.tap.owner.username}
+                        {request.tapId}
                       </Link>
                     </TableCell>
                     <TableCell className="max-w-md">
                       <div className="space-y-1">
-                        <p className="line-clamp-2 text-sm">{request.reason}</p>
-                        {request.evidence && (
-                          <a
-                            href={request.evidence}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                          >
-                            {t('admin.verifications.viewEvidence')}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
+                        <p className="font-medium">{request.title}</p>
+                        <p className="line-clamp-2 text-muted-foreground text-xs">
+                          {request.description}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {formatRelativeTime(request.requestedAt, i18n.language)}
+                      {formatRelativeTime(request.createdAt, i18n.language)}
                     </TableCell>
                     <TableCell className="text-right">
                       {request.status === 'pending' ? (
@@ -312,7 +295,7 @@ export const AdminVerificationsPage = () => {
         onOpenChange={setApproveDialogOpen}
         title={t('admin.verifications.approveConfirmTitle')}
         description={t('admin.verifications.approveConfirmDescription', {
-          name: selectedRequest?.tap.name,
+          name: selectedRequest?.tapId,
         })}
         confirmLabel={t('admin.verifications.approve')}
         onConfirm={handleApprove}
@@ -329,7 +312,7 @@ export const AdminVerificationsPage = () => {
             </DialogTitle>
             <DialogDescription>
               {t('admin.verifications.rejectConfirmDescription', {
-                name: selectedRequest?.tap.name,
+                name: selectedRequest?.tapId,
               })}
             </DialogDescription>
           </DialogHeader>

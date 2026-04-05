@@ -65,6 +65,7 @@ pub enum AudioStopFilter {
 pub struct AudioRequest {
     pub tap_name: TapName,
     pub request: AudioRequestString,
+    pub discord_user_id: hq::DiscordUserId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +73,7 @@ pub struct CachedAudioRequest {
     pub tap_name: TapName,
     pub audio_request: AudioRequestString,
     pub cache_key: AudioCachePolicy,
+    pub discord_user_id: hq::DiscordUserId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

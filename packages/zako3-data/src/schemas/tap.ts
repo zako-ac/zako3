@@ -164,18 +164,18 @@ export const reportTapSchema = z.object({
 
 export const tapVerificationRequestSchema = z.object({
   tapId: z.string(),
-  reason: z
+  title: z.string().min(5, 'Title must be at least 5 characters'),
+  description: z
     .string()
-    .min(20, 'Please provide a detailed reason (at least 20 characters)'),
-  evidence: z.string().optional(),
+    .min(20, 'Please provide a detailed description (at least 20 characters)'),
 });
 
 // Alias for backward compatibility
 export const verificationRequestSchema = z.object({
-  reason: z
+  title: z.string().min(5, 'Title must be at least 5 characters'),
+  description: z
     .string()
-    .min(20, 'Please provide a detailed reason (at least 20 characters)'),
-  evidence: z.string().optional(),
+    .min(20, 'Please provide a detailed description (at least 20 characters)'),
 });
 
 export const verificationStatusSchema = z.enum(VERIFICATION_STATUSES);
@@ -183,13 +183,13 @@ export const verificationStatusSchema = z.enum(VERIFICATION_STATUSES);
 export const verificationRequestFullSchema = z.object({
   id: z.string(),
   tapId: z.string(),
-  tap: tapWithAccessSchema,
-  reason: z.string(),
-  evidence: z.string().optional(),
+  tap: tapWithAccessSchema.optional(), // Make optional since backend might not join by default
+  requesterId: z.string(),
+  title: z.string(),
+  description: z.string(),
   status: verificationStatusSchema,
-  requestedAt: z.string(),
-  reviewedAt: z.string().optional(),
-  reviewedBy: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
   rejectionReason: z.string().optional(),
 });
 

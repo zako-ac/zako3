@@ -80,6 +80,7 @@ message PlayRequest {
   string tap_name = 3;
   string audio_request_string = 4;
   float volume = 5;
+  string discord_user_id = 6;
 }
 
 message PlayResponse {

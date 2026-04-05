@@ -18,5 +18,7 @@ pub mod audit_log;
 pub use audit_log::*;
 pub mod notification;
 pub use notification::*;
+pub mod verification;
+pub use verification::*;
 pub mod rpc;
 pub mod zod_impls;

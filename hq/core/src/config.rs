@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub jwt_secret: String,
     pub backend_address: String,
     pub rpc_address: String,
+    pub redis_url: String,
 }
 
 impl AppConfig {
@@ -29,6 +30,8 @@ impl AppConfig {
             backend_address: env::var("BACKEND_ADDRESS")
                 .unwrap_or_else(|_| "127.0.0.1:8080".to_string()),
             rpc_address: env::var("RPC_ADDRESS").unwrap_or_else(|_| "127.0.0.1:50051".to_string()),
+            redis_url: env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
         })
     }
 }

@@ -7,6 +7,7 @@ use hq_types::hq::{
     TapWithAccessDto, TimeSeriesPointDto, UserSummaryDto,
 };
 use std::sync::Arc;
+use zako3_states::{TapMetricKey, TapMetricsStateService};
 
 #[derive(Clone)]
 pub struct TapService {
@@ -14,6 +15,7 @@ pub struct TapService {
     user_repo: Arc<dyn UserRepository>,
     audit_log: AuditLogService,
     tap_metric: Arc<TapMetricService>,
+    tap_metrics_state: TapMetricsStateService,
 }
 
 impl TapService {
@@ -22,12 +24,14 @@ impl TapService {
         user_repo: Arc<dyn UserRepository>,
         audit_log: AuditLogService,
         tap_metric: Arc<TapMetricService>,
+        tap_metrics_state: TapMetricsStateService,
     ) -> Self {
         Self {
             tap_repo,
             user_repo,
             audit_log,
             tap_metric,
+            tap_metrics_state,
         }
     }
 
@@ -69,6 +73,17 @@ impl TapService {
 
         let mut tap_dtos = Vec::new();
         for tap in taps {
+            let total_uses = self
+                .tap_metrics_state
+                .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+                .await
+                .unwrap_or(0);
+            let cache_hits = self
+                .tap_metrics_state
+                .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+                .await
+                .unwrap_or(0);
+
             let tap_dto = TapDto {
                 id: tap.id.0.to_string(),
                 name: tap.name.0.clone(),
@@ -77,7 +92,8 @@ impl TapService {
                 occupation: tap.occupation.clone(),
                 permission: tap.permission.clone(),
                 roles: tap.roles.clone(),
-                total_uses: 0,
+                total_uses,
+                cache_hits,
                 created_at: tap.timestamp.created_at,
                 updated_at: tap.timestamp.updated_at,
             };
@@ -126,6 +142,17 @@ impl TapService {
 
         let has_access = tap.owner_id.0 == user_id; // Simple permission logic for now
 
+        let total_uses = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+            .await
+            .unwrap_or(0);
+        let cache_hits = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+            .await
+            .unwrap_or(0);
+
         let tap_dto = TapDto {
             id: tap.id.0.to_string(),
             name: tap.name.0.clone(),
@@ -134,7 +161,8 @@ impl TapService {
             occupation: tap.occupation.clone(),
             permission: tap.permission.clone(),
             roles: tap.roles.clone(),
-            total_uses: 0,
+            total_uses,
+            cache_hits,
             created_at: tap.timestamp.created_at,
             updated_at: tap.timestamp.updated_at,
         };
@@ -163,8 +191,28 @@ impl TapService {
             ));
         }
 
-        // Fetch real data from tap_metric service
-        let total_uses = self.tap_metric.get_total_uses(tap_id).await.unwrap_or(0);
+        // Fetch real data from tap_metric service (Redis for real-time)
+        let tap_id_typed = hq_types::hq::TapId(tap_id);
+        let total_uses = self
+            .tap_metrics_state
+            .get_metric(tap_id_typed.clone(), TapMetricKey::TotalUses)
+            .await
+            .unwrap_or(0);
+        let active_now = self
+            .tap_metrics_state
+            .get_metric(tap_id_typed.clone(), TapMetricKey::ActiveNow)
+            .await
+            .unwrap_or(0);
+        let unique_users = self
+            .tap_metrics_state
+            .get_unique_users_count(tap_id_typed.clone())
+            .await
+            .unwrap_or(0);
+        let cache_hits = self
+            .tap_metrics_state
+            .get_metric(tap_id_typed.clone(), TapMetricKey::CacheHits)
+            .await
+            .unwrap_or(0);
 
         // Return mostly mock data for history since we only track basic metrics for MVP
         let now = chrono::Utc::now();
@@ -185,10 +233,10 @@ impl TapService {
 
         Ok(TapStatsDto {
             tap_id: tap.id.0.to_string(),
-            currently_active: 0,
-            total_uses: total_uses as u64,
-            cache_hits: 0,
-            unique_users: 0,
+            currently_active: active_now,
+            total_uses: total_uses,
+            cache_hits: cache_hits,
+            unique_users: unique_users,
             use_rate_history,
             cache_hit_rate_history,
         })
@@ -256,37 +304,6 @@ impl TapService {
         Ok(updated_tap)
     }
 
-    pub async fn verify_tap(
-        &self,
-        tap_id: u64,
-        admin_id: u64,
-        occupation: hq_types::hq::TapOccupation,
-    ) -> CoreResult<Tap> {
-        let mut tap = self
-            .tap_repo
-            .find_by_id(tap_id)
-            .await?
-            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
-
-        tap.occupation = occupation.clone();
-
-        tap.timestamp.updated_at = chrono::Utc::now();
-
-        let updated_tap = self.tap_repo.update(&tap).await?;
-
-        let _ = self
-            .audit_log
-            .log(
-                tap_id,
-                Some(admin_id),
-                "tap.verify".to_string(),
-                Some(serde_json::json!({ "occupation": occupation })),
-            )
-            .await;
-
-        Ok(updated_tap)
-    }
-
     pub async fn delete_tap(&self, tap_id: u64, user_id: u64) -> CoreResult<()> {
         let tap = self
             .tap_repo
@@ -310,5 +327,12 @@ impl TapService {
 
     pub async fn get_tap_internal(&self, tap_id: u64) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
+    }
+
+    pub async fn get_user_by_discord_id(
+        &self,
+        discord_id: &str,
+    ) -> CoreResult<Option<hq_types::hq::User>> {
+        self.user_repo.find_by_discord_id(discord_id).await
     }
 }

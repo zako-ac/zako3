@@ -70,6 +70,7 @@ pub struct TapDto {
     pub permission: TapPermission,
     pub roles: Vec<TapRole>,
     pub total_uses: u64,
+    pub cache_hits: u64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

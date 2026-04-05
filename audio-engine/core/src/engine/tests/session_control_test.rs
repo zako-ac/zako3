@@ -10,8 +10,8 @@ use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
-    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, TapName, Track,
-    TrackId, Volume,
+    AudioResponse, CachedAudioRequest, ChannelId, DiscordUserId, GuildId, QueueName, SessionState,
+    TapName, Track, TrackId, Volume,
 };
 
 // Helper to create a dummy track
@@ -26,6 +26,7 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
                 cache_type: AudioCacheType::CacheKey("key".to_string()),
                 ttl_seconds: None,
             },
+            discord_user_id: DiscordUserId::from("123".to_string()),
         },
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
@@ -135,6 +136,7 @@ async fn test_play_success() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("test".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 
@@ -220,6 +222,7 @@ async fn test_play_queued() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 
@@ -706,6 +709,7 @@ async fn test_end_of_track_handling_and_preload() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 

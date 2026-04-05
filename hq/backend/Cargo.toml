@@ -18,3 +18,4 @@ utoipa-swagger-ui = { workspace = true }
 jsonwebtoken = { workspace = true }
 uuid = { workspace = true }
 jsonrpsee.workspace = true
+zako3-states = { version = "0.1.0", path = "../../crates/states", features = ["redis"] }

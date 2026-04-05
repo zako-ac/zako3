@@ -36,8 +36,10 @@ use handlers::users;
         handlers::audit_log::get_tap_audit_logs,
         handlers::users::get_me,
         handlers::users::get_my_taps,
-        handlers::admin::verify_tap,
-
+        handlers::admin::list_verification_requests,
+        handlers::admin::approve_verification,
+        handlers::admin::reject_verification,
+        handlers::tap::request_verification,
         handlers::notification::list_notifications,
 
         handlers::notification::mark_notification_read,
@@ -64,7 +66,12 @@ use handlers::users;
             hq_types::hq::NotificationDto,
 
             hq_types::hq::CreateNotificationDto,
-            handlers::admin::VerifyTapDto,
+            handlers::admin::VerificationRequestsQuery,
+            handlers::admin::PaginatedVerificationRequestsDto,
+            hq_types::hq::VerificationRequest,
+            hq_types::hq::VerificationStatus,
+            hq_types::hq::CreateVerificationRequestDto,
+            hq_types::hq::RejectVerificationDto,
         )
     ),
     tags(
@@ -100,7 +107,18 @@ pub fn app(service: Service) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout_handler))
         .route("/api/v1/users/me", get(users::get_me))
         .route("/api/v1/users/me/taps", get(users::get_my_taps))
-        .route("/api/v1/admin/taps/:id/verify", post(admin::verify_tap))
+        .route(
+            "/api/v1/admin/verifications",
+            get(admin::list_verification_requests),
+        )
+        .route(
+            "/api/v1/admin/verifications/:id/approve",
+            post(admin::approve_verification),
+        )
+        .route(
+            "/api/v1/admin/verifications/:id/reject",
+            post(admin::reject_verification),
+        )
         .route(
             "/api/v1/notifications",
             get(notification::list_notifications),
@@ -116,6 +134,7 @@ pub fn app(service: Service) -> Router {
                 .patch(tap::update_tap)
                 .delete(tap::delete_tap),
         )
+        .route("/api/v1/taps/:id/verify", post(tap::request_verification))
         .route("/api/v1/taps/:id/stats", get(tap::get_tap_stats))
         .route(
             "/api/v1/taps/:id/audit-log",

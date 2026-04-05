@@ -39,9 +39,7 @@ export const adminApi = {
       status: params.status,
     })
     return apiCall(
-      apiClient.get<PaginatedResponse<VerificationRequestFull>>(
-        `/admin/verifications${query}`
-      )
+      apiClient.get<PaginatedResponse<VerificationRequestFull>>(`/admin/verifications${query}`)
     )
   },
 

@@ -4,7 +4,10 @@ use axum::{
     extract::{Path, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{CreateTapDto, PaginatedResponseDto, Tap, TapStatsDto, TapWithAccessDto};
+use hq_types::hq::{
+    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapStatsDto,
+    TapWithAccessDto, VerificationRequest,
+};
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
@@ -170,4 +173,33 @@ pub async fn delete_tap(
         .map_err(map_error)?;
 
     Ok(Json(()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/taps/{id}/verify",
+    request_body = CreateVerificationRequestDto,
+    params(
+        ("id" = u64, Path, description = "Tap ID")
+    ),
+    responses(
+        (status = 200, description = "Verification requested", body = VerificationRequest)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn request_verification(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Path(tap_id): Path<u64>,
+    Json(payload): Json<CreateVerificationRequestDto>,
+) -> Result<Json<VerificationRequest>, (axum::http::StatusCode, String)> {
+    let request = service
+        .verification
+        .request_verification(tap_id, user_id, payload)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(request))
 }

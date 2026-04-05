@@ -25,3 +25,4 @@ urlencoding = "2.1.3"
 sha2 = "0.10"
 hex = "0.4.3"
 jsonrpsee.workspace = true
+zako3-states = { version = "0.1.0", path = "../../crates/states", features = ["redis"] }

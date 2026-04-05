@@ -115,6 +115,7 @@ async fn test_transport_integration() {
             cache_type: AudioCacheType::CacheKey("preload_key".to_string()),
             ttl_seconds: None,
         },
+        discord_user_id: "123".to_string().into(),
     };
 
     let resp = client
@@ -140,6 +141,7 @@ async fn test_transport_integration() {
     let meta_req = AudioRequest {
         tap_name: "test_tap".to_string().into(),
         request: "yt:meta".to_string().into(),
+        discord_user_id: "123".to_string().into(),
     };
     let meta_resp = client
         .request_audio_meta(meta_req)

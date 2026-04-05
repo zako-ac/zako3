@@ -54,11 +54,13 @@ impl SessionControl {
         tap_name: TapName,
         request: AudioRequestString,
         volume: Volume,
+        discord_user_id: zako3_types::hq::DiscordUserId,
     ) -> ZakoResult<TrackId> {
         tracing::info!(
             queue_name = %queue_name,
             tap_name = %tap_name,
             volume = %volume,
+            discord_user_id = %discord_user_id,
             "Playing audio"
         );
 
@@ -67,6 +69,7 @@ impl SessionControl {
         let ar = AudioRequest {
             tap_name: tap_name.clone(),
             request: request.clone(),
+            discord_user_id: discord_user_id.clone(),
         };
 
         let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
@@ -80,6 +83,7 @@ impl SessionControl {
                     tap_name,
                     audio_request: request,
                     cache_key: meta.cache_key,
+                    discord_user_id,
                 },
                 volume,
                 queue_name: queue_name.clone(),

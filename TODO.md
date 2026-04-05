@@ -8,14 +8,21 @@ refer hq todo
 - [ ] Document backend features
 
 - [x] AE Track proto handling (todo!)
+- [ ] migrate AE-TH comms to jsonrpsee
 - [ ] Make AE work without TH (atleast no crash)
 - [ ] Migrate vendor to fork
-- [ ] change IDs from Uuid to String
+- [x] change IDs from Uuid to String
+- [ ] check admin verification api
 - [ ] implement cache
+- [ ] Make background metrics saver
+- [ ] Make HQ RPC for zakoctl, and use it to make someone admin
+- [ ] merge migrations
+
+- [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 
 ## Web
-- [ ] When browsing my tap, make API key create in sidebar
-- [ ] Make *Create Tap* button in top bar
+- [ ] When browsing tap settings or tap stats, make "stats", "settings", "create api key" in sub-sidebar. Separate API key creation UI to component from settings if needed.
+- [x] Make *Create Tap* button in top bar
 - [ ] In audit log, event is not displayed and user is displayed as ID -> refactor user badge in tap info as a component then use it
 - [x] Increase border contrast
 - [ ] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)

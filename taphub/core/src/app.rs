@@ -1,8 +1,10 @@
 use crate::repository::HqRepositoryRef;
-use zako3_states::CacheRepositoryRef;
+use zako3_states::{CacheRepositoryRef, TapHubStateService, TapMetricsStateService};
 
 #[derive(Clone)]
 pub struct App {
     pub hq_repository: HqRepositoryRef,
     pub cache_repository: CacheRepositoryRef,
+    pub tap_state_service: TapHubStateService,
+    pub tap_metrics_service: TapMetricsStateService,
 }

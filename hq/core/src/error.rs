@@ -28,6 +28,8 @@ pub enum CoreError {
     Conflict(String),
     #[error("Internal server error: {0}")]
     Internal(String),
+    #[error("State service error: {0}")]
+    StateError(#[from] zako3_states::StateServiceError),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

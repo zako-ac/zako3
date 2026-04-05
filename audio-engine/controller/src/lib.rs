@@ -9,7 +9,7 @@ use zako3_audio_engine_protos::audio_engine_server::AudioEngine;
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_core::types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, TrackId, UserId,
-    Volume,
+    Volume, hq::DiscordUserId,
 };
 
 pub mod config;
@@ -82,6 +82,7 @@ impl AudioEngine for AudioEngineServer {
                 TapName::from(req.tap_name),
                 AudioRequestString::from(req.audio_request_string),
                 Volume::from(req.volume),
+                DiscordUserId::from(req.discord_user_id),
             )
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
