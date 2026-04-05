@@ -1,5 +1,5 @@
-use crate::repo::audit_log::AuditLogRepo;
 use crate::CoreResult;
+use crate::repo::audit_log::AuditLogRepo;
 use hq_types::hq::audit_log::{ActorDto, AuditLogDto, CreateAuditLogDto, PaginatedAuditLogsDto};
 use hq_types::hq::dtos::{PaginationMetaDto, UserSummaryDto};
 use std::sync::Arc;

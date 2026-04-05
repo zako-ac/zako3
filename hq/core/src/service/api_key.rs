@@ -1,5 +1,6 @@
 use crate::repo::{ApiKeyRepository, TapRepository};
 use crate::service::audit_log::AuditLogService;
+use crate::service::validation::validate_api_key_label;
 use crate::{CoreError, CoreResult};
 use chrono::Utc;
 use hq_types::hq::{
@@ -60,6 +61,7 @@ impl ApiKeyService {
         user_id: u64,
         dto: CreateApiKeyDto,
     ) -> CoreResult<ApiKeyResponseDto> {
+        validate_api_key_label(&dto.label)?;
         self.check_tap_ownership(tap_id, user_id).await?;
 
         let secret = generate_api_key_secret();
@@ -139,12 +141,13 @@ impl ApiKeyService {
             serde_json::Value::String(key_id.to_string()),
         );
 
-        if let Some(label) = dto.label {
+        if let Some(label) = &dto.label {
+            validate_api_key_label(label)?;
             changes.insert(
                 "label".to_string(),
                 serde_json::Value::String(label.clone()),
             );
-            key.label = label;
+            key.label = label.clone();
         }
 
         if let Some(expires_at) = dto.expires_at {

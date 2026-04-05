@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod tap;
+pub mod validation;
 
 pub use auth::AuthService;
 pub mod api_key;

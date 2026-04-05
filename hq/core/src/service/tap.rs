@@ -1,5 +1,6 @@
 use crate::repo::{TapRepository, UserRepository};
 use crate::service::audit_log::AuditLogService;
+use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapStatsDto,
@@ -32,6 +33,9 @@ impl TapService {
     }
 
     pub async fn create(&self, owner_id: u64, dto: CreateTapDto) -> CoreResult<Tap> {
+        validate_tap_name(&dto.name)?;
+        validate_tap_description(&dto.description)?;
+
         let mut tap = Tap::new(hq_types::hq::next_id(), owner_id, dto.name.clone());
         tap.description = dto.description.clone();
         if let Some(permission) = dto.permission.clone() {
@@ -259,10 +263,12 @@ impl TapService {
         let mut changes = serde_json::Map::new();
 
         if let Some(name) = &dto.name {
+            validate_tap_name(name)?;
             changes.insert("name".to_string(), serde_json::Value::String(name.clone()));
             tap.name = hq_types::hq::TapName(name.clone());
         }
         if let Some(description) = &dto.description {
+            validate_tap_description(&Some(description.clone()))?;
             changes.insert(
                 "description".to_string(),
                 serde_json::Value::String(description.clone()),

@@ -1,5 +1,6 @@
 use crate::repo::{TapRepository, VerificationRepository};
 use crate::service::AuditLogService;
+use crate::service::validation::validate_verification_request;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
     CreateVerificationRequestDto, TapId, TapOccupation, UserId, VerificationRequest,
@@ -33,6 +34,7 @@ impl VerificationService {
         user_id: u64,
         dto: CreateVerificationRequestDto,
     ) -> CoreResult<VerificationRequest> {
+        validate_verification_request(&dto.title, &dto.description)?;
         let tap = self
             .tap_repo
             .find_by_id(tap_id)
