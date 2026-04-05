@@ -3,8 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ArrowLeft, Trash2, Users, Activity, MousePointer2, Database } from 'lucide-react'
-import { useTap, useTapStats, useDeleteTap } from '@/features/taps'
-import { PermissionBadge, OccupationBadge, TapRolesBadge, CopyableId } from '@/components/tap'
+import { useTap, useTapStats, useDeleteTap, useUpdateTap } from '@/features/taps'
+import { PermissionBadge, TapRolesBadge, CopyableId, OccupationSelect } from '@/components/tap'
 import { TimeSeriesChart } from '@/components/common'
 import { ConfirmDialog } from '@/components/common'
 import { formatRelativeTime } from '@/lib/date'
@@ -25,11 +25,26 @@ export const AdminTapDetailPage = () => {
     const { data: tap, isLoading: isLoadingTap } = useTap(tapId)
     const { data: stats, isLoading: isLoadingStats } = useTapStats(tapId)
 
-    const owner = tap?.owner;
-
+    const owner = tap?.owner
     const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
+    const { mutate: updateTap, isPending: isUpdating } = useUpdateTap(tapId!, true)
+
+    const handleOccupationChange = (occupation: any) => {
+        updateTap(
+            { occupation },
+            {
+                onSuccess: () => {
+                    toast.success(t('admin.taps.updateSuccess'))
+                },
+                onError: () => {
+                    toast.error(t('errors.updateFailed'))
+                },
+            }
+        )
+    }
 
     const handleDelete = async () => {
+
         if (!tapId) return
         await deleteTap(tapId)
         toast.success(t('admin.taps.deleteSuccess'))
@@ -101,7 +116,11 @@ export const AdminTapDetailPage = () => {
                     <div>
                         <div className="mb-2 flex items-center gap-2">
                             <h2 className="text-xl font-semibold">{tap.name}</h2>
-                            <OccupationBadge occupation={tap.occupation} />
+                            <OccupationSelect
+                                value={tap.occupation}
+                                onChange={handleOccupationChange}
+                                disabled={isUpdating}
+                            />
                         </div>
                         <p className="text-muted-foreground">{tap.description}</p>
                     </div>
@@ -135,7 +154,7 @@ export const AdminTapDetailPage = () => {
                                 {t('taps.totalUses')}:
                             </span>{' '}
                             <div className="text-sm font-medium">
-                                {tap.totalUses.toLocaleString()}
+                                {tap.totalUses}
                             </div>
                         </div>
                         <div>

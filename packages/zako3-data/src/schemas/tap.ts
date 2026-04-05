@@ -148,6 +148,7 @@ export const updateTapSchema = z.object({
     .min(1, 'At least one role is required')
     .optional(),
   permission: tapPermissionConfigSchema.optional(),
+  occupation: tapOccupationSchema.optional(),
 });
 
 export const tapReportSchema = z.object({

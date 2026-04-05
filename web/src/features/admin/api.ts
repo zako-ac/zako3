@@ -7,6 +7,7 @@ import type {
   Tap,
   VerificationRequestFull,
   VerificationStatus,
+  UpdateTapInput,
 } from '@zako-ac/zako3-data'
 
 interface GetVerificationRequestsParams extends Partial<PaginationParams> {
@@ -14,6 +15,10 @@ interface GetVerificationRequestsParams extends Partial<PaginationParams> {
 }
 
 export const adminApi = {
+  updateTap: async (tapId: string, data: UpdateTapInput): Promise<Tap> => {
+    return apiCall(apiClient.patch<Tap>(`/admin/taps/${tapId}`, data))
+  },
+
   getActivity: async (
     params: Partial<PaginationParams> = {}
   ): Promise<PaginatedResponse<AdminActivity>> => {

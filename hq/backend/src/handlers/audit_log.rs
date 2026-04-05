@@ -44,7 +44,7 @@ pub async fn get_tap_audit_logs(
 
     let tap = service
         .tap
-        .get_tap_with_access(id.clone(), user_id)
+        .get_tap_with_access(id.clone(), Some(user_id))
         .await
         .map_err(|e| match e {
             hq_core::CoreError::NotFound(_) => axum::http::StatusCode::NOT_FOUND,

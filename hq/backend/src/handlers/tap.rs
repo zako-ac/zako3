@@ -1,4 +1,4 @@
-use crate::middleware::auth::AuthUser;
+use crate::middleware::auth::{AuthUser, OptionalAuthUser};
 use axum::{
     Json,
     extract::{Path, State},
@@ -65,16 +65,17 @@ pub async fn create_tap(
     path = "/api/v1/taps",
     responses(
         (status = 200, description = "List of taps", body = PaginatedResponseDto<TapWithAccessDto>)
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 pub async fn list_taps(
     State(service): State<Arc<Service>>,
-    AuthUser(user_id): AuthUser,
+    OptionalAuthUser(user_id): OptionalAuthUser,
 ) -> Result<Json<PaginatedResponseDto<TapWithAccessDto>>, (axum::http::StatusCode, String)> {
-    let taps = service.tap.list_by_user(user_id).await.map_err(map_error)?;
+    let taps = service
+        .tap
+        .list_all_paginated(user_id)
+        .await
+        .map_err(map_error)?;
 
     Ok(Json(taps))
 }
@@ -87,14 +88,11 @@ pub async fn list_taps(
     ),
     responses(
         (status = 200, description = "Tap details", body = TapWithAccessDto)
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 pub async fn get_tap(
     State(service): State<Arc<Service>>,
-    AuthUser(user_id): AuthUser,
+    OptionalAuthUser(user_id): OptionalAuthUser,
     Path(tap_id): Path<TapId>,
 ) -> Result<Json<TapWithAccessDto>, (axum::http::StatusCode, String)> {
     let tap = service

@@ -4,6 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { tapsApi } from './api'
+import { adminApi } from '../admin/api'
 import type { TapFilters, TapSort, PaginationParams } from '@zako-ac/zako3-data'
 import type {
   CreateTapInput,
@@ -81,13 +82,17 @@ export const useCreateTap = () => {
   })
 }
 
-export const useUpdateTap = (tapId: string) => {
+export const useUpdateTap = (tapId: string, isAdmin: boolean = false) => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: UpdateTapInput) => tapsApi.updateTap(tapId, data),
+    mutationFn: (data: UpdateTapInput) =>
+      isAdmin ? adminApi.updateTap(tapId, data) : tapsApi.updateTap(tapId, data),
     onSuccess: (updatedTap) => {
-      queryClient.setQueryData(tapKeys.detail(tapId), updatedTap)
+      queryClient.setQueryData(tapKeys.detail(tapId), (old: any) => {
+        if (!old) return updatedTap
+        return { ...old, ...updatedTap }
+      })
       queryClient.invalidateQueries({ queryKey: tapKeys.lists() })
       queryClient.invalidateQueries({ queryKey: tapKeys.myTaps() })
     },

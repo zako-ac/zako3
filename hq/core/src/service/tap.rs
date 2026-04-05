@@ -77,30 +77,7 @@ impl TapService {
 
         let mut tap_dtos = Vec::new();
         for tap in taps {
-            let total_uses = self
-                .tap_metrics_state
-                .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
-                .await
-                .unwrap_or(0);
-            let cache_hits = self
-                .tap_metrics_state
-                .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
-                .await
-                .unwrap_or(0);
-
-            let tap_dto = TapDto {
-                id: tap.id.0.clone(),
-                name: tap.name.0.clone(),
-                description: tap.description.clone().unwrap_or_default(),
-                owner_id: tap.owner_id.0.clone(),
-                occupation: tap.occupation.clone(),
-                permission: tap.permission.clone(),
-                roles: tap.roles.clone(),
-                total_uses,
-                cache_hits,
-                created_at: tap.timestamp.created_at,
-                updated_at: tap.timestamp.updated_at,
-            };
+            let tap_dto = self.map_to_tap_dto(tap).await;
 
             let tap_with_access = TapWithAccessDto {
                 tap: tap_dto,
@@ -127,10 +104,53 @@ impl TapService {
         })
     }
 
+    pub async fn list_all_paginated(
+        &self,
+        user_id: Option<UserId>,
+    ) -> CoreResult<PaginatedResponseDto<TapWithAccessDto>> {
+        let taps = self.tap_repo.list_all().await?;
+
+        let mut tap_dtos = Vec::new();
+        for tap in taps {
+            let owner = self
+                .user_repo
+                .find_by_id(tap.owner_id.clone())
+                .await?
+                .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
+
+            let has_access = self.check_access(&tap, user_id.clone()).await;
+
+            let tap_dto = self.map_to_tap_dto(tap).await;
+
+            let tap_with_access = TapWithAccessDto {
+                tap: tap_dto,
+                has_access,
+                owner: UserSummaryDto {
+                    id: owner.id.0.clone(),
+                    username: owner.username.0.clone(),
+                    avatar: owner.avatar_url.clone().unwrap_or_default(),
+                },
+            };
+
+            tap_dtos.push(tap_with_access);
+        }
+
+        let total = tap_dtos.len() as u64;
+        Ok(PaginatedResponseDto {
+            data: tap_dtos,
+            meta: PaginationMetaDto {
+                total,
+                page: 1,
+                per_page: 50,
+                total_pages: 1,
+            },
+        })
+    }
+
     pub async fn get_tap_with_access(
         &self,
         tap_id: TapId,
-        user_id: UserId,
+        user_id: Option<UserId>,
     ) -> CoreResult<TapWithAccessDto> {
         let tap = self
             .tap_repo
@@ -144,32 +164,9 @@ impl TapService {
             .await?
             .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
 
-        let has_access = tap.owner_id == user_id; // Simple permission logic for now
+        let has_access = self.check_access(&tap, user_id).await;
 
-        let total_uses = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
-            .await
-            .unwrap_or(0);
-        let cache_hits = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
-            .await
-            .unwrap_or(0);
-
-        let tap_dto = TapDto {
-            id: tap.id.0.clone(),
-            name: tap.name.0.clone(),
-            description: tap.description.clone().unwrap_or_default(),
-            owner_id: tap.owner_id.0.clone(),
-            occupation: tap.occupation.clone(),
-            permission: tap.permission.clone(),
-            roles: tap.roles.clone(),
-            total_uses,
-            cache_hits,
-            created_at: tap.timestamp.created_at,
-            updated_at: tap.timestamp.updated_at,
-        };
+        let tap_dto = self.map_to_tap_dto(tap).await;
 
         Ok(TapWithAccessDto {
             tap: tap_dto,
@@ -351,5 +348,63 @@ impl TapService {
         discord_id: &str,
     ) -> CoreResult<Option<hq_types::hq::User>> {
         self.user_repo.find_by_discord_id(discord_id).await
+    }
+
+    async fn check_access(&self, tap: &Tap, user_id: Option<UserId>) -> bool {
+        use hq_types::hq::TapPermission;
+
+        match &tap.permission {
+            TapPermission::Public => true,
+            TapPermission::OwnerOnly => user_id.map(|id| id == tap.owner_id).unwrap_or(false),
+            TapPermission::Whitelisted { user_ids } => {
+                if let Some(uid) = user_id {
+                    if uid == tap.owner_id {
+                        return true;
+                    }
+                    if let Ok(Some(user)) = self.user_repo.find_by_id(uid).await {
+                        return user_ids.contains(&user.discord_user_id.0);
+                    }
+                }
+                false
+            }
+            TapPermission::Blacklisted { user_ids } => {
+                if let Some(uid) = user_id {
+                    if uid == tap.owner_id {
+                        return true;
+                    }
+                    if let Ok(Some(user)) = self.user_repo.find_by_id(uid).await {
+                        return !user_ids.contains(&user.discord_user_id.0);
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    async fn map_to_tap_dto(&self, tap: Tap) -> TapDto {
+        let total_uses = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+            .await
+            .unwrap_or(0);
+        let cache_hits = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+            .await
+            .unwrap_or(0);
+
+        TapDto {
+            id: tap.id.0.clone(),
+            name: tap.name.0.clone(),
+            description: tap.description.clone().unwrap_or_default(),
+            owner_id: tap.owner_id.0.clone(),
+            occupation: tap.occupation.clone(),
+            permission: tap.permission.clone(),
+            roles: tap.roles.clone(),
+            total_uses,
+            cache_hits,
+            created_at: tap.timestamp.created_at,
+            updated_at: tap.timestamp.updated_at,
+        }
     }
 }

@@ -62,6 +62,54 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
     }
 }
 
+pub struct OptionalAuthUser(pub Option<UserId>);
+
+#[async_trait]
+impl FromRequestParts<Arc<Service>> for OptionalAuthUser {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<Service>,
+    ) -> Result<Self, Self::Rejection> {
+        if let Some(auth_user) = parts.extensions.get::<AuthUser>() {
+            return Ok(OptionalAuthUser(Some(auth_user.0.clone())));
+        }
+
+        let auth_header = match parts.headers.get("Authorization") {
+            Some(header) => header,
+            None => return Ok(OptionalAuthUser(None)),
+        };
+
+        let token = match auth_header.to_str() {
+            Ok(s) => match s.strip_prefix("Bearer ") {
+                Some(t) => t,
+                None => return Ok(OptionalAuthUser(None)),
+            },
+            Err(_) => return Ok(OptionalAuthUser(None)),
+        };
+
+        let secret = &state.config.jwt_secret;
+
+        let token_data = match decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(secret.as_bytes()),
+            &Validation::default(),
+        ) {
+            Ok(data) => data,
+            Err(_) => return Ok(OptionalAuthUser(None)),
+        };
+
+        let user_id = UserId(token_data.claims.sub);
+
+        if state.auth.get_user(&user_id.to_string()).await.is_err() {
+            return Ok(OptionalAuthUser(None));
+        }
+
+        Ok(OptionalAuthUser(Some(user_id)))
+    }
+}
+
 pub struct AdminUser(pub UserId);
 
 #[async_trait]
