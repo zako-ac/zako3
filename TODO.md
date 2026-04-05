@@ -9,9 +9,11 @@ refer hq todo
 
 - [ ] AE Track proto handling (todo!)
 - [ ] Make AE work without TH (atleast no crash)
+- [ ] Migrate vendor to fork
 
 ## Web
 - [ ] When browsing my tap, make API key create in sidebar
 - [ ] Make *Create Tap* button in top bar
 - [ ] In audit log, event is not displayed and user is displayed as ID
-- [ ] Increase border contrast
+- [x] Increase border contrast
+- [ ] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
