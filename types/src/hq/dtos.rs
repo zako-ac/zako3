@@ -21,6 +21,12 @@ pub struct UpdateTapDto {
     pub roles: Option<Vec<TapRole>>,
 }
 
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateOccupationDto {
+    pub occupation: TapOccupation,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthCallbackDto {

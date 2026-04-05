@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminApi } from './api'
-import type { PaginationParams, VerificationStatus } from '@zako-ac/zako3-data'
+import type { PaginationParams, VerificationStatus, TapOccupation } from '@zako-ac/zako3-data'
+import { tapKeys } from '../taps/hooks'
 
 interface GetVerificationRequestsParams extends Partial<PaginationParams> {
   status?: VerificationStatus
@@ -63,6 +64,22 @@ export const useRejectVerification = () => {
     }) => adminApi.rejectVerification(requestId, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminKeys.all })
+    },
+  })
+}
+
+export const useUpdateTapOccupation = (tapId: string) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (occupation: TapOccupation) =>
+      adminApi.updateTapOccupation(tapId, occupation),
+    onSuccess: (updatedTap: any) => {
+      queryClient.setQueryData(tapKeys.detail(tapId), (old: any) => {
+        if (!old) return updatedTap
+        return { ...old, ...updatedTap }
+      })
+      queryClient.invalidateQueries({ queryKey: tapKeys.lists() })
     },
   })
 }

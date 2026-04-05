@@ -32,6 +32,7 @@ use handlers::users;
         handlers::tap::get_tap,
         handlers::tap::update_tap,
         handlers::tap::admin_update_tap,
+        handlers::tap::admin_update_tap_occupation,
         handlers::tap::delete_tap,
         handlers::tap::get_tap_stats,
         handlers::audit_log::get_tap_audit_logs,
@@ -49,6 +50,7 @@ use handlers::users;
         schemas(
             hq_types::hq::CreateTapDto,
             hq_types::hq::UpdateTapDto,
+            hq_types::hq::UpdateOccupationDto,
             hq_types::hq::AuthCallbackDto,
             hq_types::hq::AuthUserDto,
             hq_types::hq::AuthResponseDto,
@@ -133,6 +135,10 @@ pub fn app(service: Service) -> Router {
         .route(
             "/api/v1/admin/taps/:id",
             axum::routing::patch(tap::admin_update_tap),
+        )
+        .route(
+            "/api/v1/admin/taps/:id/occupation",
+            axum::routing::patch(tap::admin_update_tap_occupation),
         )
         .route(
             "/api/v1/notifications",

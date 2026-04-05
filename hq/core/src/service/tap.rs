@@ -304,6 +304,36 @@ impl TapService {
         Ok(result)
     }
 
+    pub async fn admin_update_occupation(
+        &self,
+        tap_id: TapId,
+        admin_id: UserId,
+        dto: hq_types::hq::UpdateOccupationDto,
+    ) -> CoreResult<Tap> {
+        let mut tap = self
+            .tap_repo
+            .find_by_id(tap_id.clone())
+            .await?
+            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
+
+        tap.occupation = dto.occupation.clone();
+        tap.timestamp.updated_at = chrono::Utc::now();
+
+        let result = self.tap_repo.update(&tap).await?;
+
+        let _ = self
+            .audit_log
+            .log(
+                tap_id.0,
+                Some(admin_id.0),
+                "tap.admin_update_occupation".to_string(),
+                Some(serde_json::json!({ "occupation": dto.occupation })),
+            )
+            .await;
+
+        Ok(result)
+    }
+
     async fn apply_updates(
         &self,
         tap: &mut Tap,

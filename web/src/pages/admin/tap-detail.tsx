@@ -3,7 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ArrowLeft, Trash2, Users, Activity, MousePointer2, Database } from 'lucide-react'
-import { useTap, useTapStats, useDeleteTap, useUpdateTap } from '@/features/taps'
+import { useTap, useTapStats, useDeleteTap } from '@/features/taps'
+import { useUpdateTapOccupation } from '@/features/admin/hooks'
 import { PermissionBadge, TapRolesBadge, CopyableId, OccupationSelect } from '@/components/tap'
 import { TimeSeriesChart } from '@/components/common'
 import { ConfirmDialog } from '@/components/common'
@@ -27,20 +28,17 @@ export const AdminTapDetailPage = () => {
 
     const owner = tap?.owner
     const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
-    const { mutate: updateTap, isPending: isUpdating } = useUpdateTap(tapId!, true)
+    const { mutate: updateOccupation, isPending: isUpdating } = useUpdateTapOccupation(tapId!)
 
     const handleOccupationChange = (occupation: any) => {
-        updateTap(
-            { occupation },
-            {
-                onSuccess: () => {
-                    toast.success(t('admin.taps.updateSuccess'))
-                },
-                onError: () => {
-                    toast.error(t('errors.updateFailed'))
-                },
-            }
-        )
+        updateOccupation(occupation, {
+            onSuccess: () => {
+                toast.success(t('admin.taps.updateSuccess'))
+            },
+            onError: () => {
+                toast.error(t('errors.updateFailed'))
+            },
+        })
     }
 
     const handleDelete = async () => {

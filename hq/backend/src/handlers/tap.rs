@@ -192,6 +192,35 @@ pub async fn admin_update_tap(
 }
 
 #[utoipa::path(
+    patch,
+    path = "/api/v1/admin/taps/{id}/occupation",
+    params(
+        ("id" = String, Path, description = "Tap ID")
+    ),
+    request_body = hq_types::hq::UpdateOccupationDto,
+    responses(
+        (status = 204, description = "Tap occupation updated by admin")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn admin_update_tap_occupation(
+    State(service): State<Arc<Service>>,
+    AdminUser(admin_id): AdminUser,
+    Path(tap_id): Path<TapId>,
+    Json(payload): Json<hq_types::hq::UpdateOccupationDto>,
+) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+    service
+        .tap
+        .admin_update_occupation(tap_id, admin_id, payload)
+        .await
+        .map_err(map_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
     delete,
     path = "/api/v1/taps/{id}",
     params(
