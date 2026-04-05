@@ -3,10 +3,11 @@
 refer hq todo
 
 # Do Now
-- [ ] Implement multiple AE
+- [x] Implement multiple AE
 
 - [ ] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [ ] Implement text preprocessing
+- [ ] implement cache
 
 # Other
 - [ ] otel and prometheus and logging(promtail)
@@ -16,7 +17,6 @@ refer hq todo
 - [ ] Migrate vendor to fork
 - [x] change IDs from Uuid to String
 - [ ] check admin verification api
-- [ ] implement cache
 - [x] Make background metrics saver
 - [ ] Make HQ RPC for zakoctl, and use it to make someone admin
 - [ ] merge migrations
