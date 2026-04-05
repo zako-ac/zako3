@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use thiserror::Error;
-use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId};
+use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId};
 
 #[derive(Error, Debug)]
 pub enum StateServiceError {
@@ -18,6 +18,10 @@ type Result<T> = std::result::Result<T, StateServiceError>;
 pub trait CacheRepository: Send + Sync {
     async fn get(&self, key: &str) -> Option<String>;
     async fn set(&self, key: &str, value: &str);
+    async fn incr(&self, key: &str) -> Result<i64>;
+    async fn decr(&self, key: &str) -> Result<i64>;
+    async fn pfadd(&self, key: &str, element: u64) -> Result<()>;
+    async fn pfcount(&self, key: &str) -> Result<u64>;
 }
 
 pub type CacheRepositoryRef = Arc<dyn CacheRepository>;
@@ -108,6 +112,83 @@ impl TapHubStateService {
     }
 }
 
+pub enum TapMetricKey {
+    TotalUses,
+    ActiveNow,
+    CacheHits,
+    UniqueUsers,
+}
+
+impl TapMetricKey {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::TotalUses => "total_uses",
+            Self::ActiveNow => "active_now",
+            Self::CacheHits => "cache_hits",
+            Self::UniqueUsers => "unique_users",
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct TapMetricsStateService {
+    pub cache_repository: CacheRepositoryRef,
+}
+
+impl TapMetricsStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    fn get_key(&self, tap_id: TapId, key: TapMetricKey) -> String {
+        format!("metrics:{}:{}", tap_id.0, key.as_str())
+    }
+
+    pub async fn inc_total_uses(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::TotalUses);
+        self.cache_repository.incr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn inc_active_now(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::ActiveNow);
+        self.cache_repository.incr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn dec_active_now(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::ActiveNow);
+        self.cache_repository.decr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn inc_cache_hits(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::CacheHits);
+        self.cache_repository.incr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn record_unique_user(&self, tap_id: TapId, user_id: UserId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
+        self.cache_repository.pfadd(&key, user_id.0).await?;
+        Ok(())
+    }
+
+    pub async fn get_unique_users_count(&self, tap_id: TapId) -> Result<u64> {
+        let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
+        self.cache_repository.pfcount(&key).await
+    }
+
+    pub async fn get_metric(&self, tap_id: TapId, key: TapMetricKey) -> Result<u64> {
+        let redis_key = self.get_key(tap_id, key);
+        let val = self.cache_repository.get(&redis_key).await;
+        match val {
+            Some(v) => Ok(v.parse().unwrap_or(0)),
+            None => Ok(0),
+        }
+    }
+}
+
 #[cfg(feature = "redis")]
 #[derive(Clone)]
 pub struct RedisCacheRepository {
@@ -138,5 +219,33 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let _: redis::RedisResult<()> = conn.set(key, value).await;
+    }
+
+    async fn incr(&self, key: &str) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.incr(key, 1).await?;
+        Ok(val)
+    }
+
+    async fn decr(&self, key: &str) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.decr(key, 1).await?;
+        Ok(val)
+    }
+
+    async fn pfadd(&self, key: &str, element: u64) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: () = conn.pfadd(key, element).await?;
+        Ok(())
+    }
+
+    async fn pfcount(&self, key: &str) -> Result<u64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: u64 = conn.pfcount(key).await?;
+        Ok(val)
     }
 }

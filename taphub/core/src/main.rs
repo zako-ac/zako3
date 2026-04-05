@@ -48,6 +48,7 @@ impl HqRepository for StubHqRepository {
 #[derive(Default)]
 struct StubCacheRepository {
     data: DashMap<String, String>,
+    hll: DashMap<String, std::collections::HashSet<u64>>,
 }
 
 #[async_trait]
@@ -57,6 +58,37 @@ impl CacheRepository for StubCacheRepository {
     }
     async fn set(&self, key: &str, value: &str) {
         self.data.insert(key.to_string(), value.to_string());
+    }
+
+    async fn incr(&self, key: &str) -> Result<i64, zako3_states::StateServiceError> {
+        let mut val = self
+            .data
+            .get(key)
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+        val += 1;
+        self.data.insert(key.to_string(), val.to_string());
+        Ok(val)
+    }
+
+    async fn decr(&self, key: &str) -> Result<i64, zako3_states::StateServiceError> {
+        let mut val = self
+            .data
+            .get(key)
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+        val -= 1;
+        self.data.insert(key.to_string(), val.to_string());
+        Ok(val)
+    }
+
+    async fn pfadd(&self, key: &str, element: u64) -> Result<(), zako3_states::StateServiceError> {
+        self.hll.entry(key.to_string()).or_default().insert(element);
+        Ok(())
+    }
+
+    async fn pfcount(&self, key: &str) -> Result<u64, zako3_states::StateServiceError> {
+        Ok(self.hll.get(key).map(|v| v.len() as u64).unwrap_or(0))
     }
 }
 
