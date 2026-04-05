@@ -1,6 +1,5 @@
 pub mod auth;
 pub mod tap;
-pub mod tap_metric;
 
 pub use auth::AuthService;
 pub mod api_key;
@@ -9,13 +8,10 @@ pub mod audit_log;
 pub use audit_log::AuditLogService;
 pub use auth::Claims; // Export Claims
 pub use tap::TapService;
-pub use tap_metric::TapMetricService;
 pub mod verification;
 pub use verification::VerificationService;
 
-use crate::repo::{
-    PgApiKeyRepository, PgAuditLogRepo, PgTapRepository, PgUserRepository, TapMetricRepository,
-};
+use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgTapRepository, PgUserRepository};
 use crate::{AppConfig, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -40,11 +36,9 @@ impl Service {
         let tap_repo = Arc::new(PgTapRepository::new(pool.clone()));
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
         let audit_log_repo = Arc::new(PgAuditLogRepo::new(pool.clone()));
-        let tap_metric_repo = Arc::new(TapMetricRepository::new(pool.clone()));
         let verification_repo = Arc::new(crate::repo::PgVerificationRepository::new(pool.clone()));
 
         let audit_log_service = AuditLogService::new(audit_log_repo.clone());
-        let tap_metric_service = Arc::new(TapMetricService::new(tap_metric_repo.clone()));
         let notification_repo = Arc::new(crate::repo::PgNotificationRepository::new(pool.clone()));
         let notification_service = NotificationService::new(notification_repo);
 
@@ -56,7 +50,6 @@ impl Service {
             tap_repo.clone(),
             user_repo.clone(),
             audit_log_service.clone(),
-            tap_metric_service.clone(),
             tap_metrics_service.clone(),
         );
         let api_key_service = ApiKeyService::new(

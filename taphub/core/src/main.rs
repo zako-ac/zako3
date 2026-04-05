@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cert_chain, private_key) = load_certs(&config)?;
 
-    let hq_repository = RpcHqRepository::new(&config.hq_rpc_url)?;
+    let hq_repository = RpcHqRepository::new(&config.hq_rpc_url, &config.hq_rpc_admin_token)?;
 
     let cache_repo = Arc::new(StubCacheRepository::default());
     let app = App {

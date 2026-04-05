@@ -1,6 +1,5 @@
 use crate::repo::{TapRepository, UserRepository};
 use crate::service::audit_log::AuditLogService;
-use crate::service::tap_metric::TapMetricService;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapStatsDto,
@@ -14,7 +13,6 @@ pub struct TapService {
     tap_repo: Arc<dyn TapRepository>,
     user_repo: Arc<dyn UserRepository>,
     audit_log: AuditLogService,
-    tap_metric: Arc<TapMetricService>,
     tap_metrics_state: TapMetricsStateService,
 }
 
@@ -23,14 +21,12 @@ impl TapService {
         tap_repo: Arc<dyn TapRepository>,
         user_repo: Arc<dyn UserRepository>,
         audit_log: AuditLogService,
-        tap_metric: Arc<TapMetricService>,
         tap_metrics_state: TapMetricsStateService,
     ) -> Self {
         Self {
             tap_repo,
             user_repo,
             audit_log,
-            tap_metric,
             tap_metrics_state,
         }
     }
@@ -75,12 +71,12 @@ impl TapService {
         for tap in taps {
             let total_uses = self
                 .tap_metrics_state
-                .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+                .get_metric(tap.id, TapMetricKey::TotalUses)
                 .await
                 .unwrap_or(0);
             let cache_hits = self
                 .tap_metrics_state
-                .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+                .get_metric(tap.id, TapMetricKey::CacheHits)
                 .await
                 .unwrap_or(0);
 
@@ -144,12 +140,12 @@ impl TapService {
 
         let total_uses = self
             .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+            .get_metric(tap.id, TapMetricKey::TotalUses)
             .await
             .unwrap_or(0);
         let cache_hits = self
             .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+            .get_metric(tap.id, TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
 
@@ -195,22 +191,22 @@ impl TapService {
         let tap_id_typed = hq_types::hq::TapId(tap_id);
         let total_uses = self
             .tap_metrics_state
-            .get_metric(tap_id_typed.clone(), TapMetricKey::TotalUses)
+            .get_metric(tap_id_typed, TapMetricKey::TotalUses)
             .await
             .unwrap_or(0);
         let active_now = self
             .tap_metrics_state
-            .get_metric(tap_id_typed.clone(), TapMetricKey::ActiveNow)
+            .get_metric(tap_id_typed, TapMetricKey::ActiveNow)
             .await
             .unwrap_or(0);
         let unique_users = self
             .tap_metrics_state
-            .get_unique_users_count(tap_id_typed.clone())
+            .get_unique_users_count(tap_id_typed)
             .await
             .unwrap_or(0);
         let cache_hits = self
             .tap_metrics_state
-            .get_metric(tap_id_typed.clone(), TapMetricKey::CacheHits)
+            .get_metric(tap_id_typed, TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
 
@@ -234,9 +230,9 @@ impl TapService {
         Ok(TapStatsDto {
             tap_id: tap.id.0.to_string(),
             currently_active: active_now,
-            total_uses: total_uses,
-            cache_hits: cache_hits,
-            unique_users: unique_users,
+            total_uses,
+            cache_hits,
+            unique_users,
             use_rate_history,
             cache_hit_rate_history,
         })
@@ -327,6 +323,18 @@ impl TapService {
 
     pub async fn get_tap_internal(&self, tap_id: u64) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
+    }
+
+    pub async fn list_all_taps(&self) -> CoreResult<Vec<Tap>> {
+        self.tap_repo.list_all().await
+    }
+
+    pub async fn list_taps_by_owner(&self, owner_id: u64) -> CoreResult<Vec<Tap>> {
+        self.tap_repo.list_by_owner(owner_id).await
+    }
+
+    pub async fn delete_tap_internal(&self, tap_id: u64) -> CoreResult<()> {
+        self.tap_repo.delete(tap_id).await
     }
 
     pub async fn get_user_by_discord_id(

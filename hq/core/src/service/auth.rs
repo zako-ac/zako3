@@ -235,4 +235,20 @@ impl AuthService {
             user: auth_user,
         })
     }
+
+    pub async fn list_all_users(&self) -> CoreResult<Vec<User>> {
+        self.user_repo.list_all().await
+    }
+
+    pub async fn get_user_internal(&self, id: u64) -> CoreResult<Option<User>> {
+        self.user_repo.find_by_id(id).await
+    }
+
+    pub async fn update_user_permissions(
+        &self,
+        id: u64,
+        permissions: Vec<String>,
+    ) -> CoreResult<User> {
+        self.user_repo.update_permissions(id, permissions).await
+    }
 }

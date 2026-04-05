@@ -25,9 +25,17 @@ pub fn handle_command(cmd: ConfigCommands) -> Result<()> {
         ConfigSubcommands::SetContext {
             name,
             ae_addr,
+            hq_addr,
+            hq_admin_token,
             default_guild_id,
         } => {
-            config.set_context(name.clone(), ae_addr, default_guild_id);
+            config.set_context(
+                name.clone(),
+                ae_addr,
+                hq_addr,
+                hq_admin_token,
+                default_guild_id,
+            );
             config.save()?;
             println!("Context \"{}\" set.", name.green());
         }

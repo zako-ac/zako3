@@ -27,4 +27,5 @@ parking_lot = "0.12.5"
 uuid.workspace = true
 dashmap = "6.1.0"
 jsonrpsee.workspace = true
+http = "1.0"
 zako3-states = { version = "0.1.0", path = "../../crates/states" }

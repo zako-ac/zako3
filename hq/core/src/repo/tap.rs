@@ -10,6 +10,7 @@ pub trait TapRepository: Send + Sync {
     async fn find_by_id(&self, id: u64) -> CoreResult<Option<Tap>>;
     async fn update(&self, tap: &Tap) -> CoreResult<Tap>;
     async fn delete(&self, id: u64) -> CoreResult<()>;
+    async fn list_all(&self) -> CoreResult<Vec<Tap>>;
 }
 
 pub struct PgTapRepository {
@@ -195,5 +196,57 @@ impl TapRepository for PgTapRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    async fn list_all(&self) -> CoreResult<Vec<Tap>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            FROM taps
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let taps = rows
+            .into_iter()
+            .map(|row| {
+                let id: i64 = row.try_get("id")?;
+                let id = id as u64;
+                let owner_id: i64 = row.try_get("owner_id")?;
+                let owner_id = owner_id as u64;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
+
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
+
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
+
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+                Ok(Tap {
+                    id: hq_types::hq::TapId(id),
+                    name: hq_types::hq::TapName(name),
+                    description,
+                    owner_id: hq_types::hq::UserId(owner_id),
+                    occupation,
+                    permission,
+                    roles,
+                    timestamp: hq_types::hq::ResourceTimestamp {
+                        created_at,
+                        updated_at,
+                    },
+                })
+            })
+            .collect::<CoreResult<Vec<Tap>>>()?;
+
+        Ok(taps)
     }
 }

@@ -74,7 +74,7 @@ impl TapHubStateService {
     }
 
     pub async fn set_connection_state(&self, state: OnlineTapState) -> Result<()> {
-        let tap_id = state.tap_id.clone();
+        let tap_id = state.tap_id;
 
         let name_key = format!("tap_name:{}", state.tap_name.0);
         self.cache_repository

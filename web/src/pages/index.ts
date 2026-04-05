@@ -6,6 +6,7 @@ export {
   CreateTapPage,
   TapSettingsPage,
   TapStatsPage,
+  TapApiKeysPage,
 } from './taps'
 export { SettingsPage } from './settings'
 export {

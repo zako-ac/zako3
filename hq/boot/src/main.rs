@@ -1,5 +1,5 @@
 use hq_backend::rpc::start_rpc_server;
-use hq_core::{get_pool, run_migrations, AppConfig, Service};
+use hq_core::{AppConfig, Service, get_pool, run_migrations};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -19,8 +19,6 @@ async fn main() -> anyhow::Result<()> {
     let service = Service::new(pool, config.clone()).await?;
 
     let backend_address = config.backend_address.clone();
-    let rpc_address = config.rpc_address.clone();
-
     let service_backend = service.clone();
     let backend_task = tokio::spawn(async move {
         let app = hq_backend::app(service_backend);
@@ -35,8 +33,16 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let service_rpc = service.clone();
+    let rpc_address = config.rpc_address.clone();
+    let rpc_admin_token = config.rpc_admin_token.clone();
     let rpc_task = tokio::spawn(async move {
-        let rpc = start_rpc_server(service_rpc.api_key, service_rpc.tap, &rpc_address);
+        let rpc = start_rpc_server(
+            service_rpc.api_key,
+            service_rpc.tap,
+            service_rpc.auth,
+            &rpc_address,
+            rpc_admin_token,
+        );
         if let Err(e) = rpc.await {
             tracing::error!("RPC server error: {}", e);
         }

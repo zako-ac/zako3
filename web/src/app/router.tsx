@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { RootLayout, AppLayout, AdminLayout, AuthLayout } from '@/layouts'
+import { RootLayout, AppLayout, AdminLayout, AuthLayout, TapLayout } from '@/layouts'
 import { AuthGuard, AdminGuard, GuestGuard } from '@/features/auth'
 import {
   LoginPage,
@@ -10,6 +10,7 @@ import {
   CreateTapPage,
   TapSettingsPage,
   TapStatsPage,
+  TapApiKeysPage,
   SettingsPage,
   AdminDashboardPage,
   AdminUsersPage,
@@ -42,7 +43,9 @@ export const AppRouter = () => {
         {/* Public app routes */}
         <Route element={<AppLayout />}>
           <Route path={ROUTES.TAPS} element={<TapExplorePage />} />
-          <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
+          <Route element={<TapLayout />}>
+            <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
+          </Route>
         </Route>
 
         {/* App routes (authenticated) */}
@@ -57,7 +60,10 @@ export const AppRouter = () => {
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
           <Route path={ROUTES.TAPS_MINE} element={<MyTapsPage />} />
           <Route path={ROUTES.TAPS_CREATE} element={<CreateTapPage />} />
-          <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
+          <Route element={<TapLayout />}>
+            <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
+            <Route path="/taps/:tapId/api-keys" element={<TapApiKeysPage />} />
+          </Route>
         </Route>
 
         {/* Admin routes */}

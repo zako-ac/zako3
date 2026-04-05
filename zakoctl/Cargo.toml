@@ -18,6 +18,10 @@ toml = "0.9.10"
 dirs = "6.0.0"
 serde_yaml = "0.9.34"
 comfy-table = "7.2.1"
+jsonrpsee = { version = "0.24", features = ["http-client", "macros"] }
+http = "1.0"
+hq-types = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
 
 [[bin]]
 name = "zakoctl"

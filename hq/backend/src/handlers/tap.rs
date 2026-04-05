@@ -5,7 +5,7 @@ use axum::{
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::{
-    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapStatsDto,
+    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapDto, TapStatsDto,
     TapWithAccessDto, VerificationRequest,
 };
 use std::sync::Arc;
@@ -26,7 +26,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     path = "/api/v1/taps",
     request_body = CreateTapDto,
     responses(
-        (status = 200, description = "Tap created", body = Tap)
+        (status = 200, description = "Tap created", body = TapDto)
     ),
     security(
         ("bearer_auth" = [])
@@ -36,14 +36,28 @@ pub async fn create_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<CreateTapDto>,
-) -> Result<Json<Tap>, (axum::http::StatusCode, String)> {
+) -> Result<Json<TapDto>, (axum::http::StatusCode, String)> {
     let tap = service
         .tap
         .create(user_id, payload)
         .await
         .map_err(map_error)?;
 
-    Ok(Json(tap))
+    let tap_dto = TapDto {
+        id: tap.id.0.to_string(),
+        name: tap.name.0,
+        description: tap.description.unwrap_or_default(),
+        owner_id: tap.owner_id.0.to_string(),
+        occupation: tap.occupation,
+        permission: tap.permission,
+        roles: tap.roles,
+        total_uses: 0,
+        cache_hits: 0,
+        created_at: tap.timestamp.created_at,
+        updated_at: tap.timestamp.updated_at,
+    };
+
+    Ok(Json(tap_dto))
 }
 
 #[utoipa::path(

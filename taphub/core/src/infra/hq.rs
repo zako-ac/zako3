@@ -12,8 +12,15 @@ pub struct RpcHqRepository {
 }
 
 impl RpcHqRepository {
-    pub fn new(url: &str) -> ZakoResult<Self> {
+    pub fn new(url: &str, admin_token: &str) -> ZakoResult<Self> {
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::HeaderName::from_static("x-admin-token"),
+            http::HeaderValue::from_str(admin_token).map_err(|e| ZakoError::Rpc(e.to_string()))?,
+        );
+
         let http_client = HttpClientBuilder::default()
+            .set_headers(headers)
             .build(url)
             .map_err(|e| ZakoError::Rpc(e.to_string()))?;
 

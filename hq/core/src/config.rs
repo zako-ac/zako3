@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub backend_address: String,
     pub rpc_address: String,
     pub redis_url: String,
+    pub rpc_admin_token: String,
 }
 
 impl AppConfig {
@@ -32,6 +33,7 @@ impl AppConfig {
             rpc_address: env::var("RPC_ADDRESS").unwrap_or_else(|_| "127.0.0.1:50051".to_string()),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
+            rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
         })
     }
 }

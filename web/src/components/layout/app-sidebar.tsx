@@ -9,6 +9,8 @@ import {
     Plus,
     Box,
     Globe,
+    Activity,
+    Key,
 } from 'lucide-react'
 
 import { ROUTES } from '@/lib/constants'
@@ -88,21 +90,38 @@ export const AppSidebar = () => {
                         url: ROUTES.TAPS_MINE,
                         icon: Box,
                     },
-                    ...(isValidTapId && tapData
-                        ? [
-                            {
-                                title: tapData.name,
-                                url: `/taps/${activeTapId}/stats`,
-                                icon: Box,
-                                isSubItem: true,
-                            },
-                        ]
-                        : []),
                 ],
             },
+            ...(isValidTapId && tapData
+                ? [
+                    {
+                        title: t('admin.taps.manageTap'),
+                        items: [
+                            {
+                                title: t('taps.stats.title'),
+                                url: ROUTES.TAP_STATS(activeTapId),
+                                icon: Activity,
+                            },
+                            {
+                                title: t('nav.settings'),
+                                url: ROUTES.TAP_SETTINGS(activeTapId),
+                                icon: Settings,
+                            },
+                            {
+                                title: t('taps.settings.apiAccess'),
+                                url: ROUTES.TAP_API_KEYS(activeTapId),
+                                icon: Key,
+                            },
+                        ],
+                    },
+                ]
+                : []),
         ]
 
-    const isActive = (url: string) => location.pathname === url
+    const isActive = (url: string) => {
+        if (location.pathname === url) return true
+        return false
+    }
 
     return (
         <Sidebar collapsible="icon">

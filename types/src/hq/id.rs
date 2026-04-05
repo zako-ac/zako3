@@ -28,7 +28,7 @@ impl IdGenerator {
             let last = self.last_timestamp.load(Ordering::Relaxed);
 
             let epoch = 1704067200000;
-            let ts = if now >= epoch { now - epoch } else { 0 };
+            let ts = now.saturating_sub(epoch);
 
             if ts > last {
                 if self

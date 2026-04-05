@@ -30,3 +30,4 @@ refer hq todo
 - [ ] Improve chart
 - [ ] Add Cache hit rate in cache hits card
 - [ ] Make all cards in settings as component
+- [ ] Add "load failed" 

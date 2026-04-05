@@ -26,9 +26,22 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|| "http://[::1]:50051".to_string())
     });
 
+    let hq_addr = cli.hq_addr.unwrap_or_else(|| {
+        active_context
+            .map(|c| c.hq_addr.clone())
+            .unwrap_or_else(|| "http://127.0.0.1:3000/rpc".to_string())
+    });
+
+    let hq_admin_token = cli
+        .hq_admin_token
+        .or_else(|| active_context.and_then(|c| c.hq_admin_token.clone()));
+
     match cli.command {
         Commands::AudioEngine(cmd) => {
             services::audio_engine::handle_command(ae_addr, cmd).await?;
+        }
+        Commands::Hq(cmd) => {
+            services::hq::handle_command(hq_addr, hq_admin_token, cmd).await?;
         }
         Commands::Config(cmd) => {
             services::config::handle_command(cmd)?;

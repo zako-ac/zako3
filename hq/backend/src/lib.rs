@@ -86,12 +86,22 @@ pub struct ApiDoc;
 pub fn app(service: Service) -> Router {
     let state = Arc::new(service.clone());
 
-    let rpc_impl = rpc::HqRpcImpl::new(service.api_key.clone(), service.tap.clone());
+    let rpc_impl = rpc::HqRpcImpl::new(
+        service.api_key.clone(),
+        service.tap.clone(),
+        service.auth.clone(),
+    );
     use hq_types::hq::rpc::HqRpcServer;
     let methods = rpc_impl.into_rpc();
 
+    let admin_token = service.config.rpc_admin_token.clone();
+
     tokio::spawn(async move {
+        let middleware =
+            tower::ServiceBuilder::new().layer(rpc::AuthLayer::new(admin_token.clone()));
+
         let server = jsonrpsee::server::ServerBuilder::default()
+            .set_http_middleware(middleware)
             .build("127.0.0.1:3001")
             .await
             .unwrap();

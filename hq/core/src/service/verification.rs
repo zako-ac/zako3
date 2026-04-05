@@ -46,10 +46,11 @@ impl VerificationService {
         }
 
         // Check for existing pending request
-        if let Some(_) = self
+        if self
             .verification_repo
             .find_pending_by_tap_id(tap_id)
             .await?
+            .is_some()
         {
             return Err(CoreError::InvalidInput(
                 "A verification request is already pending for this tap".to_string(),

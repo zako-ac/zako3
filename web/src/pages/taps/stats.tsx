@@ -1,10 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { Activity, Users, TrendingUp, Database, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTap, useTapStats, useTapAuditLog } from '@/features/taps'
-import { useAuthStore } from '@/features/auth'
 import { usePagination } from '@/hooks'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { TimeSeriesChart, DataPagination } from '@/components/common'
@@ -26,7 +25,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ROUTES } from '@/lib/constants'
 import { formatRelativeTime } from '@/lib/date'
 import { TapAuditLogEntry } from '@zako-ac/zako3-data'
 import { UserBadge } from '@/components/tap/user-badge'
@@ -44,7 +42,7 @@ export const TapStatsPage = () => {
             setTimeout(() => setCopied(false), 2000)
         }
     }
-    const { user } = useAuthStore()
+
     const { pagination, setPage, getPaginationInfo } = usePagination({
         initialPerPage: 10,
     })
@@ -61,9 +59,6 @@ export const TapStatsPage = () => {
 
     const auditLogs = auditLogData?.data ?? []
     const paginationInfo = getPaginationInfo(auditLogData?.meta)
-
-    // Check if the current user is the owner of the tap
-    const isOwner = user && tap && tap.ownerId === user.id
 
     if (isTapLoading || isStatsLoading) {
         return (
@@ -121,11 +116,6 @@ export const TapStatsPage = () => {
                         </Button>
                     </div>
                 </div>
-                {isOwner && (
-                    <Button asChild variant="outline">
-                        <Link to={ROUTES.TAP_SETTINGS(tapId!)}>Settings</Link>
-                    </Button>
-                )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

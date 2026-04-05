@@ -9,6 +9,8 @@ hq-types = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower-http = { workspace = true, features = ["trace", "cors"] }
+tower = { version = "0.4", features = ["full"] }
+http = "1.0"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde = { workspace = true }

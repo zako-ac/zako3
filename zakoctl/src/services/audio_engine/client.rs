@@ -61,6 +61,7 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
                 tap_name: tap,
                 audio_request_string: config.resolve_alias(&request),
                 volume,
+                discord_user_id: "".to_string(),
             });
             let response = client.play(request).await?;
             formatter::print_play(response.into_inner());
