@@ -1,5 +1,13 @@
+pub mod api_key;
+pub mod audit_log;
 pub mod tap;
+pub mod tap_metric;
 pub mod user;
 
+pub use api_key::*;
+pub use audit_log::*;
 pub use tap::*;
+pub use tap_metric::*;
 pub use user::*;
+pub mod notification;
+pub use notification::*;

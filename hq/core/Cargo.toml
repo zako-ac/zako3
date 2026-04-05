@@ -22,3 +22,6 @@ dotenvy = { workspace = true }
 anyhow = { workspace = true }
 mockall = { workspace = true }
 urlencoding = "2.1.3"
+sha2 = "0.10"
+hex = "0.4.3"
+jsonrpsee.workspace = true

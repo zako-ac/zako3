@@ -1,4 +1,6 @@
 use crate::repo::{TapRepository, UserRepository};
+use crate::service::audit_log::AuditLogService;
+use crate::service::tap_metric::TapMetricService;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapStatsDto,
@@ -11,20 +13,42 @@ use uuid::Uuid;
 pub struct TapService {
     tap_repo: Arc<dyn TapRepository>,
     user_repo: Arc<dyn UserRepository>,
+    audit_log: AuditLogService,
+    tap_metric: Arc<TapMetricService>,
 }
 
 impl TapService {
-    pub fn new(tap_repo: Arc<dyn TapRepository>, user_repo: Arc<dyn UserRepository>) -> Self {
+    pub fn new(
+        tap_repo: Arc<dyn TapRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        audit_log: AuditLogService,
+        tap_metric: Arc<TapMetricService>,
+    ) -> Self {
         Self {
             tap_repo,
             user_repo,
+            audit_log,
+            tap_metric,
         }
     }
 
     pub async fn create(&self, owner_id: Uuid, dto: CreateTapDto) -> CoreResult<Tap> {
-        let mut tap = Tap::new(Uuid::new_v4(), owner_id, dto.name);
-        tap.description = dto.description;
-        self.tap_repo.create(&tap).await
+        let mut tap = Tap::new(Uuid::new_v4(), owner_id, dto.name.clone());
+        tap.description = dto.description.clone();
+
+        let created_tap = self.tap_repo.create(&tap).await?;
+
+        let _ = self
+            .audit_log
+            .log(
+                created_tap.id.0,
+                owner_id,
+                "tap.create".to_string(),
+                Some(serde_json::json!({ "name": dto.name, "description": dto.description })),
+            )
+            .await;
+
+        Ok(created_tap)
     }
 
     pub async fn list_by_user(
@@ -134,7 +158,10 @@ impl TapService {
             ));
         }
 
-        // Return mock data for now since we don't have analytics tracking yet
+        // Fetch real data from tap_metric service
+        let total_uses = self.tap_metric.get_total_uses(tap_id).await.unwrap_or(0);
+
+        // Return mostly mock data for history since we only track basic metrics for MVP
         let now = chrono::Utc::now();
         let mut use_rate_history = Vec::new();
         let mut cache_hit_rate_history = Vec::new();
@@ -153,12 +180,134 @@ impl TapService {
 
         Ok(TapStatsDto {
             tap_id: tap.id.0.to_string(),
-            currently_active: 5,
-            total_uses: 1337,
-            cache_hits: 1100,
-            unique_users: 42,
+            currently_active: 0,
+            total_uses: total_uses as u64,
+            cache_hits: 0,
+            unique_users: 0,
             use_rate_history,
             cache_hit_rate_history,
         })
     }
+
+    pub async fn update_tap(
+        &self,
+        tap_id: Uuid,
+        user_id: Uuid,
+        dto: hq_types::hq::UpdateTapDto,
+    ) -> CoreResult<Tap> {
+        let mut tap = self
+            .tap_repo
+            .find_by_id(tap_id)
+            .await?
+            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
+
+        if tap.owner_id.0 != user_id {
+            return Err(CoreError::Forbidden(
+                "You do not have permission to update this tap".to_string(),
+            ));
+        }
+
+        let mut changes = serde_json::Map::new();
+
+        if let Some(name) = &dto.name {
+            changes.insert("name".to_string(), serde_json::Value::String(name.clone()));
+            tap.name = hq_types::hq::TapName(name.clone());
+        }
+        if let Some(description) = &dto.description {
+            changes.insert(
+                "description".to_string(),
+                serde_json::Value::String(description.clone()),
+            );
+            tap.description = Some(description.clone());
+        }
+        tap.timestamp.updated_at = chrono::Utc::now();
+
+        let updated_tap = self.tap_repo.update(&tap).await?;
+
+        let _ = self
+            .audit_log
+            .log(
+                tap_id,
+                user_id,
+                "tap.update".to_string(),
+                Some(serde_json::Value::Object(changes)),
+            )
+            .await;
+
+        Ok(updated_tap)
+    }
+
+    pub async fn verify_tap(&self, tap_id: Uuid, admin_id: Uuid, occupation: hq_types::hq::TapOccupation) -> CoreResult<Tap> {
+
+        let mut tap = self
+
+            .tap_repo
+
+            .find_by_id(tap_id)
+
+            .await?
+
+            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
+
+
+
+        tap.occupation = occupation.clone();
+
+        tap.timestamp.updated_at = chrono::Utc::now();
+
+
+
+        let updated_tap = self.tap_repo.update(&tap).await?;
+
+
+
+        let _ = self
+
+            .audit_log
+
+            .log(
+
+                tap_id,
+
+                admin_id,
+
+                "tap.verify".to_string(),
+
+                Some(serde_json::json!({ "occupation": occupation })),
+
+            )
+
+            .await;
+
+
+
+        Ok(updated_tap)
+
+    }
+
+    pub async fn delete_tap(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<()> {
+        let tap = self
+            .tap_repo
+            .find_by_id(tap_id)
+            .await?
+            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
+        if tap.owner_id.0 != user_id {
+            return Err(CoreError::Forbidden(
+                "You do not have permission to delete this tap".to_string(),
+            ));
+        }
+        self.tap_repo.delete(tap_id).await?;
+
+        let _ = self
+            .audit_log
+            .log(tap_id, user_id, "tap.delete".to_string(), None)
+            .await;
+
+        Ok(())
+    }
+
+    pub async fn get_tap_internal(&self, tap_id: Uuid) -> CoreResult<Option<Tap>> {
+        self.tap_repo.find_by_id(tap_id).await
+    }
+
 }

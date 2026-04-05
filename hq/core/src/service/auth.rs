@@ -1,7 +1,7 @@
 use crate::repo::UserRepository;
 use crate::{AppConfig, CoreError, CoreResult};
 use hq_types::hq::{AuthResponseDto, AuthUserDto, LoginResponseDto, User};
-use jsonwebtoken::{EncodingKey, Header, encode};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -133,7 +133,7 @@ impl AuthService {
             username: user.username.0.clone(),
             avatar: avatar_url,
             email: user.email.clone(),
-            is_admin: false, // For MVP
+            is_admin: user.permissions.contains(&"admin".to_string()),
         };
 
         Ok(AuthResponseDto {
@@ -186,7 +186,49 @@ impl AuthService {
             username: user.username.0.clone(),
             avatar: user.avatar_url.unwrap_or_default(),
             email: user.email.clone(),
-            is_admin: false, // For MVP
+            is_admin: user.permissions.contains(&"admin".to_string()),
+        })
+    }
+
+    pub async fn refresh_token(&self, id: &str) -> CoreResult<AuthResponseDto> {
+        let uuid = Uuid::parse_str(id)
+            .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
+
+        let user = self
+            .user_repo
+            .find_by_id(uuid)
+            .await?
+            .ok_or(CoreError::NotFound("User not found".to_string()))?;
+
+        // Generate JWT
+        let expiration = chrono::Utc::now()
+            .checked_add_signed(chrono::Duration::days(7))
+            .expect("valid timestamp")
+            .timestamp();
+
+        let claims = Claims {
+            sub: user.id.0.to_string(),
+            exp: expiration as usize,
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.config.jwt_secret.as_bytes()),
+        )?;
+
+        let auth_user = AuthUserDto {
+            id: user.id.0.to_string(),
+            discord_id: user.discord_user_id.0.clone(),
+            username: user.username.0.clone(),
+            avatar: user.avatar_url.unwrap_or_default(),
+            email: user.email.clone(),
+            is_admin: user.permissions.contains(&"admin".to_string()),
+        };
+
+        Ok(AuthResponseDto {
+            token,
+            user: auth_user,
         })
     }
 }

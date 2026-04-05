@@ -9,6 +9,12 @@ pub struct CreateTapDto {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdateTapDto {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AuthCallbackDto {
     pub code: String,
@@ -102,4 +108,54 @@ pub struct PaginationMetaDto {
 pub struct PaginatedResponseDto<T> {
     pub data: Vec<T>,
     pub meta: PaginationMetaDto,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct CreateApiKeyDto {
+    pub name: String,
+    pub scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdateApiKeyDto {
+    pub name: Option<String>,
+    pub scopes: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeyDto {
+    pub id: String,
+    pub tap_id: String,
+    pub name: String,
+    pub scopes: Vec<String>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeyResponseDto {
+    #[serde(flatten)]
+    pub api_key: ApiKeyDto,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct NotificationDto {
+    pub id: String,
+    pub user_id: String,
+    pub r#type: String,
+    pub title: String,
+    pub message: String,
+    pub read_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct CreateNotificationDto {
+    pub user_id: String,
+    pub r#type: String,
+    pub title: String,
+    pub message: String,
 }

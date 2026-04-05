@@ -1,4 +1,4 @@
-use hq_core::{AppConfig, Service, get_pool};
+use hq_core::{get_pool, AppConfig, Service};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;

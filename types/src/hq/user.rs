@@ -20,8 +20,7 @@ pub struct User {
     pub username: Username,
     pub avatar_url: Option<String>,
     pub email: Option<String>,
-    // Removed permissions for now as they are complex to map initially, or keep as Vec<String>
-    // pub permissions: Vec<Permission>,
+    pub permissions: Vec<String>,
     pub timestamp: ResourceTimestamp,
 }
 
@@ -33,6 +32,7 @@ impl User {
             username: Username(username),
             avatar_url: None,
             email: None,
+            permissions: Vec::new(),
             timestamp: ResourceTimestamp::now(),
         }
     }

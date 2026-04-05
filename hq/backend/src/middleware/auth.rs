@@ -56,3 +56,38 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
         Ok(AuthUser(user_id))
     }
 }
+
+pub struct AdminUser(pub Uuid);
+
+#[async_trait]
+impl FromRequestParts<Arc<Service>> for AdminUser {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<Service>,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_user = AuthUser::from_request_parts(parts, state).await?;
+
+        // Fetch user from DB
+        let user = state
+            .auth
+            .get_user(&auth_user.0.to_string())
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to fetch user: {}", e),
+                )
+            })?;
+
+        if user.is_admin {
+            Ok(AdminUser(auth_user.0))
+        } else {
+            Err((
+                StatusCode::FORBIDDEN,
+                "Admin permissions required".to_string(),
+            ))
+        }
+    }
+}

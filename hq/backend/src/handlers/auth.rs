@@ -1,6 +1,8 @@
+use crate::middleware::auth::AuthUser;
 use axum::{Json, extract::Query, extract::State};
 use hq_core::Service;
 use hq_types::hq::{AuthCallbackDto, AuthResponseDto, LoginResponseDto};
+use serde_json::json;
 use std::sync::Arc;
 use utoipa;
 
@@ -39,4 +41,44 @@ pub async fn callback_handler(
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/refresh",
+    responses(
+        (status = 200, description = "Refresh successful", body = AuthResponseDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn refresh_handler(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<AuthResponseDto>, (axum::http::StatusCode, String)> {
+    let response = service
+        .auth
+        .refresh_token(&user_id.to_string())
+        .await
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    responses(
+        (status = 200, description = "Logout successful")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn logout_handler(
+    AuthUser(_user_id): AuthUser,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+    // For MVP, just return 200 OK since JWTs are stateless on backend
+    Ok(Json(json!({ "success": true })))
 }

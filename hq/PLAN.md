@@ -345,3 +345,37 @@ Once this "Tap Loop" is working, expand in this order:
 3.  **Usage Tracking:** Implement the `tap_usage` table and `TapService::record_usage`.
 4.  **Permissions:** Implement `TapPermission` logic to control who can use/edit a tap.
 5.  **Frontend:** Build a simple web UI to consume the API.
+
+## 10. Frontend Integration Expansion Plan
+
+The frontend (`web/`) has been developed ahead of the backend (`hq/`) and currently relies on MSW mocks for several features. The following plan outlines the steps to build out the missing backend functionality to fully integrate with the existing frontend.
+
+### 10.1. API Key Management (API Tokens)
+- **Database:** Create an `api_keys` table (`id`, `tap_id`, `name`, `key_hash`, `scopes`, `last_used_at`, `created_at`).
+- **Core Service:** Implement `ApiKeyService` for CRUD operations and key hashing.
+- **API Routes:** Mount `GET`, `POST`, `PATCH`, `DELETE`, and `POST /regenerate` on `/api/v1/taps/:id/api-tokens`.
+
+### 10.2. Tap Management Extensions
+- **Core Service:** Implement `update` and `delete` operations in `TapService`, ensuring robust permission checks (verifying `user_id` has owner/admin rights).
+- **API Routes:** Mount `PATCH /api/v1/taps/:id` and `DELETE /api/v1/taps/:id`.
+
+### 10.3. Audit Logs
+- **Database:** Create an `audit_logs` table (`id`, `tap_id`, `actor_id`, `action_type`, `metadata`, `created_at`).
+- **Core Service:** Add an `AuditService` to write logs. Wrap state-mutating functions in `TapService` and `ApiKeyService` to automatically emit audit records.
+- **API Routes:** Add a paginated `GET /api/v1/taps/:id/audit-log` endpoint.
+
+### 10.4. Metrics & Analytics
+- **Database:** Create a `tap_metrics` (or `tap_usage`) table for recording time-series data (e.g., requests, cache hits, errors).
+- **Core Service:** Update `get_tap_stats` to query aggregated metrics instead of returning mock arrays. Implement a mechanism to ingest metrics.
+
+### 10.5. Auth Enhancements
+- **API Routes:** Implement `POST /api/v1/auth/logout` (invalidating the session/token on the server or instructing the client to clear cookies) and `GET /api/v1/auth/refresh` to rotate JWTs or session tokens.
+
+### 10.6. Admin Panel & Moderation
+- **Auth Middleware:** Create an `AdminRequired` middleware/extractor in Rust to protect these routes.
+- **Core Service:** Add admin-specific service functions (e.g., `verify_tap`, `list_all_platform_users`).
+- **API Routes:** Mount new routes under `/api/v1/admin/`.
+
+### 10.7. Notifications
+- **Database:** Create a `notifications` table (`id`, `user_id`, `type`, `title`, `message`, `read_at`, `created_at`).
+- **Core Service/API:** Implement CRUD operations and a `GET /api/v1/notifications` endpoint.

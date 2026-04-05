@@ -10,8 +10,6 @@ pub use error::*;
 pub mod session_state;
 pub use session_state::*;
 
-use crate::hq::TapId;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
 #[display("{_0}")]
 pub struct GuildId(u64);

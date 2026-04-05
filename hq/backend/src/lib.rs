@@ -12,7 +12,11 @@ use utoipa_swagger_ui::SwaggerUi;
 pub mod handlers;
 pub mod middleware;
 
+use handlers::admin;
+use handlers::api_key;
+use handlers::audit_log;
 use handlers::auth;
+use handlers::notification;
 use handlers::tap;
 use handlers::users;
 
@@ -21,16 +25,27 @@ use handlers::users;
     paths(
         handlers::auth::login_handler,
         handlers::auth::callback_handler,
+        handlers::auth::refresh_handler,
+        handlers::auth::logout_handler,
         handlers::tap::create_tap,
         handlers::tap::list_taps,
         handlers::tap::get_tap,
+        handlers::tap::update_tap,
+        handlers::tap::delete_tap,
         handlers::tap::get_tap_stats,
+        handlers::audit_log::get_tap_audit_logs,
         handlers::users::get_me,
         handlers::users::get_my_taps,
+        handlers::admin::verify_tap,
+
+        handlers::notification::list_notifications,
+
+        handlers::notification::mark_notification_read,
     ),
     components(
         schemas(
             hq_types::hq::CreateTapDto,
+            hq_types::hq::UpdateTapDto,
             hq_types::hq::AuthCallbackDto,
             hq_types::hq::AuthUserDto,
             hq_types::hq::AuthResponseDto,
@@ -43,6 +58,13 @@ use handlers::users;
             hq_types::hq::TapRole,
             hq_types::hq::UserId,
             hq_types::hq::ResourceTimestamp,
+            hq_types::hq::audit_log::AuditLogDto,
+            hq_types::hq::audit_log::PaginatedAuditLogsDto,
+            hq_types::hq::dtos::PaginationMetaDto,
+            hq_types::hq::NotificationDto,
+
+            hq_types::hq::CreateNotificationDto,
+            handlers::admin::VerifyTapDto,
         )
     ),
     tags(
@@ -55,18 +77,64 @@ use handlers::users;
 pub struct ApiDoc;
 
 pub fn app(service: Service) -> Router {
-    let state = Arc::new(service);
+    let state = Arc::new(service.clone());
+
+    let rpc_impl = rpc::HqRpcImpl::new(service.api_key.clone(), service.tap.clone());
+    use hq_types::hq::rpc::HqRpcServer;
+    let methods = rpc_impl.into_rpc();
+
+    tokio::spawn(async move {
+        let server = jsonrpsee::server::ServerBuilder::default()
+            .build("127.0.0.1:3001")
+            .await
+            .unwrap();
+        let handle = server.start(methods);
+        handle.stopped().await;
+    });
 
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/api/v1/auth/login", get(auth::login_handler))
         .route("/api/v1/auth/callback", get(auth::callback_handler))
+        .route("/api/v1/auth/refresh", get(auth::refresh_handler))
+        .route("/api/v1/auth/logout", post(auth::logout_handler))
         .route("/api/v1/users/me", get(users::get_me))
         .route("/api/v1/users/me/taps", get(users::get_my_taps))
+        .route("/api/v1/admin/taps/:id/verify", post(admin::verify_tap))
+        .route(
+            "/api/v1/notifications",
+            get(notification::list_notifications),
+        )
+        .route(
+            "/api/v1/notifications/:id/read",
+            axum::routing::patch(notification::mark_notification_read),
+        )
         .route("/api/v1/taps", post(tap::create_tap).get(tap::list_taps))
-        .route("/api/v1/taps/:id", get(tap::get_tap))
+        .route(
+            "/api/v1/taps/:id",
+            get(tap::get_tap)
+                .patch(tap::update_tap)
+                .delete(tap::delete_tap),
+        )
         .route("/api/v1/taps/:id/stats", get(tap::get_tap_stats))
+        .route(
+            "/api/v1/taps/:id/audit-log",
+            get(audit_log::get_tap_audit_logs),
+        )
+        .route(
+            "/api/v1/taps/:id/api-tokens",
+            post(api_key::create_key).get(api_key::list_keys),
+        )
+        .route(
+            "/api/v1/taps/:id/api-tokens/:key_id",
+            axum::routing::patch(api_key::update_key).delete(api_key::delete_key),
+        )
+        .route(
+            "/api/v1/taps/:id/api-tokens/:key_id/regenerate",
+            post(api_key::regenerate_key),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
+pub mod rpc;

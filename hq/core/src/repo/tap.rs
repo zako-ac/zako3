@@ -9,6 +9,8 @@ pub trait TapRepository: Send + Sync {
     async fn create(&self, tap: &Tap) -> CoreResult<Tap>;
     async fn list_by_owner(&self, owner_id: Uuid) -> CoreResult<Vec<Tap>>;
     async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<Tap>>;
+    async fn update(&self, tap: &Tap) -> CoreResult<Tap>;
+    async fn delete(&self, id: Uuid) -> CoreResult<()>;
 }
 
 pub struct PgTapRepository {
@@ -164,5 +166,47 @@ impl TapRepository for PgTapRepository {
         } else {
             Ok(None)
         }
+    }
+
+    async fn update(&self, tap: &Tap) -> CoreResult<Tap> {
+        let id = tap.id.0;
+        let name = tap.name.0.clone();
+        let description = tap.description.clone();
+        let occupation = serde_json::to_string(&tap.occupation)?
+            .trim_matches('"')
+            .to_string();
+        let permission = serde_json::to_value(&tap.permission)?;
+        let role = if let Some(r) = &tap.role {
+            Some(serde_json::to_string(r)?.trim_matches('"').to_string())
+        } else {
+            None
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE taps
+            SET name = $1, description = $2, occupation = $3, permission = $4, role = $5, updated_at = $6
+            WHERE id = $7
+            "#,
+        )
+        .bind(name)
+        .bind(description)
+        .bind(occupation)
+        .bind(permission)
+        .bind(role)
+        .bind(tap.timestamp.updated_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(tap.clone())
+    }
+
+    async fn delete(&self, id: Uuid) -> CoreResult<()> {
+        sqlx::query("DELETE FROM taps WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }

@@ -26,3 +26,4 @@ zakofish.workspace = true
 parking_lot = "0.12.5"
 uuid.workspace = true
 dashmap = "6.1.0"
+jsonrpsee.workspace = true

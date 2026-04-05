@@ -116,3 +116,59 @@ pub async fn get_tap_stats(
 
     Ok(Json(stats))
 }
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/taps/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Tap ID")
+    ),
+    request_body = hq_types::hq::UpdateTapDto,
+    responses(
+        (status = 200, description = "Tap updated", body = Tap)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn update_tap(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Path(tap_id): Path<Uuid>,
+    Json(payload): Json<hq_types::hq::UpdateTapDto>,
+) -> Result<Json<Tap>, (axum::http::StatusCode, String)> {
+    let tap = service
+        .tap
+        .update_tap(tap_id, user_id, payload)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(tap))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/taps/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Tap ID")
+    ),
+    responses(
+        (status = 200, description = "Tap deleted")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn delete_tap(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Path(tap_id): Path<Uuid>,
+) -> Result<Json<()>, (axum::http::StatusCode, String)> {
+    service
+        .tap
+        .delete_tap(tap_id, user_id)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(()))
+}
