@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum CoreError {
     #[error("Database error: {0}")]
     DbError(#[from] sqlx::Error),
+    #[error("Database error: {0}")]
+    DbMigrationError(#[from] sqlx::migrate::MigrateError),
     #[error("Configuration error: {0}")]
     ConfigError(#[from] config::ConfigError),
     #[error("Environment variable error: {0}")]

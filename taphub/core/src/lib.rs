@@ -6,4 +6,6 @@ pub mod repository;
 pub mod service;
 pub mod transport;
 
+pub mod infra;
+
 mod routing;

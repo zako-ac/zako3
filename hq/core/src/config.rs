@@ -11,6 +11,8 @@ pub struct AppConfig {
     pub discord_redirect_uri: String,
     pub discord_bot_token: String,
     pub jwt_secret: String,
+    pub backend_address: String,
+    pub rpc_address: String,
 }
 
 impl AppConfig {
@@ -24,6 +26,9 @@ impl AppConfig {
             discord_redirect_uri: env::var("DISCORD_REDIRECT_URI")?,
             discord_bot_token: env::var("DISCORD_BOT_TOKEN")?,
             jwt_secret: env::var("JWT_SECRET")?,
+            backend_address: env::var("BACKEND_ADDRESS")
+                .unwrap_or_else(|_| "127.0.0.1:8080".to_string()),
+            rpc_address: env::var("RPC_ADDRESS").unwrap_or_else(|_| "127.0.0.1:50051".to_string()),
         })
     }
 }

@@ -7,10 +7,12 @@ use uuid::Uuid;
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
+use zako3_taphub_core::infra::hq::RpcHqRepository;
 use zako3_taphub_core::repository::{CacheRepository, HqRepository};
 use zako3_taphub_transport_server::TransportServer;
 use zako3_types::hq::{ResourceTimestamp, Tap, TapOccupation, TapPermission};
 
+#[allow(dead_code)]
 struct StubHqRepository;
 
 #[async_trait]
@@ -87,12 +89,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Starting TapHub Core...");
 
     let config = AppConfig::load()?;
-    let bind_addr = config.bind_addr.parse()?;
+    let bind_addr = config.transport_bind_addr.parse()?;
 
     let (cert_chain, private_key) = load_certs(&config)?;
 
+    let hq_repository = RpcHqRepository::new(&config.hq_rpc_url)?;
+
     let app = App {
-        hq_repository: Arc::new(StubHqRepository),
+        hq_repository: Arc::new(hq_repository),
         cache_repository: Arc::new(StubCacheRepository::default()),
     };
 

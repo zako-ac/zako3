@@ -25,6 +25,9 @@ pub enum ZakoError {
 
     #[error("TapHub error: {0}")]
     TapHub(String),
+
+    #[error("RPC error: {0}")]
+    Rpc(String),
 }
 
 pub type ZakoResult<T> = Result<T, ZakoError>;

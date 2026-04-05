@@ -1,4 +1,5 @@
-use hq_core::{get_pool, AppConfig, Service};
+use hq_backend::rpc::start_rpc_server;
+use hq_core::{get_pool, run_migrations, AppConfig, Service};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -12,19 +13,32 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Arc::new(AppConfig::load()?);
     let pool = get_pool(&config.database_url).await?;
+
+    run_migrations(&pool).await?;
+
     let service = Service::new(pool, config.clone()).await?;
+
+    let backend_address = config.backend_address.clone();
+    let rpc_address = config.rpc_address.clone();
 
     let service_backend = service.clone();
     let backend_task = tokio::spawn(async move {
         let app = hq_backend::app(service_backend);
-        let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-        let addr = format!("0.0.0.0:{}", port);
-        let listener = TcpListener::bind(&addr)
+
+        let listener = TcpListener::bind(&backend_address)
             .await
             .expect("Failed to bind backend port");
-        info!("Backend listening on {}", addr);
+        info!("Backend listening on {}", backend_address);
         if let Err(e) = axum::serve(listener, app).await {
             tracing::error!("Backend error: {}", e);
+        }
+    });
+
+    let service_rpc = service.clone();
+    let rpc_task = tokio::spawn(async move {
+        let rpc = start_rpc_server(service_rpc.api_key, service_rpc.tap, &rpc_address);
+        if let Err(e) = rpc.await {
+            tracing::error!("RPC server error: {}", e);
         }
     });
 
@@ -36,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let _ = tokio::join!(backend_task, bot_task);
+    let _ = tokio::join!(backend_task, bot_task, rpc_task);
 
     Ok(())
 }
