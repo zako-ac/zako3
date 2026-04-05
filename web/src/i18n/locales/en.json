@@ -101,8 +101,6 @@
         "filterByStatus": "Filter by status",
         "noRequests": "No verification requests",
         "noRequestsDescription": "All verification requests have been reviewed",
-        "owner": "Owner",
-        "reason": "Reason",
         "reject": "Reject",
         "rejectConfirmDescription": "Please provide a reason for rejecting \"{name}\".",
         "rejectConfirmTitle": "Reject Verification",
@@ -111,7 +109,7 @@
         "rejectionReasonRequired": "Rejection reason is required",
         "rejectSuccess": "Verification rejected",
         "requestedAt": "Requested At",
-        "sidebarTitle": "",
+        "sidebarTitle": "Verification Requests",
         "status": "Status",
         "statusAll": "All",
         "statusApproved": "Approved",
@@ -119,11 +117,9 @@
         "statusRejected": "Rejected",
         "subtitle": "Review and manage tap verification requests",
         "tapName": "Tap Name",
-        "title": "Verification Requests",
-        "viewEvidence": "View Evidence"
+        "title": "Verification Requests"
       }
     },
-    "admin.users.status.banned": "",
     "auth": {
       "continueWithDiscord": "Continue with Discord",
       "loginRequired": "",
@@ -152,7 +148,6 @@
       "noTapsYet": "You haven't created any Taps yet.",
       "recentActivity": "Recent Activity",
       "recentTaps": "Recent Taps",
-      "uses": "{{count}} uses",
       "stats": {
         "acrossTaps": "Across all taps",
         "activeUsers": "Active Users",
@@ -164,6 +159,8 @@
         "uptime": "Uptime"
       },
       "subtitle": "Welcome to your dashboard.",
+      "uses_one": "",
+      "uses_other": "",
       "welcome": "Welcome, {{name}}!"
     },
     "errors": {
@@ -335,8 +332,8 @@
         "tokenLastUsed": "Last used",
         "tokenNeverExpires": "Never expires",
         "tokenNeverUsed": "Never used",
-        "tokenRegenerated": "Token regenerated successfully",
         "tokenOneTimeView": "This token will only be shown once. Please save it securely.",
+        "tokenRegenerated": "Token regenerated successfully",
         "updateSuccess": "Tap updated successfully!",
         "yourNewToken": "Your New Token"
       },
@@ -352,7 +349,6 @@
         "cacheHits": "Cache Hits",
         "currentlyActive": "",
         "noAuditLogs": "No audit logs found.",
-        "subtitle": "View statistics and activity for your tap",
         "title": "Tap Statistics",
         "totalUses": "",
         "uniqueUsers": "Unique Users",

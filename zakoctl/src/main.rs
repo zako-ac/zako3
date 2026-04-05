@@ -29,12 +29,15 @@ async fn main() -> Result<()> {
     let hq_addr = cli.hq_addr.unwrap_or_else(|| {
         active_context
             .map(|c| c.hq_addr.clone())
-            .unwrap_or_else(|| "http://127.0.0.1:3000/rpc".to_string())
+            .unwrap_or_else(|| "http://127.0.0.1:50052".to_string())
     });
 
     let hq_admin_token = cli
         .hq_admin_token
         .or_else(|| active_context.and_then(|c| c.hq_admin_token.clone()));
+
+    println!("Using AE address: {}", ae_addr);
+    println!("Using HQ address: {}", hq_addr);
 
     match cli.command {
         Commands::AudioEngine(cmd) => {

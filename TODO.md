@@ -15,9 +15,11 @@ refer hq todo
 - [x] change IDs from Uuid to String
 - [ ] check admin verification api
 - [ ] implement cache
-- [ ] Make background metrics saver
+- [x] Make background metrics saver
 - [ ] Make HQ RPC for zakoctl, and use it to make someone admin
 - [ ] merge migrations
+- [ ] /api/v1/taps/299197284933963776/report endpoint
+- [ ] verify tap in web
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 

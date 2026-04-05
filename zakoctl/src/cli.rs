@@ -30,8 +30,7 @@ pub enum Commands {
     #[command(visible_alias = "ae")]
     AudioEngine(AudioEngineCommands),
 
-    /// HQ service commands (abbr: hq)
-    #[command(visible_alias = "hq")]
+    /// HQ service commands
     Hq(crate::services::hq::cli::HqCommands),
 
     /// Configuration commands

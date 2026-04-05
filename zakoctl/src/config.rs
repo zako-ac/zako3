@@ -29,7 +29,7 @@ pub struct Context {
 }
 
 fn default_hq_addr() -> String {
-    "http://127.0.0.1:3000/rpc".to_string()
+    "http://127.0.0.1:50052".to_string()
 }
 
 fn default_current_context() -> String {

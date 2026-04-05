@@ -101,8 +101,6 @@
         "filterByStatus": "상태별로 필터링",
         "noRequests": "보류 중인 요청 없음",
         "noRequestsDescription": "현재 검토할 인증 요청이 없습니다.",
-        "owner": "소유자",
-        "reason": "사유",
         "reject": "거부",
         "rejectConfirmDescription": "이 인증 요청을 거부하시겠습니까?",
         "rejectConfirmTitle": "거부 확인",
@@ -111,7 +109,7 @@
         "rejectionReasonRequired": "거부 사유는 필수입니다.",
         "rejectSuccess": "인증이 성공적으로 거부되었습니다.",
         "requestedAt": "요청일",
-        "sidebarTitle": "인증",
+        "sidebarTitle": "인증 요청",
         "status": "상태",
         "statusAll": "모두",
         "statusApproved": "승인됨",
@@ -119,11 +117,9 @@
         "statusRejected": "거부됨",
         "subtitle": "사용자 제출 인증 요청을 관리합니다.",
         "tapName": "탭 이름",
-        "title": "인증",
-        "viewEvidence": "증거 보기"
+        "title": "인증"
       }
     },
-    "admin.users.status.banned": "",
     "auth": {
       "continueWithDiscord": "Discord로 계속하기",
       "loginRequired": "로그인 필요",
@@ -152,7 +148,6 @@
       "noTapsYet": "아직 탭을 만들지 않았습니다.",
       "recentActivity": "최근 활동",
       "recentTaps": "최근 탭",
-      "uses": "{{count}} 번 사용",
       "stats": {
         "acrossTaps": "모든 탭에서",
         "activeUsers": "활성 사용자",
@@ -164,6 +159,7 @@
         "uptime": "가동 시간"
       },
       "subtitle": "대시보드에 오신 것을 환영합니다.",
+      "uses_other": "",
       "welcome": "{{name}}님, 환영합니다!"
     },
     "errors": {
@@ -335,6 +331,7 @@
         "tokenLastUsed": "마지막 사용",
         "tokenNeverExpires": "만료되지 않음",
         "tokenNeverUsed": "사용되지 않음",
+        "tokenOneTimeView": "",
         "tokenRegenerated": "토큰이 성공적으로 재생성되었습니다.",
         "updateSuccess": "탭이 성공적으로 업데이트되었습니다!",
         "yourNewToken": "새 API 토큰"
@@ -351,7 +348,6 @@
         "cacheHits": "캐시 적중",
         "currentlyActive": "현재 활성",
         "noAuditLogs": "감사 로그를 찾을 수 없습니다.",
-        "subtitle": "탭의 통계 및 활동 보기",
         "title": "탭 통계",
         "totalUses": "총 사용량",
         "uniqueUsers": "고유 사용자",
