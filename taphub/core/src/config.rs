@@ -8,6 +8,7 @@ pub struct AppConfig {
     pub hq_rpc_admin_token: String,
     pub cert_file: String,
     pub key_file: String,
+    pub redis_url: String,
 }
 
 impl AppConfig {
@@ -24,6 +25,8 @@ impl AppConfig {
             hq_rpc_admin_token: env::var("ZK_TH_HQ_RPC_ADMIN_TOKEN")?,
             cert_file: env::var("ZK_TH_CERT_FILE").unwrap_or_else(|_| "cert.pem".to_string()),
             key_file: env::var("ZK_TH_KEY_FILE").unwrap_or_else(|_| "key.pem".to_string()),
+            redis_url: env::var("ZK_TH_REDIS_URL")
+                .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         })
     }
 }

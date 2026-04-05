@@ -3,7 +3,9 @@ use dashmap::DashMap;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
 use tracing::Level;
-use zako3_states::{CacheRepository, TapHubStateService, TapMetricsStateService};
+use zako3_states::{
+    CacheRepository, RedisCacheRepository, TapHubStateService, TapMetricsStateService,
+};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
@@ -161,7 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let hq_repository = RpcHqRepository::new(&config.hq_rpc_url, &config.hq_rpc_admin_token)?;
 
-    let cache_repo = Arc::new(StubCacheRepository::default());
+    let cache_repo = Arc::new(RedisCacheRepository::new(&config.redis_url).await?);
     let app = App {
         hq_repository: Arc::new(hq_repository),
         cache_repository: cache_repo.clone(),
