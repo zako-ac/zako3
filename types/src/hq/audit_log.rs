@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 pub type AuditLogId = Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+
 #[serde(rename_all = "camelCase")]
 pub struct AuditLog {
     pub id: AuditLogId,
@@ -17,7 +18,8 @@ pub struct AuditLog {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+
 #[serde(rename_all = "camelCase")]
 pub struct AuditLogDto {
     pub id: String,
@@ -28,7 +30,8 @@ pub struct AuditLogDto {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+
 #[serde(rename_all = "camelCase")]
 pub struct CreateAuditLogDto {
     pub tap_id: Uuid,
@@ -37,7 +40,8 @@ pub struct CreateAuditLogDto {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+
 #[serde(rename_all = "camelCase")]
 pub struct PaginatedAuditLogsDto {
     pub data: Vec<AuditLogDto>,

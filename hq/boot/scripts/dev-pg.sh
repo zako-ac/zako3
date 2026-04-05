@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+podman rm -f zako3-postgres 2>/dev/null || true
 podman run -d \
   --name zako3-postgres \
   -e POSTGRES_USER=user \

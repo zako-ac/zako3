@@ -1,10 +1,10 @@
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    http::{StatusCode, request::Parts},
+    http::{request::Parts, StatusCode},
 };
 use hq_core::{Claims, Service};
-use jsonwebtoken::{DecodingKey, Validation, decode};
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -52,6 +52,12 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
                 "Invalid user ID in token".to_string(),
             )
         })?;
+
+        state
+            .auth
+            .get_user(&user_id.to_string())
+            .await
+            .map_err(|_| (StatusCode::UNAUTHORIZED, "Unknown user".to_string()))?;
 
         Ok(AuthUser(user_id))
     }

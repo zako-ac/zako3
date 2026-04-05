@@ -3,24 +3,27 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateTapDto {
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateTapDto {
     pub name: Option<String>,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthCallbackDto {
     pub code: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthUserDto {
     pub id: String,
@@ -31,19 +34,20 @@ pub struct AuthUserDto {
     pub is_admin: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthResponseDto {
     pub token: String,
     pub user: AuthUserDto,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponseDto {
     pub redirect_url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSummaryDto {
     pub id: String,
@@ -51,7 +55,7 @@ pub struct UserSummaryDto {
     pub avatar: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TapDto {
     pub id: String,
@@ -66,7 +70,7 @@ pub struct TapDto {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TapWithAccessDto {
     #[serde(flatten)]
@@ -75,14 +79,14 @@ pub struct TapWithAccessDto {
     pub owner: UserSummaryDto,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeSeriesPointDto {
     pub timestamp: String,
     pub value: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TapStatsDto {
     pub tap_id: String,
@@ -94,7 +98,7 @@ pub struct TapStatsDto {
     pub cache_hit_rate_history: Vec<TimeSeriesPointDto>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationMetaDto {
     pub total: u64,
@@ -110,38 +114,52 @@ pub struct PaginatedResponseDto<T> {
     pub meta: PaginationMetaDto,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+impl<T: zod_gen::ZodSchema> zod_gen::ZodSchema for PaginatedResponseDto<T> {
+    fn zod_schema() -> String {
+        zod_gen::zod_object(&[
+            ("data", &zod_gen::zod_array(&T::zod_schema())),
+            ("meta", &PaginationMetaDto::zod_schema()),
+        ])
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateApiKeyDto {
-    pub name: String,
-    pub scopes: Vec<String>,
+    pub label: String,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateApiKeyDto {
-    pub name: Option<String>,
-    pub scopes: Option<Vec<String>>,
+    pub label: Option<String>,
+    pub expires_at: Option<Option<DateTime<Utc>>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeyDto {
     pub id: String,
     pub tap_id: String,
-    pub name: String,
-    pub scopes: Vec<String>,
+    pub label: String,
+    pub expires_at: Option<DateTime<Utc>>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeyResponseDto {
     #[serde(flatten)]
     pub api_key: ApiKeyDto,
-    pub key: String,
+    pub token: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema, zod_gen_derive::ZodSchema,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct NotificationDto {
     pub id: String,
     pub user_id: String,
@@ -152,7 +170,10 @@ pub struct NotificationDto {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema, zod_gen_derive::ZodSchema,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateNotificationDto {
     pub user_id: String,
     pub r#type: String,

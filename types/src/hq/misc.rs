@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, ToSchema, zod_gen_derive::ZodSchema)]
 pub struct ResourceTimestamp {
     #[serde(with = "chrono::serde::ts_milliseconds")]
     pub created_at: DateTime<Utc>,

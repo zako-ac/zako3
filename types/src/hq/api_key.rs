@@ -14,9 +14,9 @@ pub struct ApiKeyId(pub Uuid);
 pub struct ApiKey {
     pub id: ApiKeyId,
     pub tap_id: TapId,
-    pub name: String,
+    pub label: String,
     pub key_hash: String,
-    pub scopes: Vec<String>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }

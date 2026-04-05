@@ -124,7 +124,7 @@ export const TapCard = ({
                 </CardHeader>
 
                 <CardContent className="pb-2">
-                    <p className="text-muted-foreground line-clamp-2 min-h-[2.5rem] text-sm">
+                    <p className="text-muted-foreground line-clamp-2 min-h-10 text-sm">
                         {tap.description || 'No description'}
                     </p>
 
@@ -157,7 +157,7 @@ export const TapCard = ({
                                             {tap.owner.username.slice(0, 2).toUpperCase()}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <span className="max-w-[100px] truncate">
+                                    <span className="max-w-25 truncate">
                                         {tap.owner.username}
                                     </span>
                                     {copied ? (

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "zakoctl", "zakofish"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "cache", "emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish"]
 
 [workspace.dependencies]
 zako3-audio-engine-core = { path = "audio-engine/core" }
@@ -63,3 +63,5 @@ debug = true
 opt-level = 0
 
 
+[patch.crates-io.zod_gen]
+path = "vendor/zod_gen"

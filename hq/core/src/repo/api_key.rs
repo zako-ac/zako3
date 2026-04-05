@@ -29,23 +29,23 @@ impl ApiKeyRepository for PgApiKeyRepository {
     async fn create(&self, key: &ApiKey) -> CoreResult<ApiKey> {
         let id = key.id.0;
         let tap_id = key.tap_id.0;
-        let name = key.name.clone();
+        let label = key.label.clone();
         let key_hash = key.key_hash.clone();
-        let scopes = serde_json::to_value(&key.scopes)?;
+        let expires_at = key.expires_at;
         let created_at = key.created_at;
 
         let row = sqlx::query(
             r#"
-            INSERT INTO api_keys (id, tap_id, name, key_hash, scopes, created_at)
+            INSERT INTO api_keys (id, tap_id, label, key_hash, expires_at, created_at)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, tap_id, name, key_hash, scopes, last_used_at, created_at
+            RETURNING id, tap_id, label, key_hash, expires_at, last_used_at, created_at
             "#,
         )
         .bind(id)
         .bind(tap_id)
-        .bind(name)
+        .bind(label)
         .bind(key_hash)
-        .bind(scopes)
+        .bind(expires_at)
         .bind(created_at)
         .fetch_one(&self.pool)
         .await?;
@@ -53,9 +53,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
         Ok(ApiKey {
             id: ApiKeyId(row.try_get("id")?),
             tap_id: TapId(row.try_get("tap_id")?),
-            name: row.try_get("name")?,
+            label: row.try_get("label")?,
             key_hash: row.try_get("key_hash")?,
-            scopes: serde_json::from_value(row.try_get("scopes")?)?,
+            expires_at: row.try_get("expires_at")?,
             last_used_at: row.try_get("last_used_at")?,
             created_at: row.try_get("created_at")?,
         })
@@ -64,7 +64,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
     async fn list_by_tap(&self, tap_id: Uuid) -> CoreResult<Vec<ApiKey>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, tap_id, name, key_hash, scopes, last_used_at, created_at
+            SELECT id, tap_id, label, key_hash, expires_at, last_used_at, created_at
             FROM api_keys
             WHERE tap_id = $1
             ORDER BY created_at DESC
@@ -79,9 +79,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
             keys.push(ApiKey {
                 id: ApiKeyId(row.try_get("id")?),
                 tap_id: TapId(row.try_get("tap_id")?),
-                name: row.try_get("name")?,
+                label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
-                scopes: serde_json::from_value(row.try_get("scopes")?)?,
+                expires_at: row.try_get("expires_at")?,
                 last_used_at: row.try_get("last_used_at")?,
                 created_at: row.try_get("created_at")?,
             });
@@ -92,7 +92,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
     async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<ApiKey>> {
         let row_opt = sqlx::query(
             r#"
-            SELECT id, tap_id, name, key_hash, scopes, last_used_at, created_at
+            SELECT id, tap_id, label, key_hash, expires_at, last_used_at, created_at
             FROM api_keys
             WHERE id = $1
             "#,
@@ -105,9 +105,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
             Ok(Some(ApiKey {
                 id: ApiKeyId(row.try_get("id")?),
                 tap_id: TapId(row.try_get("tap_id")?),
-                name: row.try_get("name")?,
+                label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
-                scopes: serde_json::from_value(row.try_get("scopes")?)?,
+                expires_at: row.try_get("expires_at")?,
                 last_used_at: row.try_get("last_used_at")?,
                 created_at: row.try_get("created_at")?,
             }))
@@ -119,7 +119,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
     async fn find_by_key_hash(&self, hash: &str) -> CoreResult<Option<ApiKey>> {
         let row_opt = sqlx::query(
             r#"
-            SELECT id, tap_id, name, key_hash, scopes, last_used_at, created_at
+            SELECT id, tap_id, label, key_hash, expires_at, last_used_at, created_at
             FROM api_keys
             WHERE key_hash = $1
             "#,
@@ -132,9 +132,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
             Ok(Some(ApiKey {
                 id: ApiKeyId(row.try_get("id")?),
                 tap_id: TapId(row.try_get("tap_id")?),
-                name: row.try_get("name")?,
+                label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
-                scopes: serde_json::from_value(row.try_get("scopes")?)?,
+                expires_at: row.try_get("expires_at")?,
                 last_used_at: row.try_get("last_used_at")?,
                 created_at: row.try_get("created_at")?,
             }))
@@ -145,22 +145,22 @@ impl ApiKeyRepository for PgApiKeyRepository {
 
     async fn update(&self, key: &ApiKey) -> CoreResult<ApiKey> {
         let id = key.id.0;
-        let name = key.name.clone();
+        let label = key.label.clone();
         let key_hash = key.key_hash.clone();
-        let scopes = serde_json::to_value(&key.scopes)?;
+        let expires_at = key.expires_at;
         let last_used_at = key.last_used_at;
 
         let row = sqlx::query(
             r#"
             UPDATE api_keys
-            SET name = $1, key_hash = $2, scopes = $3, last_used_at = $4
+            SET label = $1, key_hash = $2, expires_at = $3, last_used_at = $4
             WHERE id = $5
-            RETURNING id, tap_id, name, key_hash, scopes, last_used_at, created_at
+            RETURNING id, tap_id, label, key_hash, expires_at, last_used_at, created_at
             "#,
         )
-        .bind(name)
+        .bind(label)
         .bind(key_hash)
-        .bind(scopes)
+        .bind(expires_at)
         .bind(last_used_at)
         .bind(id)
         .fetch_one(&self.pool)
@@ -169,9 +169,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
         Ok(ApiKey {
             id: ApiKeyId(row.try_get("id")?),
             tap_id: TapId(row.try_get("tap_id")?),
-            name: row.try_get("name")?,
+            label: row.try_get("label")?,
             key_hash: row.try_get("key_hash")?,
-            scopes: serde_json::from_value(row.try_get("scopes")?)?,
+            expires_at: row.try_get("expires_at")?,
             last_used_at: row.try_get("last_used_at")?,
             created_at: row.try_get("created_at")?,
         })

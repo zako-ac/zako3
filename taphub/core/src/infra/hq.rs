@@ -28,7 +28,7 @@ impl HqRepository for RpcHqRepository {
             .authenticate_tap(token.to_string())
             .await
             .inspect_err(|err| {
-                tracing::warn!("Failed to authenticate tap with token {}: {}", token, err);
+                tracing::warn!("Failed to authenticate tap: {}", err);
             })
             .ok()?
     }
@@ -43,4 +43,3 @@ impl HqRepository for RpcHqRepository {
             .ok()?
     }
 }
-

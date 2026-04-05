@@ -4,25 +4,32 @@ import { useTranslation } from 'react-i18next'
 import type { TapOccupation } from '@zako-ac/zako3-data'
 
 interface OccupationBadgeProps {
-  occupation: TapOccupation
+    occupation: TapOccupation
 }
 
+
 export const OccupationBadge = ({ occupation }: OccupationBadgeProps) => {
-  const { t } = useTranslation()
+    const { t } = useTranslation()
 
-  if (occupation === 'base') return null
+    if (occupation === 'base') return null
 
-  return (
-    <Badge
-      variant={occupation === 'official' ? 'default' : 'secondary'}
-      className="gap-1"
-    >
-      {occupation === 'official' ? (
-        <Crown className="h-3 w-3" />
-      ) : (
-        <CheckCircle className="h-3 w-3" />
-      )}
-      {t(`taps.occupations.${occupation}`)}
-    </Badge>
-  )
+    const occupationTranslation = {
+        official: t("taps.occupations.official"),
+        verified: t("taps.occupations.verified"),
+        base: t("taps.occupations.base"),
+    }[occupation]
+
+    return (
+        <Badge
+            variant={occupation === 'official' ? 'default' : 'secondary'}
+            className="gap-1"
+        >
+            {occupation === 'official' ? (
+                <Crown className="h-3 w-3" />
+            ) : (
+                <CheckCircle className="h-3 w-3" />
+            )}
+            {occupationTranslation}
+        </Badge>
+    )
 }

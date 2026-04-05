@@ -14,3 +14,4 @@ refer hq todo
 - [ ] When browsing my tap, make API key create in sidebar
 - [ ] Make *Create Tap* button in top bar
 - [ ] In audit log, event is not displayed and user is displayed as ID
+- [ ] Increase border contrast

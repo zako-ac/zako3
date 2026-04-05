@@ -12,25 +12,25 @@ pub struct TapId(pub Uuid);
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]
 pub struct TapName(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum TapOccupation {
     Official,
     Verified,
     Base,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case", tag = "type", content = "user_ids")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase", tag = "type", content = "userIds")]
 pub enum TapPermission {
+    #[serde(rename = "owner_only")]
     OwnerOnly,
+    #[serde(rename = "public")]
     Public,
-    // Whitelist(Vec<DiscordUserId>), // Temporarily commented out
-    // Blacklist(Vec<DiscordUserId>),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum TapRole {
     Music,
     TTS,

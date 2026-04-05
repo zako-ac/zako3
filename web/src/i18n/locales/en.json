@@ -27,55 +27,46 @@
         "totalUsers": "Total Users"
       },
       "taps": {
-        "occupations": {
-            "verified": "Verified",
-            "official": "Official",
-            "base": "Base"
-        },
-        "permissions": {
-            "public": "Public",
-            "blacklisted": "Blacklisted Users",
-            "whitelisted": "Whitelisted Users",
-            "owner_only": "Owner Only"
-        },
         "actions": {
-          "delete": ""
+          "delete": "Delete"
         },
         "deleteConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to delete the tap \"{name}\"? This action cannot be undone.",
+          "title": "Delete Tap"
         },
-        "deleteSuccess": "",
-        "information": "",
-        "manageTap": "",
-        "owner": "",
+        "deleteSuccess": "Tap deleted successfully.",
+        "information": "Information",
+        "manageTap": "Manage Tap",
+        "owner": "Owner",
         "subtitle": "Manage all taps in the system",
         "tapDetails": "Tap Details",
         "title": "Taps"
       },
       "users": {
         "actions": {
-          "ban": "",
-          "makeAdmin": "",
-          "removeAdmin": "",
-          "unban": ""
+          "ban": "Ban",
+          "makeAdmin": "Make Admin",
+          "removeAdmin": "Remove Admin",
+          "unban": "Unban"
         },
         "ban": "Ban",
         "banConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to ban user \"{username}\"? They will not be able to log in.",
+          "title": "Confirm Ban"
         },
-        "banConfirmDescription": "Are you sure you want to ban this user? They will not be able to log in.",
-        "banConfirmTitle": "Confirm Ban",
+        "unbanConfirm": {
+          "description": "Are you sure you want to unban user \"{username}\"? They will be able to log in again.",
+          "title": "Confirm Unban"
+        },
         "banSuccess": "User has been banned.",
-        "createdAt": "",
+        "createdAt": "Created At",
         "email": "Email",
         "grantedAdminRole": "Granted admin role.",
         "lastActive": "Last Active",
         "makeAdmin": "Make Admin",
         "makeAdminConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to grant admin role to user \"{username}\"? They will have full access to the admin panel.",
+          "title": "Confirm Make Admin"
         },
         "manageUser": "",
         "noTaps": "",
@@ -84,29 +75,23 @@
         "profile": "",
         "removeAdmin": "Remove Admin",
         "removeAdminConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to remove admin role from user \"{username}\"? They will lose access to the admin panel.",
+          "title": "Confirm Remove Admin"
         },
         "removedAdminRole": "Removed admin role.",
         "role": "Role",
         "roles": {
-          "admin": ""
+          "admin": "Admin"
         },
         "searchPlaceholder": "Search users...",
         "status": "Status",
         "subtitle": "Manage all users in the system.",
         "title": "Users",
         "unban": "Unban",
-        "unbanConfirm": {
-          "description": "",
-          "title": ""
-        },
-        "unbanConfirmDescription": "Are you sure you want to unban this user?",
-        "unbanConfirmTitle": "Confirm Unban",
         "unbanSuccess": "User has been unbanned.",
         "user": "User",
-        "userDetails": "",
-        "userId": ""
+        "userDetails": "User Details",
+        "userId": "User ID"
       },
       "verifications": {
         "approve": "Approve",
@@ -267,7 +252,6 @@
         "id": "Tap ID",
         "idHelp": "Lowercase letters, numbers, underscores, and periods only",
         "idPlaceholder": "my_awesome_tap",
-        "idWarning": "Changing the ID will change the tap's URL. Use with caution.",
         "name": "Name",
         "namePlaceholder": "My Awesome Tap",
         "permission": "Permission",
@@ -280,7 +264,18 @@
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
+      "occupations": {
+        "base": "",
+        "official": "",
+        "verified": ""
+      },
       "permission": "",
+      "permissions": {
+        "blacklisted": "",
+        "owner_only": "",
+        "public": "",
+        "whitelisted": ""
+      },
       "report": {
         "description": "Why are you reporting this Tap?",
         "reason": "Reason",
@@ -293,7 +288,7 @@
         "tts": "Text-to-Speech"
       },
       "roles": {
-        "label": ""
+        "label": "Roles"
       },
       "settings": {
         "apiAccess": "API Access",
@@ -358,9 +353,9 @@
         "uniqueUsers": "Unique Users",
         "useRate": "Use Rate"
       },
-      "tapId": "",
-      "totalUses": "",
-      "updatedAt": ""
+      "tapId": "Tap ID",
+      "totalUses": "Total Uses",
+      "updatedAt": "Updated At"
     }
   }
 }

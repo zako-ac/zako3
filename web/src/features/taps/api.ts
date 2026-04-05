@@ -8,11 +8,9 @@ import type {
   TapFilters,
   TapSort,
   TapStats,
-  TapAuditLogEntry,
   TapApiToken,
   TapApiTokenCreated,
-} from '@zako-ac/zako3-data'
-import type {
+  TapAuditLogEntry as TapAuditLog,
   CreateTapInput,
   UpdateTapInput,
   ReportTapInput,
@@ -68,13 +66,13 @@ export const tapsApi = {
   getTapAuditLog: async (
     tapId: string,
     params: Partial<PaginationParams> = {}
-  ): Promise<PaginatedResponse<TapAuditLogEntry>> => {
+  ): Promise<PaginatedResponse<TapAuditLog>> => {
     const query = buildQueryString({
       page: params.page,
       perPage: params.perPage,
     })
     return apiCall(
-      apiClient.get<PaginatedResponse<TapAuditLogEntry>>(
+      apiClient.get<PaginatedResponse<TapAuditLog>>(
         `/taps/${tapId}/audit-log${query}`
       )
     )

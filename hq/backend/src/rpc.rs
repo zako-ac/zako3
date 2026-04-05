@@ -50,9 +50,7 @@ pub async fn start_rpc_server(
     tap_service: TapService,
     address: &str,
 ) -> ZakoResult<()> {
-    let server = jsonrpsee::server::Server::builder()
-        .build("127.0.0.1:9944")
-        .await?;
+    let server = jsonrpsee::server::Server::builder().build(address).await?;
 
     let handle = server.start(HqRpcImpl::new(api_key_service, tap_service).into_rpc());
     tracing::info!("RPC server listening on {}", address);

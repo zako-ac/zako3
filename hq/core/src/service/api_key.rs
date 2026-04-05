@@ -69,9 +69,9 @@ impl ApiKeyService {
         let key = ApiKey {
             id: ApiKeyId(Uuid::new_v4()),
             tap_id: TapId(tap_id),
-            name: dto.name.clone(),
+            label: dto.label.clone(),
             key_hash,
-            scopes: dto.scopes.clone(),
+            expires_at: dto.expires_at,
             last_used_at: None,
             created_at: Utc::now(),
         };
@@ -82,19 +82,19 @@ impl ApiKeyService {
             tap_id,
             user_id,
             "api_key.create".to_string(),
-            Some(serde_json::json!({ "key_id": created.id.0.to_string(), "name": created.name, "scopes": created.scopes }))
+            Some(serde_json::json!({ "key_id": created.id.0.to_string(), "label": created.label, "expires_at": created.expires_at }))
         ).await;
 
         Ok(ApiKeyResponseDto {
             api_key: ApiKeyDto {
                 id: created.id.0.to_string(),
                 tap_id: created.tap_id.0.to_string(),
-                name: created.name,
-                scopes: created.scopes,
+                label: created.label,
+                expires_at: created.expires_at,
                 last_used_at: created.last_used_at,
                 created_at: created.created_at,
             },
-            key: secret,
+            token: secret,
         })
     }
 
@@ -107,8 +107,8 @@ impl ApiKeyService {
             .map(|k| ApiKeyDto {
                 id: k.id.0.to_string(),
                 tap_id: k.tap_id.0.to_string(),
-                name: k.name,
-                scopes: k.scopes,
+                label: k.label,
+                expires_at: k.expires_at,
                 last_used_at: k.last_used_at,
                 created_at: k.created_at,
             })
@@ -140,15 +140,19 @@ impl ApiKeyService {
             serde_json::Value::String(key_id.to_string()),
         );
 
-        if let Some(name) = dto.name {
-            changes.insert("name".to_string(), serde_json::Value::String(name.clone()));
-            key.name = name;
+        if let Some(label) = dto.label {
+            changes.insert(
+                "label".to_string(),
+                serde_json::Value::String(label.clone()),
+            );
+            key.label = label;
         }
 
-        if let Some(scopes) = dto.scopes {
-            let scopes_val = serde_json::to_value(&scopes).unwrap_or(serde_json::Value::Null);
-            changes.insert("scopes".to_string(), scopes_val);
-            key.scopes = scopes;
+        if let Some(expires_at) = dto.expires_at {
+            let expires_at_val =
+                serde_json::to_value(expires_at).unwrap_or(serde_json::Value::Null);
+            changes.insert("expires_at".to_string(), expires_at_val);
+            key.expires_at = expires_at;
         }
 
         let updated = self.repo.update(&key).await?;
@@ -166,8 +170,8 @@ impl ApiKeyService {
         Ok(ApiKeyDto {
             id: updated.id.0.to_string(),
             tap_id: updated.tap_id.0.to_string(),
-            name: updated.name,
-            scopes: updated.scopes,
+            label: updated.label,
+            expires_at: updated.expires_at,
             last_used_at: updated.last_used_at,
             created_at: updated.created_at,
         })
@@ -194,7 +198,7 @@ impl ApiKeyService {
                 tap_id,
                 user_id,
                 "api_key.delete".to_string(),
-                Some(serde_json::json!({ "key_id": key_id.to_string(), "name": key.name })),
+                Some(serde_json::json!({ "key_id": key_id.to_string(), "label": key.label })),
             )
             .await;
 
@@ -238,23 +242,28 @@ impl ApiKeyService {
             api_key: ApiKeyDto {
                 id: updated.id.0.to_string(),
                 tap_id: updated.tap_id.0.to_string(),
-                name: updated.name,
-                scopes: updated.scopes,
+                label: updated.label,
+                expires_at: updated.expires_at,
                 last_used_at: updated.last_used_at,
                 created_at: updated.created_at,
             },
-            key: secret,
+            token: secret,
         })
     }
 
     pub async fn authenticate_tap(&self, token: &str) -> CoreResult<Option<hq_types::hq::Tap>> {
         let hash = hash_api_key(token);
         if let Some(mut key) = self.repo.find_by_key_hash(&hash).await? {
+            if let Some(expires_at) = key.expires_at {
+                if expires_at < Utc::now() {
+                    return Err(CoreError::Unauthorized("API Key has expired".to_string()));
+                }
+            }
+
             key.last_used_at = Some(Utc::now());
             let _ = self.repo.update(&key).await;
             return self.tap_repo.find_by_id(key.tap_id.0).await;
         }
         Ok(None)
     }
-
 }
