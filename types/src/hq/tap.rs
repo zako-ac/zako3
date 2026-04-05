@@ -21,18 +21,29 @@ pub enum TapOccupation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
-#[serde(rename_all = "camelCase", tag = "type", content = "userIds")]
+#[serde(tag = "type")]
 pub enum TapPermission {
     #[serde(rename = "owner_only")]
     OwnerOnly,
     #[serde(rename = "public")]
     Public,
+    #[serde(rename = "whitelisted")]
+    Whitelisted {
+        #[serde(rename = "userIds")]
+        user_ids: Vec<String>,
+    },
+    #[serde(rename = "blacklisted")]
+    Blacklisted {
+        #[serde(rename = "userIds")]
+        user_ids: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum TapRole {
+    #[serde(rename = "music")]
     Music,
+    #[serde(rename = "tts")]
     TTS,
 }
 
@@ -44,7 +55,7 @@ pub struct Tap {
     pub owner_id: UserId,
     pub occupation: TapOccupation,
     pub permission: TapPermission,
-    pub role: Option<TapRole>,
+    pub roles: Vec<TapRole>,
 
     pub timestamp: ResourceTimestamp,
 }
@@ -58,7 +69,7 @@ impl Tap {
             owner_id: UserId(owner_id),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
-            role: None,
+            roles: vec![],
             timestamp: ResourceTimestamp::now(),
         }
     }

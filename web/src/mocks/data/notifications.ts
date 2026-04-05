@@ -111,7 +111,7 @@ export const createTapAuditLogEntry = (
     id: faker.string.uuid(),
     tapId,
     actorId: faker.string.uuid(),
-    action: faker.helpers.arrayElement([
+    actionType: faker.helpers.arrayElement([
         'tap.created',
         'tap.updated',
         'tap.settings.changed',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
@@ -75,22 +75,17 @@ export const CreateApiTokenDialog = ({
     }
   }
 
-  const handleClose = () => {
-    onOpenChange(false)
-    // Reset form and token after dialog closes
-    setTimeout(() => {
-      form.reset()
-      setNewToken(null)
-    }, 300)
+  const handleOpenChange = (newOpen: boolean) => {
+    onOpenChange(newOpen)
+    if (!newOpen) {
+      setTimeout(() => {
+        form.reset()
+        setNewToken(null)
+      }, 300)
+    }
   }
 
-  // Reset when dialog closes
-  useEffect(() => {
-    if (!open) {
-      form.reset()
-      setNewToken(null)
-    }
-  }, [open, form])
+  const handleClose = () => handleOpenChange(false)
 
   const expiryOptions = [
     { value: '1_month', label: t('taps.settings.expiry.1_month') },
@@ -101,7 +96,7 @@ export const CreateApiTokenDialog = ({
   ]
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{t('taps.settings.createToken')}</DialogTitle>

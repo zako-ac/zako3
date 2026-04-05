@@ -58,7 +58,7 @@ pub async fn verify_tap(
         owner_id: tap.owner_id.0.to_string(),
         occupation: tap.occupation.clone(),
         permission: tap.permission.clone(),
-        roles: tap.role.clone().into_iter().collect(),
+        roles: tap.roles.clone(),
         total_uses: 0,
         created_at: tap.timestamp.created_at,
         updated_at: tap.timestamp.updated_at,

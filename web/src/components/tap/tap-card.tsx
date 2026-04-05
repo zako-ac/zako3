@@ -1,17 +1,18 @@
 import { useTranslation } from 'react-i18next'
 import {
     Flag,
-    Check,
     Music,
     MessageSquare,
-    Copy,
     Settings,
+    Copy,
+    Check,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
     Tooltip,
     TooltipContent,
@@ -19,10 +20,10 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { formatRelativeTime } from '@/lib/date'
-import { useClipboard } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { TapWithAccess, TapOccupation, TapRole } from '@zako-ac/zako3-data'
 import { PermissionBadge } from './permission-badge'
+import { UserBadge } from './user-badge'
 
 const occupationVariants: Record<
     TapOccupation,
@@ -58,13 +59,15 @@ export const TapCard = ({
     onSettingsClick,
 }: TapCardProps) => {
     const { t, i18n } = useTranslation()
-    const { copied, copy } = useClipboard()
-
+    const [copied, setCopied] = useState(false)
     const occupation = occupationVariants[tap.occupation]
 
-    const handleCopyUserId = (e: React.MouseEvent) => {
+    const handleCopyId = (e: React.MouseEvent) => {
         e.stopPropagation()
-        copy(tap.owner.id)
+        navigator.clipboard.writeText(tap.id)
+        setCopied(true)
+        toast.success(t('common.copied'))
+        setTimeout(() => setCopied(false), 2000)
     }
 
     const handleReport = (e: React.MouseEvent) => {
@@ -85,7 +88,7 @@ export const TapCard = ({
         >
             <Card
                 className={cn(
-                    'group hover:border-primary/50 hover:shadow-primary/10 cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg',
+                    'group hover:border-primary/50 hover:shadow-primary/10 cursor-pointer transition-all hover:shadow-lg',
                     onClick && 'cursor-pointer'
                 )}
                 onClick={() => onClick?.(tap.id)}
@@ -99,9 +102,23 @@ export const TapCard = ({
                                     {t(`taps.occupations.${tap.occupation}`)}
                                 </Badge>
                             </div>
-                            <p className="text-muted-foreground mt-0.5 font-mono text-xs">
-                                {tap.id}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                                <p className="text-muted-foreground mt-0.5 font-mono text-xs">
+                                    {tap.id}
+                                </p>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 shrink-0 hover:bg-transparent"
+                                    onClick={handleCopyId}
+                                >
+                                    {copied ? (
+                                        <Check className="text-success h-3 w-3" />
+                                    ) : (
+                                        <Copy className="h-3 w-3" />
+                                    )}
+                                </Button>
+                            </div>
                         </div>
                         {onSettingsClick && (
                             <TooltipProvider>
@@ -141,37 +158,7 @@ export const TapCard = ({
                 </CardContent>
 
                 <CardFooter className="flex items-center justify-between border-t pt-2">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors"
-                                    onClick={handleCopyUserId}
-                                >
-                                    <Avatar className="h-5 w-5">
-                                        <AvatarImage
-                                            src={tap.owner.avatar}
-                                            alt={tap.owner.username}
-                                        />
-                                        <AvatarFallback className="text-[10px]">
-                                            {tap.owner.username.slice(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <span className="max-w-25 truncate">
-                                        {tap.owner.username}
-                                    </span>
-                                    {copied ? (
-                                        <Check className="text-success h-3 w-3" />
-                                    ) : (
-                                        <Copy className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                                    )}
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                {copied ? t('common.copied') : t('common.copyToClipboard')}
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <UserBadge user={tap.owner} />
 
                     <div className="text-muted-foreground flex items-center gap-3 text-xs">
                         <span>{tap.totalUses.toLocaleString()} uses</span>

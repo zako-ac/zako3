@@ -109,7 +109,6 @@ export const tapIdSchema = z
   );
 
 export const createTapSchema = z.object({
-  id: tapIdSchema,
   name: z
     .string()
     .min(1, 'Tap name is required')
@@ -129,7 +128,6 @@ export const createTapSchema = z.object({
 });
 
 export const updateTapSchema = z.object({
-  id: tapIdSchema.optional(),
   name: z
     .string()
     .min(1, 'Tap name is required')

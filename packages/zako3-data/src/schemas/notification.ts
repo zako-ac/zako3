@@ -10,27 +10,27 @@ export const notificationLevelSchema = z.enum(NOTIFICATION_LEVELS);
 export const notificationCategorySchema = z.enum(NOTIFICATION_CATEGORIES);
 
 export const notificationSchema = z.object({
-  id: z.string(),
-  userId: z.string(),
-  category: notificationCategorySchema,
-  level: notificationLevelSchema,
-  title: z.string(),
-  message: z.string(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  isRead: z.boolean(),
-  createdAt: z.string(),
+    id: z.string(),
+    userId: z.string(),
+    category: notificationCategorySchema,
+    level: notificationLevelSchema,
+    title: z.string(),
+    message: z.string(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    isRead: z.boolean(),
+    createdAt: z.string(),
 });
 
 export const notificationFiltersSchema = z.object({
-  search: z.string().optional(),
-  level: notificationLevelSchema.optional(),
-  category: notificationCategorySchema.optional(),
-  isRead: z.boolean().optional(),
+    search: z.string().optional(),
+    level: notificationLevelSchema.optional(),
+    category: notificationCategorySchema.optional(),
+    isRead: z.boolean().optional(),
 });
 
 export const notificationSortSchema = z.object({
-  field: z.enum(['createdAt', 'level']),
-  direction: sortDirectionSchema,
+    field: z.enum(['createdAt', 'level']),
+    direction: sortDirectionSchema,
 });
 
 // ============================================================================
@@ -38,31 +38,31 @@ export const notificationSortSchema = z.object({
 // ============================================================================
 
 export const auditLogEntrySchema = z.object({
-  id: z.string(),
-  tapId: z.string(),
-  actorId: z.string(),
-  action: z.string(),
-  level: notificationLevelSchema,
-  details: z.record(z.string(), z.unknown()),
-  createdAt: z.string(),
+    id: z.string(),
+    tapId: z.string(),
+    actorId: z.string(),
+    action: z.string(),
+    level: notificationLevelSchema,
+    details: z.record(z.string(), z.unknown()),
+    createdAt: z.string(),
 });
 
 export const auditLogFiltersSchema = z.object({
-  search: z.string().optional(),
-  level: notificationLevelSchema.optional(),
-  action: z.string().optional(),
-  actorId: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+    search: z.string().optional(),
+    level: notificationLevelSchema.optional(),
+    action: z.string().optional(),
+    actorId: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
 });
 
 export const tapAuditLogEntrySchema = z.object({
-  id: z.string(),
-  tapId: z.string(),
-  actorId: z.string().nullable(),
-  action: z.string(),
-  details: z.string().nullable(),
-  createdAt: z.string(),
+    id: z.string(),
+    tapId: z.string(),
+    actorId: z.string().nullable(),
+    actionType: z.string(),
+    details: z.string().nullable(),
+    createdAt: z.string(),
 });
 
 // ============================================================================

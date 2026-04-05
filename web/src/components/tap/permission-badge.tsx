@@ -35,9 +35,10 @@ export const PermissionBadge = ({
         <Badge variant={variant} className="gap-1">
             <Icon className="h-3 w-3" />
             {permissionTranslation}
-            {hasAccess !== undefined && (
+            {hasAccess !== undefined && (<>
+                <span className="ml-2 text-xs">{hasAccess ? t("taps.permissionsCard.accessYes") : t("taps.permissionsCard.accessNo")}</span>
                 <span className="ml-1">{hasAccess ? '✓' : '✗'}</span>
-            )}
+            </>)}
         </Badge>
     )
 }

@@ -26,6 +26,8 @@ pub async fn create(
     let dto = CreateTapDto {
         name,
         description: None,
+        permission: None,
+        roles: None,
     };
     let tap = service.tap.create(user.id.0, dto).await?;
 

@@ -35,6 +35,12 @@ impl TapService {
     pub async fn create(&self, owner_id: Uuid, dto: CreateTapDto) -> CoreResult<Tap> {
         let mut tap = Tap::new(Uuid::new_v4(), owner_id, dto.name.clone());
         tap.description = dto.description.clone();
+        if let Some(permission) = dto.permission.clone() {
+            tap.permission = permission;
+        }
+        if let Some(roles) = dto.roles.clone() {
+            tap.roles = roles;
+        }
 
         let created_tap = self.tap_repo.create(&tap).await?;
 
@@ -44,7 +50,7 @@ impl TapService {
                 created_tap.id.0,
                 owner_id,
                 "tap.create".to_string(),
-                Some(serde_json::json!({ "name": dto.name, "description": dto.description })),
+                Some(serde_json::json!({ "name": dto.name, "description": dto.description, "roles": dto.roles, "permission": dto.permission })),
             )
             .await;
 
@@ -71,7 +77,7 @@ impl TapService {
                 owner_id: tap.owner_id.0.to_string(),
                 occupation: tap.occupation.clone(),
                 permission: tap.permission.clone(),
-                roles: tap.role.clone().into_iter().collect(),
+                roles: tap.roles.clone(),
                 total_uses: 0,
                 created_at: tap.timestamp.created_at,
                 updated_at: tap.timestamp.updated_at,
@@ -128,7 +134,7 @@ impl TapService {
             owner_id: tap.owner_id.0.to_string(),
             occupation: tap.occupation.clone(),
             permission: tap.permission.clone(),
-            roles: tap.role.clone().into_iter().collect(),
+            roles: tap.roles.clone(),
             total_uses: 0,
             created_at: tap.timestamp.created_at,
             updated_at: tap.timestamp.updated_at,
@@ -220,6 +226,14 @@ impl TapService {
             );
             tap.description = Some(description.clone());
         }
+        if let Some(permission) = &dto.permission {
+            changes.insert("permission".to_string(), serde_json::to_value(permission).unwrap_or(serde_json::Value::Null));
+            tap.permission = permission.clone();
+        }
+        if let Some(roles) = &dto.roles {
+            changes.insert("roles".to_string(), serde_json::to_value(roles).unwrap_or(serde_json::Value::Null));
+            tap.roles = roles.clone();
+        }
         tap.timestamp.updated_at = chrono::Utc::now();
 
         let updated_tap = self.tap_repo.update(&tap).await?;
@@ -237,52 +251,35 @@ impl TapService {
         Ok(updated_tap)
     }
 
-    pub async fn verify_tap(&self, tap_id: Uuid, admin_id: Uuid, occupation: hq_types::hq::TapOccupation) -> CoreResult<Tap> {
-
+    pub async fn verify_tap(
+        &self,
+        tap_id: Uuid,
+        admin_id: Uuid,
+        occupation: hq_types::hq::TapOccupation,
+    ) -> CoreResult<Tap> {
         let mut tap = self
-
             .tap_repo
-
             .find_by_id(tap_id)
-
             .await?
-
             .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
-
-
 
         tap.occupation = occupation.clone();
 
         tap.timestamp.updated_at = chrono::Utc::now();
 
-
-
         let updated_tap = self.tap_repo.update(&tap).await?;
 
-
-
         let _ = self
-
             .audit_log
-
             .log(
-
                 tap_id,
-
                 admin_id,
-
                 "tap.verify".to_string(),
-
                 Some(serde_json::json!({ "occupation": occupation })),
-
             )
-
             .await;
 
-
-
         Ok(updated_tap)
-
     }
 
     pub async fn delete_tap(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<()> {
@@ -309,5 +306,4 @@ impl TapService {
     pub async fn get_tap_internal(&self, tap_id: Uuid) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
     }
-
 }

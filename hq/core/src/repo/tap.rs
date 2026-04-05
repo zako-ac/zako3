@@ -34,15 +34,11 @@ impl TapRepository for PgTapRepository {
             .trim_matches('"')
             .to_string();
         let permission = serde_json::to_value(&tap.permission)?;
-        let role = if let Some(r) = &tap.role {
-            Some(serde_json::to_string(r)?.trim_matches('"').to_string())
-        } else {
-            None
-        };
+        let roles = serde_json::to_value(&tap.roles)?;
 
         sqlx::query(
             r#"
-            INSERT INTO taps (id, owner_id, name, description, occupation, permission, role, created_at, updated_at)
+            INSERT INTO taps (id, owner_id, name, description, occupation, permission, roles, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
@@ -52,7 +48,7 @@ impl TapRepository for PgTapRepository {
         .bind(description)
         .bind(occupation)
         .bind(permission)
-        .bind(role)
+        .bind(roles)
         .bind(tap.timestamp.created_at)
         .bind(tap.timestamp.updated_at)
         .execute(&self.pool)
@@ -64,7 +60,7 @@ impl TapRepository for PgTapRepository {
     async fn list_by_owner(&self, owner_id: Uuid) -> CoreResult<Vec<Tap>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, role, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
             FROM taps
             WHERE owner_id = $1
             "#,
@@ -87,12 +83,8 @@ impl TapRepository for PgTapRepository {
                 let permission_val: serde_json::Value = row.try_get("permission")?;
                 let permission = serde_json::from_value(permission_val)?;
 
-                let role_str: Option<String> = row.try_get("role")?;
-                let role = if let Some(r) = role_str {
-                    Some(serde_json::from_str(&format!("\"{}\"", r))?)
-                } else {
-                    None
-                };
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
 
                 let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
                 let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
@@ -104,7 +96,7 @@ impl TapRepository for PgTapRepository {
                     owner_id: UserId(owner_id),
                     occupation,
                     permission,
-                    role,
+                    roles,
                     timestamp: hq_types::hq::ResourceTimestamp {
                         created_at,
                         updated_at,
@@ -119,7 +111,7 @@ impl TapRepository for PgTapRepository {
     async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<Tap>> {
         let row = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, role, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
             FROM taps
             WHERE id = $1
             "#,
@@ -140,12 +132,8 @@ impl TapRepository for PgTapRepository {
             let permission_val: serde_json::Value = row.try_get("permission")?;
             let permission = serde_json::from_value(permission_val)?;
 
-            let role_str: Option<String> = row.try_get("role")?;
-            let role = if let Some(r) = role_str {
-                Some(serde_json::from_str(&format!("\"{}\"", r))?)
-            } else {
-                None
-            };
+            let roles_val: serde_json::Value = row.try_get("roles")?;
+            let roles = serde_json::from_value(roles_val)?;
 
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
             let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
@@ -157,7 +145,7 @@ impl TapRepository for PgTapRepository {
                 owner_id: UserId(owner_id),
                 occupation,
                 permission,
-                role,
+                roles,
                 timestamp: hq_types::hq::ResourceTimestamp {
                     created_at,
                     updated_at,
@@ -176,16 +164,12 @@ impl TapRepository for PgTapRepository {
             .trim_matches('"')
             .to_string();
         let permission = serde_json::to_value(&tap.permission)?;
-        let role = if let Some(r) = &tap.role {
-            Some(serde_json::to_string(r)?.trim_matches('"').to_string())
-        } else {
-            None
-        };
+        let roles = serde_json::to_value(&tap.roles)?;
 
         sqlx::query(
             r#"
             UPDATE taps
-            SET name = $1, description = $2, occupation = $3, permission = $4, role = $5, updated_at = $6
+            SET name = $1, description = $2, occupation = $3, permission = $4, roles = $5, updated_at = $6
             WHERE id = $7
             "#,
         )
@@ -193,7 +177,7 @@ impl TapRepository for PgTapRepository {
         .bind(description)
         .bind(occupation)
         .bind(permission)
-        .bind(role)
+        .bind(roles)
         .bind(tap.timestamp.updated_at)
         .bind(id)
         .execute(&self.pool)

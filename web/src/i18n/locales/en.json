@@ -54,10 +54,6 @@
           "description": "Are you sure you want to ban user \"{username}\"? They will not be able to log in.",
           "title": "Confirm Ban"
         },
-        "unbanConfirm": {
-          "description": "Are you sure you want to unban user \"{username}\"? They will be able to log in again.",
-          "title": "Confirm Unban"
-        },
         "banSuccess": "User has been banned.",
         "createdAt": "Created At",
         "email": "Email",
@@ -88,6 +84,10 @@
         "subtitle": "Manage all users in the system.",
         "title": "Users",
         "unban": "Unban",
+        "unbanConfirm": {
+          "description": "Are you sure you want to unban user \"{username}\"? They will be able to log in again.",
+          "title": "Confirm Unban"
+        },
         "unbanSuccess": "User has been unbanned.",
         "user": "User",
         "userDetails": "User Details",
@@ -132,13 +132,14 @@
       "welcome": "Welcome"
     },
     "common": {
-      "actions": "",
-      "back": "",
+      "actions": "Actions",
+      "back": "Back",
       "cancel": "Cancel",
       "close": "Close",
       "confirm": "Confirm",
       "copied": "Copied to clipboard!",
-      "copyToClipboard": "Copy to clipboard",
+      "copy": "Copy to clipboard",
+      "copyIdToClipboard": "Copy ID to clipboard",
       "delete": "Delete",
       "loading": "Loading...",
       "role": "Role",
@@ -151,6 +152,7 @@
       "noTapsYet": "You haven't created any Taps yet.",
       "recentActivity": "Recent Activity",
       "recentTaps": "Recent Taps",
+      "uses": "{{count}} uses",
       "stats": {
         "acrossTaps": "Across all taps",
         "activeUsers": "Active Users",
@@ -243,15 +245,13 @@
         "byRole": "By Role"
       },
       "form": {
-        "addBlacklistedUsers": "",
-        "addWhitelistedUsers": "",
-        "blacklistedUsers": "",
-        "blacklistedUsersHelp": "",
+        "addBlacklistedUsers": "Add Blacklisted Users",
+        "addWhitelistedUsers": "Add Whitelisted Users",
+        "blacklistedUsers": "Blacklisted Users",
+        "blacklistedUsersHelp": "Select users who should be blocked from using this tap",
         "description": "Description",
         "descriptionPlaceholder": "Describe what this tap does...",
         "id": "Tap ID",
-        "idHelp": "Lowercase letters, numbers, underscores, and periods only",
-        "idPlaceholder": "my_awesome_tap",
         "name": "Name",
         "namePlaceholder": "My Awesome Tap",
         "permission": "Permission",
@@ -265,16 +265,20 @@
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
       "occupations": {
-        "base": "",
-        "official": "",
-        "verified": ""
+        "base": "Base",
+        "official": "Official",
+        "verified": "Verified"
       },
-      "permission": "",
+      "permission": "Permission",
       "permissions": {
-        "blacklisted": "",
-        "owner_only": "",
-        "public": "",
-        "whitelisted": ""
+        "blacklisted": "Blacklist",
+        "owner_only": "Owner Only",
+        "public": "Public",
+        "whitelisted": "Whitelist"
+      },
+      "permissionsCard": {
+        "accessNo": "You don't have access",
+        "accessYes": "You have access"
       },
       "report": {
         "description": "Why are you reporting this Tap?",

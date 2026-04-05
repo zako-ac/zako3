@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
-import { Activity, Users, TrendingUp, Database } from 'lucide-react'
+import { useState } from 'react'
+import { Activity, Users, TrendingUp, Database, Copy, Check } from 'lucide-react'
+import { toast } from 'sonner'
 import { useTap, useTapStats, useTapAuditLog } from '@/features/taps'
 import { useAuthStore } from '@/features/auth'
 import { usePagination } from '@/hooks'
@@ -27,10 +29,21 @@ import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/constants'
 import { formatRelativeTime } from '@/lib/date'
 import { TapAuditLogEntry } from '@zako-ac/zako3-data'
+import { UserBadge } from '@/components/tap/user-badge'
 
 export const TapStatsPage = () => {
     const { t, i18n } = useTranslation()
+    const [copied, setCopied] = useState(false)
     const { tapId } = useParams<{ tapId: string }>()
+
+    const handleCopyId = () => {
+        if (tapId) {
+            navigator.clipboard.writeText(tapId)
+            setCopied(true)
+            toast.success(t('common.copied'))
+            setTimeout(() => setCopied(false), 2000)
+        }
+    }
     const { user } = useAuthStore()
     const { pagination, setPage, getPaginationInfo } = usePagination({
         initialPerPage: 10,
@@ -90,7 +103,23 @@ export const TapStatsPage = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold">{tap.name}</h1>
-                    <p className="text-muted-foreground">{t('taps.stats.subtitle')}</p>
+                    <div className="flex items-center gap-2">
+                        <p className="text-muted-foreground font-mono text-sm">
+                            {tap.id}
+                        </p>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 hover:bg-transparent"
+                            onClick={handleCopyId}
+                        >
+                            {copied ? (
+                                <Check className="text-success h-3.5 w-3.5" />
+                            ) : (
+                                <Copy className="text-muted-foreground h-3.5 w-3.5" />
+                            )}
+                        </Button>
+                    </div>
                 </div>
                 {isOwner && (
                     <Button asChild variant="outline">
@@ -168,10 +197,20 @@ export const TapStatsPage = () => {
                                     {auditLogs.map((log: TapAuditLogEntry) => (
                                         <TableRow key={log.id}>
                                             <TableCell>
-                                                <Badge variant="outline">{log.action}</Badge>
+                                                <Badge variant="outline">{log.actionType}</Badge>
                                             </TableCell>
-                                            <TableCell className="font-mono text-xs">
-                                                {log.actorId || 'System'}
+                                            <TableCell>
+                                                {log.actorId ? (
+                                                    <UserBadge
+                                                        user={{
+                                                            id: log.actorId,
+                                                            username: log.actorId.slice(0, 8), // Fallback if username not available
+                                                        }}
+                                                        showId={false}
+                                                    />
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs italic">System</span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {formatRelativeTime(log.createdAt, i18n.language)}
@@ -180,7 +219,8 @@ export const TapStatsPage = () => {
                                                 {log.details || '-'}
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )
+                                    )}
                                 </TableBody>
                             </Table>
                             {auditLogData?.meta && paginationInfo.totalPages > 1 && (

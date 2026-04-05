@@ -1,17 +1,19 @@
 import zakoLogo from '@/assets/zakopsa.png'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, matchPath } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
     LayoutDashboard,
-    Compass,
     Settings,
     LogOut,
-    ChevronRight,
     Shield,
+    Plus,
+    Box,
+    Globe,
 } from 'lucide-react'
 
 import { ROUTES } from '@/lib/constants'
 import { useLogout, useAuthStore } from '@/features/auth'
+import { useTap } from '@/features/taps'
 import {
     Sidebar,
     SidebarContent,
@@ -23,9 +25,6 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-    SidebarMenuSub,
-    SidebarMenuSubButton,
-    SidebarMenuSubItem,
     useSidebar,
 } from '@/components/ui/sidebar'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -36,19 +35,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import clsx from 'clsx'
-
-interface NavItem {
-    title: string
-    url: string
-    icon: React.ComponentType<{ className?: string }>
-    items?: { title: string; url: string }[]
-}
 
 export const AppSidebar = () => {
     const { t } = useTranslation()
@@ -57,27 +44,65 @@ export const AppSidebar = () => {
     const { mutate: logout } = useLogout()
     const { state } = useSidebar()
 
-    const navItems: NavItem[] = [
-        {
-            title: t('nav.dashboard'),
-            url: ROUTES.DASHBOARD,
-            icon: LayoutDashboard,
-        },
-        {
-            title: t('nav.taps'),
-            url: ROUTES.TAPS,
-            icon: Compass,
-            items: [
-                { title: t('nav.explore'), url: ROUTES.TAPS },
-                { title: t('nav.myTaps'), url: ROUTES.TAPS_MINE },
-                { title: t('nav.createTap'), url: ROUTES.TAPS_CREATE },
-            ],
-        },
-    ]
+    const match = matchPath('/taps/:tapId/*', location.pathname) || matchPath('/taps/:tapId', location.pathname)
+    const activeTapId = match?.params.tapId
+    const isValidTapId = activeTapId && !['create', 'mine'].includes(activeTapId)
+    const { data: tapData } = useTap(isValidTapId ? activeTapId : undefined)
+
+    const navSections: {
+        title: string
+        items: {
+            title: string
+            url: string
+            icon: React.ComponentType<{ className?: string }>
+            isPrimary?: boolean
+            isSubItem?: boolean
+        }[]
+    }[] = [
+            {
+                title: t('nav.dashboard'),
+                items: [
+                    {
+                        title: t('nav.dashboard'),
+                        url: ROUTES.DASHBOARD,
+                        icon: LayoutDashboard,
+                    },
+                ],
+            },
+            {
+                title: t('nav.taps'),
+                items: [
+                    {
+                        title: t('nav.createTap'),
+                        url: ROUTES.TAPS_CREATE,
+                        icon: Plus,
+                        isPrimary: true,
+                    },
+                    {
+                        title: t('nav.explore'),
+                        url: ROUTES.TAPS,
+                        icon: Globe,
+                    },
+                    {
+                        title: t('nav.myTaps'),
+                        url: ROUTES.TAPS_MINE,
+                        icon: Box,
+                    },
+                    ...(isValidTapId && tapData
+                        ? [
+                            {
+                                title: tapData.name,
+                                url: `/taps/${activeTapId}/stats`,
+                                icon: Box,
+                                isSubItem: true,
+                            },
+                        ]
+                        : []),
+                ],
+            },
+        ]
 
     const isActive = (url: string) => location.pathname === url
-    const isGroupActive = (item: NavItem) =>
-        isActive(item.url) || item.items?.some((sub) => isActive(sub.url))
 
     return (
         <Sidebar collapsible="icon">
@@ -102,51 +127,21 @@ export const AppSidebar = () => {
             </SidebarHeader>
 
             <SidebarContent>
-                <SidebarGroup>
-                    <SidebarGroupLabel>{t('nav.dashboard')}</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {navItems.map((item) =>
-                                item.items ? (
-                                    <Collapsible
-                                        key={item.title}
-                                        asChild
-                                        defaultOpen={isGroupActive(item)}
-                                        className="group/collapsible"
-                                    >
-                                        <SidebarMenuItem>
-                                            <CollapsibleTrigger asChild>
-                                                <SidebarMenuButton
-                                                    tooltip={item.title}
-                                                    isActive={isGroupActive(item)}
-                                                >
-                                                    <item.icon className="h-4 w-4" />
-                                                    <span>{item.title}</span>
-                                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                                </SidebarMenuButton>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent>
-                                                <SidebarMenuSub>
-                                                    {item.items.map((subItem) => (
-                                                        <SidebarMenuSubItem key={subItem.url}>
-                                                            <SidebarMenuSubButton
-                                                                asChild
-                                                                isActive={isActive(subItem.url)}
-                                                            >
-                                                                <Link to={subItem.url}>{subItem.title}</Link>
-                                                            </SidebarMenuSubButton>
-                                                        </SidebarMenuSubItem>
-                                                    ))}
-                                                </SidebarMenuSub>
-                                            </CollapsibleContent>
-                                        </SidebarMenuItem>
-                                    </Collapsible>
-                                ) : (
+                {navSections.map((section) => (
+                    <SidebarGroup key={section.title}>
+                        <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                {section.items.map((item) => (
                                     <SidebarMenuItem key={item.title}>
                                         <SidebarMenuButton
                                             asChild
                                             tooltip={item.title}
-                                            isActive={isActive(item.url)}
+                                            isActive={isActive(item.url) || (item.isSubItem && location.pathname.startsWith(`/taps/${activeTapId}`))}
+                                            className={clsx(
+                                                item.isPrimary && 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground',
+                                                item.isSubItem && 'pl-8'
+                                            )}
                                         >
                                             <Link to={item.url}>
                                                 <item.icon className="h-4 w-4" />
@@ -154,11 +149,11 @@ export const AppSidebar = () => {
                                             </Link>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
-                                )
-                            )}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                ))}
             </SidebarContent>
 
             <SidebarFooter className="border-sidebar-border border-t">

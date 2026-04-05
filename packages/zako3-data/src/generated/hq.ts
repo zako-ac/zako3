@@ -78,7 +78,19 @@ export type CreateNotificationDto = z.infer<typeof CreateNotificationDtoSchema>;
 
 export const CreateTapDtoSchema = z.object({
   name: z.string(),
-  description: z.string().nullable()
+  description: z.string().nullable(),
+  permission: z.discriminatedUnion('type', [z.object({
+  type: z.literal('owner_only')
+}), z.object({
+  type: z.literal('public')
+}), z.object({
+  type: z.literal('whitelisted'),
+  userIds: z.array(z.string())
+}), z.object({
+  type: z.literal('blacklisted'),
+  userIds: z.array(z.string())
+})]).nullable(),
+  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable()
 });
 export type CreateTapDto = z.infer<typeof CreateTapDtoSchema>;
 
@@ -116,6 +128,12 @@ export const TapDtoSchema = z.object({
   type: z.literal('owner_only')
 }), z.object({
   type: z.literal('public')
+}), z.object({
+  type: z.literal('whitelisted'),
+  userIds: z.array(z.string())
+}), z.object({
+  type: z.literal('blacklisted'),
+  userIds: z.array(z.string())
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
   totalUses: z.number(),
@@ -131,6 +149,12 @@ export const TapPermissionSchema = z.discriminatedUnion('type', [z.object({
   type: z.literal('owner_only')
 }), z.object({
   type: z.literal('public')
+}), z.object({
+  type: z.literal('whitelisted'),
+  userIds: z.array(z.string())
+}), z.object({
+  type: z.literal('blacklisted'),
+  userIds: z.array(z.string())
 })]);
 export type TapPermission = z.infer<typeof TapPermissionSchema>;
 
@@ -165,6 +189,12 @@ export const TapWithAccessDtoSchema = z.object({
   type: z.literal('owner_only')
 }), z.object({
   type: z.literal('public')
+}), z.object({
+  type: z.literal('whitelisted'),
+  userIds: z.array(z.string())
+}), z.object({
+  type: z.literal('blacklisted'),
+  userIds: z.array(z.string())
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
   totalUses: z.number(),
@@ -194,7 +224,19 @@ export type UpdateApiKeyDto = z.infer<typeof UpdateApiKeyDtoSchema>;
 
 export const UpdateTapDtoSchema = z.object({
   name: z.string().nullable(),
-  description: z.string().nullable()
+  description: z.string().nullable(),
+  permission: z.discriminatedUnion('type', [z.object({
+  type: z.literal('owner_only')
+}), z.object({
+  type: z.literal('public')
+}), z.object({
+  type: z.literal('whitelisted'),
+  userIds: z.array(z.string())
+}), z.object({
+  type: z.literal('blacklisted'),
+  userIds: z.array(z.string())
+})]).nullable(),
+  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable()
 });
 export type UpdateTapDto = z.infer<typeof UpdateTapDtoSchema>;
 

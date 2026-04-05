@@ -8,6 +8,8 @@ use utoipa::ToSchema;
 pub struct CreateTapDto {
     pub name: String,
     pub description: Option<String>,
+    pub permission: Option<TapPermission>,
+    pub roles: Option<Vec<TapRole>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
@@ -15,6 +17,8 @@ pub struct CreateTapDto {
 pub struct UpdateTapDto {
     pub name: Option<String>,
     pub description: Option<String>,
+    pub permission: Option<TapPermission>,
+    pub roles: Option<Vec<TapRole>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]

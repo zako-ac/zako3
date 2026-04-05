@@ -207,16 +207,8 @@ export const tapHandlers = [
     await delay(300)
     const body = (await request.json()) as CreateTapInput
 
-    const existingTap = mockTapsStore.find((t) => t.id === body.id)
-    if (existingTap) {
-      return HttpResponse.json(
-        { code: 'CONFLICT', message: 'Tap ID already exists' },
-        { status: 409 }
-      )
-    }
-
     const newTap = createTapWithAccess({
-      id: body.id,
+      id: `tap_${Math.random().toString(36).substr(2, 9)}`,
       name: body.name,
       description: body.description,
       roles: body.roles,
@@ -242,16 +234,6 @@ export const tapHandlers = [
         { code: 'NOT_FOUND', message: 'Tap not found' },
         { status: 404 }
       )
-    }
-
-    if (body.id && body.id !== tapId) {
-      const existingTap = mockTapsStore.find((t) => t.id === body.id)
-      if (existingTap) {
-        return HttpResponse.json(
-          { code: 'CONFLICT', message: 'Tap ID already exists' },
-          { status: 409 }
-        )
-      }
     }
 
     const updatedTap: TapWithAccess = {

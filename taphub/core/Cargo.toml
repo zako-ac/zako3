@@ -11,7 +11,7 @@ thiserror.workspace = true
 zako3-types = { path = "../../types" }
 tokio = { workspace = true, features = ["full"] }
 zako3-taphub-transport-server = { path = "../transport/server" }
-protofish2 = "0.4"
+protofish2 = "0.5"
 bytes = "1"
 opus = "0.3.1"
 tracing.workspace = true

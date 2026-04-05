@@ -25,7 +25,7 @@ impl HqRepository for StubHqRepository {
             owner_id: Uuid::new_v4().into(),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
-            role: None,
+            roles: vec![],
             timestamp: ResourceTimestamp::now(),
         }
         .into()
@@ -38,7 +38,7 @@ impl HqRepository for StubHqRepository {
             owner_id: Uuid::new_v4().into(),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
-            role: None,
+            roles: vec![],
             timestamp: ResourceTimestamp::now(),
         }
         .into()
