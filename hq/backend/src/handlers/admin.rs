@@ -5,10 +5,18 @@ use axum::{
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::{
-    RejectVerificationDto, VerificationRequest, VerificationRequestId, VerificationStatus,
+    AuthUserDto, PaginatedResponseDto, RejectVerificationDto, UpdateUserRoleDto, UserId,
+    VerificationRequest, VerificationRequestId, VerificationStatus,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::sync::Arc;
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct AdminUsersQuery {
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct VerificationRequestsQuery {
@@ -17,7 +25,7 @@ pub struct VerificationRequestsQuery {
     pub per_page: Option<u32>,
 }
 
-#[derive(serde::Serialize, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct PaginatedVerificationRequestsDto {
     pub data: Vec<VerificationRequest>,
     pub meta: hq_types::hq::dtos::PaginationMetaDto,
@@ -32,6 +40,209 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
         CoreError::Conflict(_) => (axum::http::StatusCode::CONFLICT, e.to_string()),
         _ => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users",
+    params(
+        ("page" = Option<u32>, Query, description = "Page number"),
+        ("per_page" = Option<u32>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "List of users", body = PaginatedResponseDto<AuthUserDto>)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn list_users(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Query(query): Query<AdminUsersQuery>,
+) -> Result<Json<PaginatedResponseDto<AuthUserDto>>, (axum::http::StatusCode, String)> {
+    let page = query.page.unwrap_or(1);
+    let per_page = query.per_page.unwrap_or(20);
+
+    let (users, total) = service
+        .auth
+        .list_all_users(page, per_page)
+        .await
+        .map_err(map_error)?;
+
+    let user_dtos = users
+        .into_iter()
+        .map(|user| AuthUserDto {
+            id: user.id.0.clone(),
+            discord_id: user.discord_user_id.0.clone(),
+            username: user.username.0.clone(),
+            avatar: user.avatar_url.unwrap_or_default(),
+            email: user.email.clone(),
+            is_admin: user.permissions.contains(&"admin".to_string()),
+            banned: user.banned,
+        })
+        .collect();
+
+    Ok(Json(PaginatedResponseDto {
+        data: user_dtos,
+        meta: hq_types::hq::dtos::PaginationMetaDto {
+            total,
+            page: page.into(),
+            per_page: per_page.into(),
+            total_pages: (total as f64 / per_page as f64).ceil() as u64,
+        },
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}",
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "User details", body = AuthUserDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_user(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<AuthUserDto>, (axum::http::StatusCode, String)> {
+    let user = service.auth.get_user(&id).await.map_err(map_error)?;
+
+    Ok(Json(user))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{id}/ban",
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "User banned", body = AuthUserDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn ban_user(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<AuthUserDto>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let user = service.auth.ban_user(user_id).await.map_err(map_error)?;
+
+    Ok(Json(AuthUserDto {
+        id: user.id.0.clone(),
+        discord_id: user.discord_user_id.0.clone(),
+        username: user.username.0.clone(),
+        avatar: user.avatar_url.unwrap_or_default(),
+        email: user.email.clone(),
+        is_admin: user.permissions.contains(&"admin".to_string()),
+        banned: user.banned,
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{id}/unban",
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "User unbanned", body = AuthUserDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn unban_user(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<AuthUserDto>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let user = service.auth.unban_user(user_id).await.map_err(map_error)?;
+
+    Ok(Json(AuthUserDto {
+        id: user.id.0.clone(),
+        discord_id: user.discord_user_id.0.clone(),
+        username: user.username.0.clone(),
+        avatar: user.avatar_url.unwrap_or_default(),
+        email: user.email.clone(),
+        is_admin: user.permissions.contains(&"admin".to_string()),
+        banned: user.banned,
+    }))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/users/{id}/role",
+    request_body = UpdateUserRoleDto,
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "User role updated", body = AuthUserDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn update_user_role(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+    Json(payload): Json<UpdateUserRoleDto>,
+) -> Result<Json<AuthUserDto>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    // In this system, "role" update currently means updating permissions.
+    // If the role is "admin", we add "admin" to permissions.
+    // If it's "user", we remove "admin" from permissions.
+    let mut permissions = vec![];
+    if payload.role == "admin" {
+        permissions.push("admin".to_string());
+    }
+
+    let user = service
+        .auth
+        .update_user_permissions(user_id, permissions)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(AuthUserDto {
+        id: user.id.0.clone(),
+        discord_id: user.discord_user_id.0.clone(),
+        username: user.username.0.clone(),
+        avatar: user.avatar_url.unwrap_or_default(),
+        email: user.email.clone(),
+        is_admin: user.permissions.contains(&"admin".to_string()),
+        banned: user.banned,
+    }))
 }
 
 #[utoipa::path(

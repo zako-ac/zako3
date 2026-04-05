@@ -106,6 +106,10 @@ impl AuthService {
             .get_or_create_user(discord_id, username, avatar.as_deref(), email.as_deref())
             .await?;
 
+        if user.banned {
+            return Err(CoreError::Forbidden("User is banned".to_string()));
+        }
+
         // Generate JWT
         let expiration = chrono::Utc::now()
             .checked_add_signed(chrono::Duration::days(7))
@@ -134,6 +138,7 @@ impl AuthService {
             avatar: avatar_url,
             email: user.email.clone(),
             is_admin: user.permissions.contains(&"admin".to_string()),
+            banned: user.banned,
         };
 
         Ok(AuthResponseDto {
@@ -190,6 +195,7 @@ impl AuthService {
             avatar: user.avatar_url.unwrap_or_default(),
             email: user.email.clone(),
             is_admin: user.permissions.contains(&"admin".to_string()),
+            banned: user.banned,
         })
     }
 
@@ -202,6 +208,10 @@ impl AuthService {
             .find_by_id(user_id)
             .await?
             .ok_or(CoreError::NotFound("User not found".to_string()))?;
+
+        if user.banned {
+            return Err(CoreError::Forbidden("User is banned".to_string()));
+        }
 
         // Generate JWT
         let expiration = chrono::Utc::now()
@@ -227,6 +237,7 @@ impl AuthService {
             avatar: user.avatar_url.unwrap_or_default(),
             email: user.email.clone(),
             is_admin: user.permissions.contains(&"admin".to_string()),
+            banned: user.banned,
         };
 
         Ok(AuthResponseDto {
@@ -235,8 +246,8 @@ impl AuthService {
         })
     }
 
-    pub async fn list_all_users(&self) -> CoreResult<Vec<User>> {
-        self.user_repo.list_all().await
+    pub async fn list_all_users(&self, page: u32, per_page: u32) -> CoreResult<(Vec<User>, u64)> {
+        self.user_repo.list_all(page, per_page).await
     }
 
     pub async fn get_user_internal(&self, id: UserId) -> CoreResult<Option<User>> {
@@ -249,5 +260,13 @@ impl AuthService {
         permissions: Vec<String>,
     ) -> CoreResult<User> {
         self.user_repo.update_permissions(id, permissions).await
+    }
+
+    pub async fn ban_user(&self, id: UserId) -> CoreResult<User> {
+        self.user_repo.set_banned_status(id, true).await
+    }
+
+    pub async fn unban_user(&self, id: UserId) -> CoreResult<User> {
+        self.user_repo.set_banned_status(id, false).await
     }
 }

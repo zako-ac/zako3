@@ -2,11 +2,13 @@
 
 refer hq todo
 
-- [ ] Implement settings UI `~/projects/zako3/docs/en/settings.md`
-- [ ] Add CI
+# Do Now
+- [ ] Implement multiple AE
 
-- [ ] Document backend features
+- [ ] Implement settings `~/projects/zako3/docs/en/settings.md`
+- [ ] Implement text preprocessing
 
+# Other
 - [ ] otel and prometheus and logging(promtail)
 - [x] AE Track proto handling (todo!)
 - [x] migrate AE-TH comms to jsonrpsee
@@ -20,6 +22,7 @@ refer hq todo
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 - [ ] verify tap in web
+- [ ] implement ban
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 
@@ -35,5 +38,5 @@ refer hq todo
 - [ ] Make all cards in settings as component
 - [ ] Add "load failed" 
 - [ ] Dashboard status (my taps, total uses, active users, uptime)
-- [ ] Add admin UI/API to change tap settings
-- [ ] Make admin tap details UI use StatsCard component instead of manual impl
+- [x] Add admin UI/API to change tap settings
+- [x] Make admin tap details UI use StatsCard component instead of manual impl

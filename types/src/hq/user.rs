@@ -46,6 +46,7 @@ pub struct User {
     pub avatar_url: Option<String>,
     pub email: Option<String>,
     pub permissions: Vec<String>,
+    pub banned: bool,
     pub timestamp: ResourceTimestamp,
 }
 
@@ -58,6 +59,7 @@ impl User {
             avatar_url: None,
             email: None,
             permissions: Vec::new(),
+            banned: false,
             timestamp: ResourceTimestamp::now(),
         }
     }

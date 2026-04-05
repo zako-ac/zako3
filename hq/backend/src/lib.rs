@@ -41,6 +41,11 @@ use handlers::users;
         handlers::admin::list_verification_requests,
         handlers::admin::approve_verification,
         handlers::admin::reject_verification,
+        handlers::admin::list_users,
+        handlers::admin::get_user,
+        handlers::admin::ban_user,
+        handlers::admin::unban_user,
+        handlers::admin::update_user_role,
         handlers::tap::request_verification,
         handlers::notification::list_notifications,
 
@@ -71,10 +76,13 @@ use handlers::users;
             hq_types::hq::CreateNotificationDto,
             handlers::admin::VerificationRequestsQuery,
             handlers::admin::PaginatedVerificationRequestsDto,
+            handlers::admin::AdminUsersQuery,
             hq_types::hq::VerificationRequest,
             hq_types::hq::VerificationStatus,
             hq_types::hq::CreateVerificationRequestDto,
             hq_types::hq::RejectVerificationDto,
+            hq_types::hq::UpdateUserRoleDto,
+            hq_types::hq::PaginatedResponseDto<hq_types::hq::AuthUserDto>,
         )
     ),
     tags(
@@ -131,6 +139,14 @@ pub fn app(service: Service) -> Router {
         .route(
             "/api/v1/admin/verifications/:id/reject",
             post(admin::reject_verification),
+        )
+        .route("/api/v1/admin/users", get(admin::list_users))
+        .route("/api/v1/admin/users/:id", get(admin::get_user))
+        .route("/api/v1/admin/users/:id/ban", post(admin::ban_user))
+        .route("/api/v1/admin/users/:id/unban", post(admin::unban_user))
+        .route(
+            "/api/v1/admin/users/:id/role",
+            axum::routing::patch(admin::update_user_role),
         )
         .route(
             "/api/v1/admin/taps/:id",

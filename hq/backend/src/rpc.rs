@@ -134,9 +134,9 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn list_users(&self) -> RpcResult<Vec<User>> {
-        let res = self.auth_service.list_all_users().await;
+        let res = self.auth_service.list_all_users(1, 1000).await;
         match res {
-            Ok(users) => Ok(users),
+            Ok((users, _total)) => Ok(users),
             Err(e) => Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
         }
     }

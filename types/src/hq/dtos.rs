@@ -42,6 +42,13 @@ pub struct AuthUserDto {
     pub avatar: String,
     pub email: Option<String>,
     pub is_admin: bool,
+    pub banned: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserRoleDto {
+    pub role: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
