@@ -9,11 +9,12 @@ use zakofish::{
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
 
-use crate::{app::App, routing::DynamicSampler, service::state::StateService};
+use crate::{app::App, routing::DynamicSampler};
+use zako3_states::TapHubStateService;
 
 pub struct TapHubConnectionHandler {
     app: App,
-    state_service: StateService,
+    state_service: TapHubStateService,
 }
 
 #[async_trait]
@@ -91,7 +92,7 @@ impl HubHandler for TapHubConnectionHandler {
 pub struct TapHub {
     pub zf_hub: ZakofishHub,
     pub sampler: Arc<Mutex<DynamicSampler>>,
-    pub state_service: StateService,
+    pub state_service: TapHubStateService,
 }
 
 impl TapHub {
@@ -111,7 +112,7 @@ impl TapHub {
 
         let handler = TapHubConnectionHandler {
             app: app.clone(),
-            state_service: StateService::new(app.cache_repository.clone()),
+            state_service: TapHubStateService::new(app.cache_repository.clone()),
         };
 
         let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
@@ -119,7 +120,7 @@ impl TapHub {
         Ok(Self {
             zf_hub,
             sampler: Arc::new(DynamicSampler::new().into()),
-            state_service: StateService::new(app.cache_repository.clone()),
+            state_service: TapHubStateService::new(app.cache_repository.clone()),
         })
     }
 

@@ -1,4 +1,5 @@
-use crate::repository::{CacheRepositoryRef, HqRepositoryRef};
+use crate::repository::HqRepositoryRef;
+use zako3_states::CacheRepositoryRef;
 
 #[derive(Clone)]
 pub struct App {

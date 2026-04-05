@@ -4,11 +4,12 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
 use tracing::Level;
 use uuid::Uuid;
+use zako3_states::CacheRepository;
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
 use zako3_taphub_core::infra::hq::RpcHqRepository;
-use zako3_taphub_core::repository::{CacheRepository, HqRepository};
+use zako3_taphub_core::repository::HqRepository;
 use zako3_taphub_transport_server::TransportServer;
 use zako3_types::hq::{ResourceTimestamp, Tap, TapOccupation, TapPermission};
 

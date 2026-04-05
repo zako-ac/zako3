@@ -21,5 +21,5 @@ refer hq todo
 - [ ] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
 - [ ] unread-count
 - [ ] Improve chart
-
+- [ ] Add Cache hit rate in cache hits card
 - [ ] Make all cards in settings as component
