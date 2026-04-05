@@ -31,6 +31,7 @@ use handlers::users;
         handlers::tap::list_taps,
         handlers::tap::get_tap,
         handlers::tap::update_tap,
+        handlers::tap::admin_update_tap,
         handlers::tap::delete_tap,
         handlers::tap::get_tap_stats,
         handlers::audit_log::get_tap_audit_logs,
@@ -128,6 +129,10 @@ pub fn app(service: Service) -> Router {
         .route(
             "/api/v1/admin/verifications/:id/reject",
             post(admin::reject_verification),
+        )
+        .route(
+            "/api/v1/admin/taps/:id",
+            axum::routing::patch(tap::admin_update_tap),
         )
         .route(
             "/api/v1/notifications",

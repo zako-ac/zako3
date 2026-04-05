@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Compass } from 'lucide-react'
 import { TapCard } from './tap-card'
 import { EmptyState, LoadingSkeleton } from '@/components/common'
+import { useAuthStore } from '@/features/auth'
 import type { TapWithAccess } from '@zako-ac/zako3-data'
 
 interface TapListProps {
@@ -24,6 +25,7 @@ export const TapList = ({
   emptyDescription,
 }: TapListProps) => {
   const { t } = useTranslation()
+  const { user } = useAuthStore()
 
   if (isLoading) {
     return <LoadingSkeleton count={6} variant="card" />
@@ -41,15 +43,18 @@ export const TapList = ({
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {taps.map((tap) => (
-        <TapCard
-          key={tap.id}
-          tap={tap}
-          onReport={onReport}
-          onClick={onTapClick}
-          onSettingsClick={onSettingsClick}
-        />
-      ))}
+      {taps.map((tap) => {
+        const canClick = !!(onTapClick && (user?.id === tap.owner.id || user?.isAdmin))
+        return (
+          <TapCard
+            key={tap.id}
+            tap={tap}
+            onReport={onReport}
+            onClick={canClick ? onTapClick : undefined}
+            onSettingsClick={onSettingsClick}
+          />
+        )
+      })}
     </div>
   )
 }

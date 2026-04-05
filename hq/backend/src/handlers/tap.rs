@@ -1,12 +1,14 @@
-use crate::middleware::auth::{AuthUser, OptionalAuthUser};
+use crate::middleware::auth::{AdminUser, AuthUser, OptionalAuthUser};
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::{
-    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapDto, TapId,
-    TapStatsDto, TapWithAccessDto, VerificationRequest,
+    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, TapDto, TapId, TapStatsDto,
+    TapWithAccessDto, VerificationRequest,
 };
 use std::sync::Arc;
 
@@ -139,7 +141,7 @@ pub async fn get_tap_stats(
     ),
     request_body = hq_types::hq::UpdateTapDto,
     responses(
-        (status = 200, description = "Tap updated", body = Tap)
+        (status = 204, description = "Tap updated")
     ),
     security(
         ("bearer_auth" = [])
@@ -150,14 +152,43 @@ pub async fn update_tap(
     AuthUser(user_id): AuthUser,
     Path(tap_id): Path<TapId>,
     Json(payload): Json<hq_types::hq::UpdateTapDto>,
-) -> Result<Json<Tap>, (axum::http::StatusCode, String)> {
-    let tap = service
+) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+    service
         .tap
         .update_tap(tap_id, user_id, payload)
         .await
         .map_err(map_error)?;
 
-    Ok(Json(tap))
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/taps/{id}",
+    params(
+        ("id" = String, Path, description = "Tap ID")
+    ),
+    request_body = hq_types::hq::UpdateTapDto,
+    responses(
+        (status = 204, description = "Tap updated by admin")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn admin_update_tap(
+    State(service): State<Arc<Service>>,
+    AdminUser(admin_id): AdminUser,
+    Path(tap_id): Path<TapId>,
+    Json(payload): Json<hq_types::hq::UpdateTapDto>,
+) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+    service
+        .tap
+        .admin_update_tap(tap_id, admin_id, payload)
+        .await
+        .map_err(map_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(

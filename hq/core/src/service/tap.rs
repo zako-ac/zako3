@@ -260,6 +260,55 @@ impl TapService {
             ));
         }
 
+        let (updated_tap, changes) = self.apply_updates(&mut tap, dto).await?;
+        let result = self.tap_repo.update(&updated_tap).await?;
+
+        let _ = self
+            .audit_log
+            .log(
+                tap_id.0,
+                Some(user_id.0),
+                "tap.update".to_string(),
+                Some(serde_json::Value::Object(changes)),
+            )
+            .await;
+
+        Ok(result)
+    }
+
+    pub async fn admin_update_tap(
+        &self,
+        tap_id: TapId,
+        admin_id: UserId,
+        dto: hq_types::hq::UpdateTapDto,
+    ) -> CoreResult<Tap> {
+        let mut tap = self
+            .tap_repo
+            .find_by_id(tap_id.clone())
+            .await?
+            .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
+
+        let (updated_tap, changes) = self.apply_updates(&mut tap, dto).await?;
+        let result = self.tap_repo.update(&updated_tap).await?;
+
+        let _ = self
+            .audit_log
+            .log(
+                tap_id.0,
+                Some(admin_id.0),
+                "tap.admin_update".to_string(),
+                Some(serde_json::Value::Object(changes)),
+            )
+            .await;
+
+        Ok(result)
+    }
+
+    async fn apply_updates(
+        &self,
+        tap: &mut Tap,
+        dto: hq_types::hq::UpdateTapDto,
+    ) -> CoreResult<(Tap, serde_json::Map<String, serde_json::Value>)> {
         let mut changes = serde_json::Map::new();
 
         if let Some(name) = &dto.name {
@@ -291,19 +340,7 @@ impl TapService {
         }
         tap.timestamp.updated_at = chrono::Utc::now();
 
-        let updated_tap = self.tap_repo.update(&tap).await?;
-
-        let _ = self
-            .audit_log
-            .log(
-                tap_id.0,
-                Some(user_id.0),
-                "tap.update".to_string(),
-                Some(serde_json::Value::Object(changes)),
-            )
-            .await;
-
-        Ok(updated_tap)
+        Ok((tap.clone(), changes))
     }
 
     pub async fn delete_tap(&self, tap_id: TapId, user_id: UserId) -> CoreResult<()> {

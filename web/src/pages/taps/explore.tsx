@@ -15,7 +15,7 @@ import type { TapRole, TapSort, TapWithAccess } from '@zako-ac/zako3-data'
 export const TapExplorePage = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuthStore()
+  const { user, isAuthenticated } = useAuthStore()
   const { pagination, setPage, setPerPage, getPaginationInfo } = usePagination()
 
   // Filter state
@@ -46,7 +46,14 @@ export const TapExplorePage = () => {
   const paginationInfo = getPaginationInfo(data?.meta)
 
   const handleTapClick = (tapId: string) => {
-    navigate(ROUTES.TAP_STATS(tapId))
+    const tap = taps.find((t) => t.id === tapId)
+    if (!tap) return
+
+    if (user?.id === tap.owner.id) {
+      navigate(ROUTES.TAP_STATS(tapId))
+    } else if (user?.isAdmin) {
+      navigate(ROUTES.ADMIN_TAP(tapId))
+    }
   }
 
   const handleReport = (tapId: string) => {

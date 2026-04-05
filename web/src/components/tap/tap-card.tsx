@@ -54,8 +54,8 @@ export const TapCard = ({
         >
             <Card
                 className={cn(
-                    'group hover:border-primary/50 hover:shadow-primary/10 cursor-pointer transition-all hover:shadow-lg',
-                    onClick && 'cursor-pointer'
+                    'group transition-all',
+                    onClick ? 'hover:border-primary/50 hover:shadow-primary/10 cursor-pointer hover:shadow-lg' : 'cursor-default'
                 )}
                 onClick={() => onClick?.(tap.id)}
             >
