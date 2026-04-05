@@ -58,10 +58,12 @@ impl HqRepository for StubHqRepository {
             email: None,
             permissions: vec![],
             timestamp: ResourceTimestamp::now(),
+            banned: false,
         })
     }
 }
 
+#[allow(dead_code)]
 #[derive(Default)]
 struct StubCacheRepository {
     data: DashMap<String, String>,

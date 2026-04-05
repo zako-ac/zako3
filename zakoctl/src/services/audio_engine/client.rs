@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
-use http::{HeaderName, HeaderValue};
-use jsonrpsee::http_client::HttpClientBuilder;
-use zako3_audio_engine_controller::AudioEngineRpcClient;
+use zako3_audio_engine_client::client::AudioEngineRpcClient;
 use zako3_types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, TrackId, UserId,
     Volume, hq::DiscordUserId,
@@ -13,10 +11,24 @@ use crate::services::audio_engine::formatter;
 
 pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result<()> {
     let config = Config::load().unwrap_or_default();
-    let ae_token = config
-        .get_active_context()
-        .and_then(|ctx| ctx.ae_token.clone());
-    let client = connect(ae_addr, ae_token).await?;
+    
+    // ae_addr here represents the rabbitmq URL or we load from context if empty.
+    // For backwards compatibility, the CLI parameter ae_addr might be HTTP from old setup.
+    // Assuming the user updates config or passes amqp:// URL.
+    let endpoint = if ae_addr.starts_with("amqp") {
+        ae_addr
+    } else if let Some(ctx) = config.get_active_context() {
+        if ctx.ae_addr.starts_with("amqp") {
+            ctx.ae_addr.clone()
+        } else {
+            "amqp://127.0.0.1:5672/%2f".to_string()
+        }
+    } else {
+        "amqp://127.0.0.1:5672/%2f".to_string()
+    };
+
+    println!("Connecting to Audio Engine at {}...", endpoint);
+    let client = AudioEngineRpcClient::new(&endpoint).await.context("Failed to connect to RabbitMQ")?;
 
     // Helper closure to resolve guild_id from option or context
     let resolve_guild_id = |gid: Option<String>| -> Result<GuildId> {
@@ -44,22 +56,26 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
             let success = client.join(gid, cid).await?;
             println!("Join Success: {}", success);
         }
-        AudioEngineSubcommands::Leave { guild_id } => {
+        AudioEngineSubcommands::Leave { guild_id, channel_id } => {
             let gid = resolve_guild_id(guild_id)?;
-            let success = client.leave(gid).await?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
+            let success = client.leave(gid, cid).await?;
             println!("Leave Success: {}", success);
         }
         AudioEngineSubcommands::Play {
             guild_id,
+            channel_id,
             queue,
             tap,
             request,
             volume,
         } => {
             let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let track_id = client
                 .play(
                     gid,
+                    cid,
                     QueueName::from(queue),
                     TapName::from(tap),
                     AudioRequestString::from(config.resolve_alias(&request)),
@@ -71,27 +87,32 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
         }
         AudioEngineSubcommands::SetVolume {
             guild_id,
+            channel_id,
             track_id,
             volume,
         } => {
             let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let success = client
-                .set_volume(gid, TrackId::from(track_id), Volume::from(volume))
+                .set_volume(gid, cid, TrackId::from(track_id), Volume::from(volume))
                 .await?;
             println!("SetVolume Success: {}", success);
         }
-        AudioEngineSubcommands::Stop { guild_id, track_id } => {
+        AudioEngineSubcommands::Stop { guild_id, channel_id, track_id } => {
             let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let tid = track_id.parse::<u64>().context("Invalid track ID")?;
-            let success = client.stop(gid, TrackId::from(tid)).await?;
+            let success = client.stop(gid, cid, TrackId::from(tid)).await?;
             println!("Stop Success: {}", success);
         }
         AudioEngineSubcommands::StopMany {
             guild_id,
+            channel_id,
             filter,
             user_id,
         } => {
             let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let filter_type = match filter.to_lowercase().as_str() {
                 "all" => AudioStopFilter::All,
                 "music" => AudioStopFilter::Music,
@@ -106,47 +127,22 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
                 }
             };
 
-            let success = client.stop_many(gid, filter_type).await?;
+            let success = client.stop_many(gid, cid, filter_type).await?;
             println!("StopMany Success: {}", success);
         }
-        AudioEngineSubcommands::NextMusic { guild_id } => {
+        AudioEngineSubcommands::NextMusic { guild_id, channel_id } => {
             let gid = resolve_guild_id(guild_id)?;
-            let success = client.next_music(gid).await?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
+            let success = client.next_music(gid, cid).await?;
             println!("NextMusic Success: {}", success);
         }
-        AudioEngineSubcommands::GetSessionState { guild_id } => {
+        AudioEngineSubcommands::GetSessionState { guild_id, channel_id } => {
             let gid = resolve_guild_id(guild_id)?;
-            let state = client.get_session_state(gid).await?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
+            let state = client.get_session_state(gid, cid).await?;
             formatter::print_session_state_native(state);
         }
     }
 
     Ok(())
-}
-
-async fn connect(
-    addr: String,
-    token: Option<String>,
-) -> Result<jsonrpsee::http_client::HttpClient> {
-    let endpoint = if addr.starts_with("http") {
-        addr
-    } else {
-        format!("http://{}", addr)
-    };
-
-    println!("Connecting to Audio Engine at {}...", endpoint);
-
-    let mut builder = HttpClientBuilder::default();
-    if let Some(token) = token {
-        let mut headers = jsonrpsee::http_client::HeaderMap::new();
-        headers.insert(
-            HeaderName::from_static("x-ae-token"),
-            HeaderValue::from_str(&token).context("Invalid token format")?,
-        );
-        builder = builder.set_headers(headers);
-    }
-
-    builder
-        .build(endpoint)
-        .context("Failed to connect to Audio Engine service")
 }

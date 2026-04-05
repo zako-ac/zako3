@@ -21,12 +21,16 @@ pub enum AudioEngineSubcommands {
     Leave {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
     },
     /// Play audio in a voice channel
     #[command(name = "play", alias = "p")]
     Play {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
         #[arg(long, help = "Queue name", default_value = "default")]
         queue: String,
         #[arg(long, help = "Tap name", default_value = "ytdl")]
@@ -41,6 +45,8 @@ pub enum AudioEngineSubcommands {
     SetVolume {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
         #[arg(help = "The Track ID")]
         track_id: u64,
         #[arg(help = "Volume (0.0 - 1.0)")]
@@ -50,6 +56,8 @@ pub enum AudioEngineSubcommands {
     Stop {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
         #[arg(help = "The Track ID")]
         track_id: String,
     },
@@ -58,6 +66,8 @@ pub enum AudioEngineSubcommands {
     StopMany {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
         #[arg(long, help = "Filter type: all, music, tts", default_value = "all")]
         filter: String,
         #[arg(long, help = "User ID for TTS filter", required_if_eq("filter", "tts"))]
@@ -67,11 +77,15 @@ pub enum AudioEngineSubcommands {
     NextMusic {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
     },
     /// Get the current session state
     #[command(name = "get-session-state", alias = "gss")]
     GetSessionState {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
+        #[arg(short = 'c', long, help = "The Channel ID")]
+        channel_id: String,
     },
 }
