@@ -48,7 +48,7 @@ impl TapService {
             .audit_log
             .log(
                 created_tap.id.0,
-                owner_id,
+                Some(owner_id),
                 "tap.create".to_string(),
                 Some(serde_json::json!({ "name": dto.name, "description": dto.description, "roles": dto.roles, "permission": dto.permission })),
             )
@@ -227,11 +227,17 @@ impl TapService {
             tap.description = Some(description.clone());
         }
         if let Some(permission) = &dto.permission {
-            changes.insert("permission".to_string(), serde_json::to_value(permission).unwrap_or(serde_json::Value::Null));
+            changes.insert(
+                "permission".to_string(),
+                serde_json::to_value(permission).unwrap_or(serde_json::Value::Null),
+            );
             tap.permission = permission.clone();
         }
         if let Some(roles) = &dto.roles {
-            changes.insert("roles".to_string(), serde_json::to_value(roles).unwrap_or(serde_json::Value::Null));
+            changes.insert(
+                "roles".to_string(),
+                serde_json::to_value(roles).unwrap_or(serde_json::Value::Null),
+            );
             tap.roles = roles.clone();
         }
         tap.timestamp.updated_at = chrono::Utc::now();
@@ -242,7 +248,7 @@ impl TapService {
             .audit_log
             .log(
                 tap_id,
-                user_id,
+                Some(user_id),
                 "tap.update".to_string(),
                 Some(serde_json::Value::Object(changes)),
             )
@@ -273,7 +279,7 @@ impl TapService {
             .audit_log
             .log(
                 tap_id,
-                admin_id,
+                Some(admin_id),
                 "tap.verify".to_string(),
                 Some(serde_json::json!({ "occupation": occupation })),
             )
@@ -297,7 +303,7 @@ impl TapService {
 
         let _ = self
             .audit_log
-            .log(tap_id, user_id, "tap.delete".to_string(), None)
+            .log(tap_id, Some(user_id), "tap.delete".to_string(), None)
             .await;
 
         Ok(())

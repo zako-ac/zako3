@@ -51,7 +51,7 @@ pub struct LoginResponseDto {
     pub redirect_url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSummaryDto {
     pub id: String,

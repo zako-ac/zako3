@@ -10,6 +10,8 @@ refer hq todo
 - [x] AE Track proto handling (todo!)
 - [ ] Make AE work without TH (atleast no crash)
 - [ ] Migrate vendor to fork
+- [ ] change IDs from Uuid to String
+- [ ] implement cache
 
 ## Web
 - [ ] When browsing my tap, make API key create in sidebar
@@ -18,4 +20,6 @@ refer hq todo
 - [x] Increase border contrast
 - [ ] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
 - [ ] unread-count
-- [ ] change IDs from Uuid to String
+- [ ] Improve chart
+
+- [ ] Make all cards in settings as component

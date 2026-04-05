@@ -1,7 +1,7 @@
-use crate::repo::audit_log::AuditLogRepo;
 use crate::CoreResult;
-use hq_types::hq::audit_log::{AuditLogDto, CreateAuditLogDto, PaginatedAuditLogsDto};
-use hq_types::hq::dtos::PaginationMetaDto;
+use crate::repo::audit_log::AuditLogRepo;
+use hq_types::hq::audit_log::{ActorDto, AuditLogDto, CreateAuditLogDto, PaginatedAuditLogsDto};
+use hq_types::hq::dtos::{PaginationMetaDto, UserSummaryDto};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ impl AuditLogService {
     pub async fn log(
         &self,
         tap_id: Uuid,
-        actor_id: Uuid,
+        actor_id: Option<Uuid>,
         action_type: String,
         metadata: Option<serde_json::Value>,
     ) -> CoreResult<()> {
@@ -42,13 +42,25 @@ impl AuditLogService {
 
         let data = records
             .into_iter()
-            .map(|r| AuditLogDto {
-                id: r.id.to_string(),
-                tap_id: r.tap_id.to_string(),
-                actor_id: r.actor_id.to_string(),
-                action_type: r.action_type,
-                metadata: r.metadata,
-                created_at: r.created_at,
+            .map(|r| {
+                let actor = if let (Some(actor_id), Some(username)) = (r.log.actor_id, r.username) {
+                    ActorDto::User(UserSummaryDto {
+                        id: actor_id.to_string(),
+                        username,
+                        avatar: r.avatar_url.unwrap_or_default(),
+                    })
+                } else {
+                    ActorDto::System
+                };
+
+                AuditLogDto {
+                    id: r.log.id.to_string(),
+                    tap_id: r.log.tap_id.to_string(),
+                    actor,
+                    action_type: r.log.action_type,
+                    metadata: r.log.metadata,
+                    created_at: r.log.created_at,
+                }
             })
             .collect();
 

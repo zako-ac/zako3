@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { NOTIFICATION_LEVELS, NOTIFICATION_CATEGORIES } from '../constants';
 import { sortDirectionSchema } from './api';
+import { userSummarySchema } from './user';
 
 // ============================================================================
 // Notification Schemas
@@ -56,10 +57,15 @@ export const auditLogFiltersSchema = z.object({
     endDate: z.string().optional(),
 });
 
+export const actorSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('user'), data: userSummarySchema }),
+    z.object({ type: z.literal('system') }),
+]);
+
 export const tapAuditLogEntrySchema = z.object({
     id: z.string(),
     tapId: z.string(),
-    actorId: z.string().nullable(),
+    actor: actorSchema,
     actionType: z.string(),
     details: z.string().nullable(),
     createdAt: z.string(),
@@ -76,4 +82,5 @@ export type NotificationFilters = z.infer<typeof notificationFiltersSchema>;
 export type NotificationSort = z.infer<typeof notificationSortSchema>;
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
 export type AuditLogFilters = z.infer<typeof auditLogFiltersSchema>;
+export type Actor = z.infer<typeof actorSchema>;
 export type TapAuditLogEntry = z.infer<typeof tapAuditLogEntrySchema>;

@@ -118,12 +118,14 @@ export const TapSettingsPage = () => {
 
     const handleRegenerateToken = async (tokenId: string) => {
         try {
-            await regenerateToken(tokenId)
+            const result = await regenerateToken(tokenId)
             toast.success(t('taps.settings.tokenRegenerated'))
+            return result
         } catch (error) {
             toast.error(
                 error instanceof Error ? error.message : 'Failed to regenerate token'
             )
+            throw error
         }
     }
 

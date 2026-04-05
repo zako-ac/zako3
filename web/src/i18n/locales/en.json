@@ -336,6 +336,7 @@
         "tokenNeverExpires": "Never expires",
         "tokenNeverUsed": "Never used",
         "tokenRegenerated": "Token regenerated successfully",
+        "tokenOneTimeView": "This token will only be shown once. Please save it securely.",
         "updateSuccess": "Tap updated successfully!",
         "yourNewToken": "Your New Token"
       },

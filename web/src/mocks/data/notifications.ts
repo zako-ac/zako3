@@ -107,23 +107,34 @@ export const createAuditLogEntry = (
 export const createTapAuditLogEntry = (
     tapId: string,
     overrides?: Partial<TapAuditLogEntry>
-): TapAuditLogEntry => ({
-    id: faker.string.uuid(),
-    tapId,
-    actorId: faker.string.uuid(),
-    actionType: faker.helpers.arrayElement([
-        'tap.created',
-        'tap.updated',
-        'tap.settings.changed',
-        'tap.permission.changed',
-        'tap.role.added',
-        'tap.role.removed',
-        'tap.verification.requested',
-    ]),
-    details: faker.lorem.sentence(),
-    createdAt: faker.date.recent({ days: 90 }).toISOString(),
-    ...overrides,
-})
+): TapAuditLogEntry => {
+    const isSystem = faker.datatype.boolean({ probability: 0.1 });
+    
+    return {
+        id: faker.string.uuid(),
+        tapId,
+        actor: isSystem ? { type: 'system' } : {
+            type: 'user',
+            data: {
+                id: faker.string.uuid(),
+                username: faker.internet.username(),
+                avatar: faker.image.avatar(),
+            }
+        },
+        actionType: faker.helpers.arrayElement([
+            'tap.created',
+            'tap.updated',
+            'tap.settings.changed',
+            'tap.permission.changed',
+            'tap.role.added',
+            'tap.role.removed',
+            'tap.verification.requested',
+        ]),
+        details: faker.lorem.sentence(),
+        createdAt: faker.date.recent({ days: 90 }).toISOString(),
+        ...overrides,
+    };
+}
 
 export const mockNotifications: Notification[] = Array.from({ length: 50 }, () =>
     createNotification()

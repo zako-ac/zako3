@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, RotateCw, Trash2, Check } from 'lucide-react'
+import { Copy, RotateCw, Trash2, Check, AlertTriangle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,9 +11,8 @@ import type { TapApiToken } from '@zako-ac/zako3-data'
 
 interface ApiTokenItemProps {
     token: TapApiToken
-    onRegenerate: (tokenId: string) => void
+    onRegenerate: (tokenId: string) => Promise<{ token: string }>
     onDelete: (tokenId: string) => void
-    onNewToken?: (fullToken: string) => void
     isRegenerating?: boolean
     isDeleting?: boolean
 }
@@ -29,15 +28,21 @@ export const ApiTokenItem = ({
     const { copied, copy } = useClipboard()
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false)
+    const [newToken, setNewToken] = useState<string | null>(null)
 
-    const handleCopy = async () => {
-        await copy(token.token)
+    const handleCopyToken = async (text: string) => {
+        await copy(text)
         toast.success(t('taps.settings.tokenCopied'))
     }
 
-    const handleRegenerate = () => {
-        onRegenerate(token.id)
-        setRegenerateDialogOpen(false)
+    const handleRegenerate = async () => {
+        try {
+            const result = await onRegenerate(token.id)
+            setNewToken(result.token)
+            setRegenerateDialogOpen(false)
+        } catch (error) {
+            // Error is handled in the parent
+        }
     }
 
     const handleDelete = () => {
@@ -53,8 +58,8 @@ export const ApiTokenItem = ({
 
     return (
         <>
-            <div className="border-border rounded-lg border p-4">
-                <div className="mb-3 flex items-start justify-between">
+            <div className="border-border rounded-lg border p-4 space-y-4">
+                <div className="flex items-start justify-between">
                     <div>
                         <h4 className="font-medium">{token.label}</h4>
                         <p className="text-muted-foreground text-xs">
@@ -65,7 +70,10 @@ export const ApiTokenItem = ({
                         <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setRegenerateDialogOpen(true)}
+                            onClick={() => {
+                                setNewToken(null)
+                                setRegenerateDialogOpen(true)
+                            }}
                             disabled={isRegenerating || isDeleting}
                         >
                             <RotateCw className="h-4 w-4" />
@@ -81,28 +89,62 @@ export const ApiTokenItem = ({
                     </div>
                 </div>
 
-                <div className="mb-2 flex gap-2">
-                    <Input
-                        value={token.token}
-                        readOnly
-                        className="font-mono text-xs"
-                        type="text"
-                    />
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleCopy}
-                        className="shrink-0"
-                    >
-                        {copied ? (
-                            <Check className="h-4 w-4" />
-                        ) : (
-                            <Copy className="h-4 w-4" />
-                        )}
-                    </Button>
-                </div>
+                {newToken ? (
+                    <div className="space-y-3">
+                        <div className="bg-warning/10 text-warning border-warning/20 flex gap-3 rounded-lg border p-3">
+                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                            <p className="text-xs">{t('taps.settings.copyTokenWarning')}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Input
+                                value={newToken}
+                                readOnly
+                                className="font-mono text-xs border-warning/50 bg-warning/5"
+                                type="text"
+                                autoFocus
+                                onClick={(e) => e.currentTarget.select()}
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleCopyToken(newToken)}
+                                className="shrink-0"
+                            >
+                                {copied ? (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                ) : (
+                                    <Copy className="h-4 w-4" />
+                                )}
+                            </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground italic">
+                            * {t('taps.settings.tokenOneTimeView')}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex gap-2">
+                        <Input
+                            value={token.token}
+                            readOnly
+                            className="font-mono text-xs opacity-70"
+                            type="text"
+                        />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCopyToken(token.token)}
+                            className="shrink-0"
+                        >
+                            {copied ? (
+                                <Check className="h-4 w-4" />
+                            ) : (
+                                <Copy className="h-4 w-4" />
+                            )}
+                        </Button>
+                    </div>
+                )}
 
-                <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
+                <div className="text-muted-foreground flex flex-wrap gap-3 text-xs pt-1">
                     <span>
                         {t('taps.settings.tokenLastUsed')}:{' '}
                         {token.lastUsedAt

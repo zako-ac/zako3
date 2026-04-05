@@ -4,6 +4,13 @@ use hq_types::hq::audit_log::{AuditLog, CreateAuditLogDto};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
+pub struct AuditLogWithActor {
+    pub log: AuditLog,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
 #[async_trait]
 pub trait AuditLogRepo: Send + Sync {
     async fn create(&self, dto: &CreateAuditLogDto) -> CoreResult<AuditLog>;
@@ -12,7 +19,7 @@ pub trait AuditLogRepo: Send + Sync {
         tap_id: Uuid,
         page: i64,
         limit: i64,
-    ) -> CoreResult<(Vec<AuditLog>, i64)>;
+    ) -> CoreResult<(Vec<AuditLogWithActor>, i64)>;
 }
 
 pub struct PgAuditLogRepo {
@@ -57,7 +64,7 @@ impl AuditLogRepo for PgAuditLogRepo {
         tap_id: Uuid,
         page: i64,
         limit: i64,
-    ) -> CoreResult<(Vec<AuditLog>, i64)> {
+    ) -> CoreResult<(Vec<AuditLogWithActor>, i64)> {
         let offset = (page - 1) * limit;
 
         let row = sqlx::query("SELECT COUNT(*) as count FROM audit_logs WHERE tap_id = $1")
@@ -69,10 +76,13 @@ impl AuditLogRepo for PgAuditLogRepo {
 
         let rows = sqlx::query(
             r#"
-            SELECT id, tap_id, actor_id, action_type, metadata, created_at
-            FROM audit_logs
-            WHERE tap_id = $1
-            ORDER BY created_at DESC
+            SELECT 
+                al.id, al.tap_id, al.actor_id, al.action_type, al.metadata, al.created_at,
+                u.username, u.avatar_url
+            FROM audit_logs al
+            LEFT JOIN users u ON al.actor_id = u.id
+            WHERE al.tap_id = $1
+            ORDER BY al.created_at DESC
             LIMIT $2 OFFSET $3
             "#,
         )
@@ -84,13 +94,17 @@ impl AuditLogRepo for PgAuditLogRepo {
 
         let records = rows
             .into_iter()
-            .map(|row| AuditLog {
-                id: row.try_get("id").unwrap_or_default(),
-                tap_id: row.try_get("tap_id").unwrap_or_default(),
-                actor_id: row.try_get("actor_id").unwrap_or_default(),
-                action_type: row.try_get("action_type").unwrap_or_default(),
-                metadata: row.try_get("metadata").unwrap_or_default(),
-                created_at: row.try_get("created_at").unwrap_or_default(),
+            .map(|row| AuditLogWithActor {
+                log: AuditLog {
+                    id: row.try_get("id").unwrap_or_default(),
+                    tap_id: row.try_get("tap_id").unwrap_or_default(),
+                    actor_id: row.try_get("actor_id").ok(),
+                    action_type: row.try_get("action_type").unwrap_or_default(),
+                    metadata: row.try_get("metadata").unwrap_or_default(),
+                    created_at: row.try_get("created_at").unwrap_or_default(),
+                },
+                username: row.try_get("username").ok(),
+                avatar_url: row.try_get("avatar_url").ok(),
             })
             .collect();
 

@@ -80,7 +80,7 @@ impl ApiKeyService {
 
         let _ = self.audit_log.log(
             tap_id,
-            user_id,
+            Some(user_id),
             "api_key.create".to_string(),
             Some(serde_json::json!({ "key_id": created.id.0.to_string(), "label": created.label, "expires_at": created.expires_at }))
         ).await;
@@ -161,7 +161,7 @@ impl ApiKeyService {
             .audit_log
             .log(
                 tap_id,
-                user_id,
+                Some(user_id),
                 "api_key.update".to_string(),
                 Some(serde_json::Value::Object(changes)),
             )
@@ -196,7 +196,7 @@ impl ApiKeyService {
             .audit_log
             .log(
                 tap_id,
-                user_id,
+                Some(user_id),
                 "api_key.delete".to_string(),
                 Some(serde_json::json!({ "key_id": key_id.to_string(), "label": key.label })),
             )
@@ -232,7 +232,7 @@ impl ApiKeyService {
             .audit_log
             .log(
                 tap_id,
-                user_id,
+                Some(user_id),
                 "api_key.regenerate".to_string(),
                 Some(serde_json::json!({ "key_id": key_id.to_string() })),
             )

@@ -1,7 +1,4 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use serenity::Client;
 use serenity::all::GatewayIntents;
@@ -12,9 +9,7 @@ use zako3_audio_engine_protos::audio_engine_server::AudioEngineServer as GrpcSer
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
-    discord::SongbirdDiscordService,
-    state::RedisStateService,
-    taphub::{RealTapHubService, StubTapHubService},
+    discord::SongbirdDiscordService, state::RedisStateService, taphub::RealTapHubService,
 };
 
 use tonic::transport::Server;

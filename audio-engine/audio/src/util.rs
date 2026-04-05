@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use ringbuf::{HeapRb, traits::Split};
 
 use crate::{OpusCons, OpusProd, RINGBUFFER_SIZE, RingCons, RingProd};

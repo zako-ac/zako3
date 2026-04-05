@@ -200,17 +200,7 @@ export const TapStatsPage = () => {
                                                 <Badge variant="outline">{log.actionType}</Badge>
                                             </TableCell>
                                             <TableCell>
-                                                {log.actorId ? (
-                                                    <UserBadge
-                                                        user={{
-                                                            id: log.actorId,
-                                                            username: log.actorId.slice(0, 8), // Fallback if username not available
-                                                        }}
-                                                        showId={false}
-                                                    />
-                                                ) : (
-                                                    <span className="text-muted-foreground text-xs italic">System</span>
-                                                )}
+                                                <UserBadge actor={log.actor} />
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {formatRelativeTime(log.createdAt, i18n.language)}
