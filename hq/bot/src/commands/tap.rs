@@ -29,7 +29,7 @@ pub async fn create(
         permission: None,
         roles: None,
     };
-    let tap = service.tap.create(user.id.0, dto).await?;
+    let tap = service.tap.create(user.id, dto).await?;
 
     ctx.say(format!("Tap '{}' created! ID: {}", tap.name.0, tap.id.0))
         .await?;
@@ -46,7 +46,7 @@ pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
         .auth
         .get_or_create_user(&discord_id, username, None, None)
         .await?;
-    let taps = service.tap.list_by_user(user.id.0).await?;
+    let taps = service.tap.list_by_user(user.id).await?;
 
     let mut response = String::from("Your Taps:\n");
     for tap_item in taps.data {

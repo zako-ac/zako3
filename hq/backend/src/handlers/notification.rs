@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{NotificationDto, PaginatedResponseDto};
+use hq_types::hq::{NotificationDto, NotificationId, PaginatedResponseDto};
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
@@ -44,7 +44,7 @@ pub async fn list_notifications(
     patch,
     path = "/api/v1/notifications/{id}/read",
     params(
-        ("id" = u64, Path, description = "Notification ID"),
+        ("id" = String, Path, description = "Notification ID"),
     ),
     responses(
         (status = 200, description = "Notification marked as read", body = NotificationDto)
@@ -56,7 +56,7 @@ pub async fn list_notifications(
 pub async fn mark_notification_read(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<NotificationId>,
 ) -> Result<Json<NotificationDto>, (axum::http::StatusCode, String)> {
     let notification = service
         .notification

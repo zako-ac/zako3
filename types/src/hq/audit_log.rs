@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-pub type AuditLogId = u64;
+pub type AuditLogId = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
@@ -16,8 +16,8 @@ pub enum ActorDto {
 #[serde(rename_all = "camelCase")]
 pub struct AuditLog {
     pub id: AuditLogId,
-    pub tap_id: u64,
-    pub actor_id: Option<u64>,
+    pub tap_id: String,
+    pub actor_id: Option<String>,
     pub action_type: String,
     pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
@@ -37,8 +37,8 @@ pub struct AuditLogDto {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAuditLogDto {
-    pub tap_id: u64,
-    pub actor_id: Option<u64>,
+    pub tap_id: String,
+    pub actor_id: Option<String>,
     pub action_type: String,
     pub metadata: Option<serde_json::Value>,
 }

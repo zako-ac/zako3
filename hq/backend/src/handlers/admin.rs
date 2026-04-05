@@ -4,7 +4,9 @@ use axum::{
     extract::{Path, Query, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{RejectVerificationDto, VerificationRequest, VerificationStatus};
+use hq_types::hq::{
+    RejectVerificationDto, VerificationRequest, VerificationRequestId, VerificationStatus,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -76,7 +78,7 @@ pub async fn list_verification_requests(
     post,
     path = "/api/v1/admin/verifications/{id}/approve",
     params(
-        ("id" = u64, Path, description = "Request ID"),
+        ("id" = String, Path, description = "Request ID"),
     ),
     responses(
         (status = 200, description = "Verification approved", body = VerificationRequest)
@@ -88,7 +90,7 @@ pub async fn list_verification_requests(
 pub async fn approve_verification(
     State(service): State<Arc<Service>>,
     AdminUser(admin_id): AdminUser,
-    Path(id): Path<u64>,
+    Path(id): Path<VerificationRequestId>,
 ) -> Result<Json<VerificationRequest>, (axum::http::StatusCode, String)> {
     let request = service
         .verification
@@ -104,7 +106,7 @@ pub async fn approve_verification(
     path = "/api/v1/admin/verifications/{id}/reject",
     request_body = RejectVerificationDto,
     params(
-        ("id" = u64, Path, description = "Request ID"),
+        ("id" = String, Path, description = "Request ID"),
     ),
     responses(
         (status = 200, description = "Verification rejected", body = VerificationRequest)
@@ -116,7 +118,7 @@ pub async fn approve_verification(
 pub async fn reject_verification(
     State(service): State<Arc<Service>>,
     AdminUser(admin_id): AdminUser,
-    Path(id): Path<u64>,
+    Path(id): Path<VerificationRequestId>,
     Json(payload): Json<RejectVerificationDto>,
 ) -> Result<Json<VerificationRequest>, (axum::http::StatusCode, String)> {
     let request = service

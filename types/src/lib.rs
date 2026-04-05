@@ -28,9 +28,11 @@ pub struct QueueName(String);
 #[display("{_0}")]
 pub struct TrackId(u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Into, From, Display, FromStr, Serialize, Deserialize,
+)]
 #[display("{_0}")]
-pub struct UserId(u64);
+pub struct UserId(pub String);
 
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,

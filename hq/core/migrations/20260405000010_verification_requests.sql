@@ -1,8 +1,8 @@
 -- Create verification_requests table
 CREATE TABLE IF NOT EXISTS verification_requests (
-    id BIGINT PRIMARY KEY,
-    tap_id BIGINT NOT NULL REFERENCES taps(id) ON DELETE CASCADE,
-    requester_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    tap_id TEXT NOT NULL REFERENCES taps(id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, approved, rejected

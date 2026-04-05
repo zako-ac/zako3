@@ -4,10 +4,11 @@ use axum::{
     http::{StatusCode, request::Parts},
 };
 use hq_core::{Claims, Service};
+use hq_types::hq::UserId;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use std::sync::Arc;
 
-pub struct AuthUser(pub u64);
+pub struct AuthUser(pub UserId);
 
 #[async_trait]
 impl FromRequestParts<Arc<Service>> for AuthUser {
@@ -18,7 +19,7 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
         state: &Arc<Service>,
     ) -> Result<Self, Self::Rejection> {
         if let Some(auth_user) = parts.extensions.get::<AuthUser>() {
-            return Ok(AuthUser(auth_user.0));
+            return Ok(AuthUser(auth_user.0.clone()));
         }
 
         let auth_header = parts.headers.get("Authorization").ok_or((
@@ -49,12 +50,7 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
         )
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
 
-        let user_id: u64 = token_data.claims.sub.parse().map_err(|_| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "Invalid user ID in token".to_string(),
-            )
-        })?;
+        let user_id = UserId(token_data.claims.sub);
 
         state
             .auth
@@ -66,7 +62,7 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
     }
 }
 
-pub struct AdminUser(pub u64);
+pub struct AdminUser(pub UserId);
 
 #[async_trait]
 impl FromRequestParts<Arc<Service>> for AdminUser {

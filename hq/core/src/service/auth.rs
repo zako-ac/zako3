@@ -1,9 +1,10 @@
 use crate::repo::UserRepository;
 use crate::{AppConfig, CoreError, CoreResult};
-use hq_types::hq::{AuthResponseDto, AuthUserDto, LoginResponseDto, User};
+use hq_types::hq::{AuthResponseDto, AuthUserDto, LoginResponseDto, User, UserId};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -155,7 +156,7 @@ impl AuthService {
             }
             None => {
                 let mut new_user = User::new(
-                    hq_types::hq::next_id(),
+                    hq_types::hq::next_id().to_string(),
                     discord_id.to_string(),
                     username.to_string(),
                 );
@@ -174,8 +175,7 @@ impl AuthService {
     }
 
     pub async fn get_user(&self, id: &str) -> CoreResult<AuthUserDto> {
-        let user_id = id
-            .parse::<u64>()
+        let user_id = UserId::from_str(id)
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
         let user = self
             .user_repo
@@ -184,7 +184,7 @@ impl AuthService {
             .ok_or(CoreError::NotFound("User not found".to_string()))?;
 
         Ok(AuthUserDto {
-            id: user.id.0.to_string(),
+            id: user.id.0.clone(),
             discord_id: user.discord_user_id.0.clone(),
             username: user.username.0.clone(),
             avatar: user.avatar_url.unwrap_or_default(),
@@ -194,8 +194,7 @@ impl AuthService {
     }
 
     pub async fn refresh_token(&self, id: &str) -> CoreResult<AuthResponseDto> {
-        let user_id = id
-            .parse::<u64>()
+        let user_id = UserId::from_str(id)
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
 
         let user = self
@@ -240,13 +239,13 @@ impl AuthService {
         self.user_repo.list_all().await
     }
 
-    pub async fn get_user_internal(&self, id: u64) -> CoreResult<Option<User>> {
+    pub async fn get_user_internal(&self, id: UserId) -> CoreResult<Option<User>> {
         self.user_repo.find_by_id(id).await
     }
 
     pub async fn update_user_permissions(
         &self,
-        id: u64,
+        id: UserId,
         permissions: Vec<String>,
     ) -> CoreResult<User> {
         self.user_repo.update_permissions(id, permissions).await

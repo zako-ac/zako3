@@ -22,10 +22,10 @@ struct StubHqRepository;
 impl HqRepository for StubHqRepository {
     async fn authenticate_tap(&self, _token: &str) -> Option<Tap> {
         Tap {
-            id: TapId(0x67e55044_10b1_426f),
+            id: TapId("0x67e55044_10b1_426f".to_string()),
             name: "mytap".to_string().into(),
             description: "This is a stub tap for testing".to_string().into(),
-            owner_id: UserId(1),
+            owner_id: UserId("1".to_string()),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
@@ -35,10 +35,10 @@ impl HqRepository for StubHqRepository {
     }
     async fn get_tap_by_id(&self, _tap_id: &str) -> Option<Tap> {
         Tap {
-            id: TapId(0x67e55044_10b1_426f),
+            id: TapId("0x67e55044_10b1_426f".to_string()),
             name: "mytap".to_string().into(),
             description: "This is a stub tap for testing".to_string().into(),
-            owner_id: UserId(1),
+            owner_id: UserId("1".to_string()),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
@@ -49,7 +49,7 @@ impl HqRepository for StubHqRepository {
 
     async fn get_user_by_discord_id(&self, discord_id: &DiscordUserId) -> Option<User> {
         Some(User {
-            id: UserId(1),
+            id: UserId("1".to_string()),
             discord_user_id: discord_id.clone(),
             username: Username("stubuser".to_string()),
             avatar_url: None,
@@ -63,7 +63,7 @@ impl HqRepository for StubHqRepository {
 #[derive(Default)]
 struct StubCacheRepository {
     data: DashMap<String, String>,
-    hll: DashMap<String, std::collections::HashSet<u64>>,
+    hll: DashMap<String, std::collections::HashSet<String>>,
 }
 
 #[async_trait]
@@ -97,8 +97,11 @@ impl CacheRepository for StubCacheRepository {
         Ok(val)
     }
 
-    async fn pfadd(&self, key: &str, element: u64) -> Result<(), zako3_states::StateServiceError> {
-        self.hll.entry(key.to_string()).or_default().insert(element);
+    async fn pfadd(&self, key: &str, element: &str) -> Result<(), zako3_states::StateServiceError> {
+        self.hll
+            .entry(key.to_string())
+            .or_default()
+            .insert(element.to_string());
         Ok(())
     }
 

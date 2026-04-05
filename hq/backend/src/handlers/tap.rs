@@ -5,8 +5,8 @@ use axum::{
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::{
-    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapDto, TapStatsDto,
-    TapWithAccessDto, VerificationRequest,
+    CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, Tap, TapDto, TapId,
+    TapStatsDto, TapWithAccessDto, VerificationRequest,
 };
 use std::sync::Arc;
 
@@ -83,7 +83,7 @@ pub async fn list_taps(
     get,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = u64, Path, description = "Tap ID")
+        ("id" = String, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap details", body = TapWithAccessDto)
@@ -95,7 +95,7 @@ pub async fn list_taps(
 pub async fn get_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
 ) -> Result<Json<TapWithAccessDto>, (axum::http::StatusCode, String)> {
     let tap = service
         .tap
@@ -110,7 +110,7 @@ pub async fn get_tap(
     get,
     path = "/api/v1/taps/{id}/stats",
     params(
-        ("id" = u64, Path, description = "Tap ID")
+        ("id" = String, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap statistics", body = TapStatsDto)
@@ -122,7 +122,7 @@ pub async fn get_tap(
 pub async fn get_tap_stats(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
 ) -> Result<Json<TapStatsDto>, (axum::http::StatusCode, String)> {
     let stats = service
         .tap
@@ -137,7 +137,7 @@ pub async fn get_tap_stats(
     patch,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = u64, Path, description = "Tap ID")
+        ("id" = String, Path, description = "Tap ID")
     ),
     request_body = hq_types::hq::UpdateTapDto,
     responses(
@@ -150,7 +150,7 @@ pub async fn get_tap_stats(
 pub async fn update_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
     Json(payload): Json<hq_types::hq::UpdateTapDto>,
 ) -> Result<Json<Tap>, (axum::http::StatusCode, String)> {
     let tap = service
@@ -166,7 +166,7 @@ pub async fn update_tap(
     delete,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = u64, Path, description = "Tap ID")
+        ("id" = String, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap deleted")
@@ -178,7 +178,7 @@ pub async fn update_tap(
 pub async fn delete_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
 ) -> Result<Json<()>, (axum::http::StatusCode, String)> {
     service
         .tap
@@ -194,7 +194,7 @@ pub async fn delete_tap(
     path = "/api/v1/taps/{id}/verify",
     request_body = CreateVerificationRequestDto,
     params(
-        ("id" = u64, Path, description = "Tap ID")
+        ("id" = String, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Verification requested", body = VerificationRequest)
@@ -206,7 +206,7 @@ pub async fn delete_tap(
 pub async fn request_verification(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
     Json(payload): Json<CreateVerificationRequestDto>,
 ) -> Result<Json<VerificationRequest>, (axum::http::StatusCode, String)> {
     let request = service

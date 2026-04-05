@@ -4,7 +4,9 @@ use axum::{
     extract::{Path, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{ApiKeyDto, ApiKeyResponseDto, CreateApiKeyDto, UpdateApiKeyDto};
+use hq_types::hq::{
+    ApiKeyDto, ApiKeyId, ApiKeyResponseDto, CreateApiKeyDto, TapId, UpdateApiKeyDto,
+};
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
@@ -21,7 +23,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
 pub async fn create_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
     Json(dto): Json<CreateApiKeyDto>,
 ) -> Result<Json<ApiKeyResponseDto>, (axum::http::StatusCode, String)> {
     let res = service
@@ -35,7 +37,7 @@ pub async fn create_key(
 pub async fn list_keys(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path(tap_id): Path<u64>,
+    Path(tap_id): Path<TapId>,
 ) -> Result<Json<Vec<ApiKeyDto>>, (axum::http::StatusCode, String)> {
     let res = service
         .api_key
@@ -48,7 +50,7 @@ pub async fn list_keys(
 pub async fn update_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(u64, u64)>,
+    Path((tap_id, key_id)): Path<(TapId, ApiKeyId)>,
     Json(dto): Json<UpdateApiKeyDto>,
 ) -> Result<Json<ApiKeyDto>, (axum::http::StatusCode, String)> {
     let res = service
@@ -62,7 +64,7 @@ pub async fn update_key(
 pub async fn delete_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(u64, u64)>,
+    Path((tap_id, key_id)): Path<(TapId, ApiKeyId)>,
 ) -> Result<axum::http::StatusCode, (axum::http::StatusCode, String)> {
     service
         .api_key
@@ -75,7 +77,7 @@ pub async fn delete_key(
 pub async fn regenerate_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(u64, u64)>,
+    Path((tap_id, key_id)): Path<(TapId, ApiKeyId)>,
 ) -> Result<Json<ApiKeyResponseDto>, (axum::http::StatusCode, String)> {
     let res = service
         .api_key

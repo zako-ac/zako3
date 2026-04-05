@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tap = ZakofishTap::new(client_config)?;
 
     let hello_info = TapClientHello {
-        tap_id: TapId(Uuid::new_v4()),
+        tap_id: TapId(Uuid::new_v4().to_string()),
         friendly_name: "Simple Tap Example".to_string(),
         api_token: "secret_token".to_string(),
         selection_weight: 1.0,

@@ -1,12 +1,23 @@
 use super::UserId;
-use derive_more::{From, FromStr, Into};
+use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr, Copy,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    PartialEq,
+    Eq,
+    ToSchema,
+    Hash,
+    FromStr,
+    Display,
 )]
-pub struct NotificationId(pub u64);
+pub struct NotificationId(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Notification {
@@ -20,10 +31,16 @@ pub struct Notification {
 }
 
 impl Notification {
-    pub fn new(id: u64, user_id: u64, r#type: String, title: String, message: String) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        user_id: impl Into<String>,
+        r#type: String,
+        title: String,
+        message: String,
+    ) -> Self {
         Self {
-            id: NotificationId(id),
-            user_id: UserId(user_id),
+            id: NotificationId(id.into()),
+            user_id: UserId(user_id.into()),
             r#type,
             title,
             message,

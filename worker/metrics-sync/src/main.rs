@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS tap_metrics (
             time TIMESTAMPTZ NOT NULL,
-            tap_id BIGINT NOT NULL,
+            tap_id TEXT NOT NULL,
             total_uses BIGINT DEFAULT 0,
             active_now BIGINT DEFAULT 0,
             cache_hits BIGINT DEFAULT 0,
@@ -59,21 +59,20 @@ async fn main() -> Result<()> {
             Ok(taps) => {
                 let now = Utc::now();
                 for tap_id in &taps {
-                    let tap_id = *tap_id;
                     let total_uses = metrics_service
-                        .get_metric(tap_id, TapMetricKey::TotalUses)
+                        .get_metric(tap_id.clone(), TapMetricKey::TotalUses)
                         .await
                         .unwrap_or(0);
                     let active_now = metrics_service
-                        .get_metric(tap_id, TapMetricKey::ActiveNow)
+                        .get_metric(tap_id.clone(), TapMetricKey::ActiveNow)
                         .await
                         .unwrap_or(0);
                     let cache_hits = metrics_service
-                        .get_metric(tap_id, TapMetricKey::CacheHits)
+                        .get_metric(tap_id.clone(), TapMetricKey::CacheHits)
                         .await
                         .unwrap_or(0);
                     let unique_users = metrics_service
-                        .get_unique_users_count(tap_id)
+                        .get_unique_users_count(tap_id.clone())
                         .await
                         .unwrap_or(0);
 
@@ -82,7 +81,7 @@ async fn main() -> Result<()> {
                          VALUES ($1, $2, $3, $4, $5, $6)"
                     )
                     .bind(now)
-                    .bind(tap_id.0 as i64)
+                    .bind(tap_id.0.clone())
                     .bind(total_uses as i64)
                     .bind(active_now as i64)
                     .bind(cache_hits as i64)

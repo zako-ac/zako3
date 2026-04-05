@@ -4,7 +4,7 @@ use crate::service::validation::validate_api_key_label;
 use crate::{CoreError, CoreResult};
 use chrono::Utc;
 use hq_types::hq::{
-    ApiKey, ApiKeyDto, ApiKeyId, ApiKeyResponseDto, CreateApiKeyDto, TapId, UpdateApiKeyDto,
+    ApiKey, ApiKeyDto, ApiKeyId, ApiKeyResponseDto, CreateApiKeyDto, TapId, UpdateApiKeyDto, UserId,
 };
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -39,14 +39,14 @@ impl ApiKeyService {
         }
     }
 
-    async fn check_tap_ownership(&self, tap_id: u64, user_id: u64) -> CoreResult<()> {
+    async fn check_tap_ownership(&self, tap_id: TapId, user_id: UserId) -> CoreResult<()> {
         let tap = self
             .tap_repo
             .find_by_id(tap_id)
             .await?
             .ok_or_else(|| CoreError::NotFound("Tap not found".to_string()))?;
 
-        if tap.owner_id.0 != user_id {
+        if tap.owner_id != user_id {
             return Err(CoreError::Unauthorized(
                 "You do not own this tap".to_string(),
             ));
@@ -57,19 +57,20 @@ impl ApiKeyService {
 
     pub async fn create_key(
         &self,
-        tap_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        user_id: UserId,
         dto: CreateApiKeyDto,
     ) -> CoreResult<ApiKeyResponseDto> {
         validate_api_key_label(&dto.label)?;
-        self.check_tap_ownership(tap_id, user_id).await?;
+        self.check_tap_ownership(tap_id.clone(), user_id.clone())
+            .await?;
 
         let secret = generate_api_key_secret();
         let key_hash = hash_api_key(&secret);
 
         let key = ApiKey {
-            id: ApiKeyId(hq_types::hq::next_id()),
-            tap_id: TapId(tap_id),
+            id: ApiKeyId(hq_types::hq::next_id().to_string()),
+            tap_id: tap_id.clone(),
             label: dto.label.clone(),
             key_hash,
             expires_at: dto.expires_at,
@@ -80,16 +81,16 @@ impl ApiKeyService {
         let created = self.repo.create(&key).await?;
 
         let _ = self.audit_log.log(
-            tap_id,
-            Some(user_id),
+            tap_id.0.clone(),
+            Some(user_id.0.clone()),
             "api_key.create".to_string(),
-            Some(serde_json::json!({ "key_id": created.id.0.to_string(), "label": created.label, "expires_at": created.expires_at }))
+            Some(serde_json::json!({ "key_id": created.id.0.clone(), "label": created.label, "expires_at": created.expires_at }))
         ).await;
 
         Ok(ApiKeyResponseDto {
             api_key: ApiKeyDto {
-                id: created.id.0.to_string(),
-                tap_id: created.tap_id.0.to_string(),
+                id: created.id.0.clone(),
+                tap_id: created.tap_id.0.clone(),
                 label: created.label,
                 expires_at: created.expires_at,
                 last_used_at: created.last_used_at,
@@ -99,15 +100,16 @@ impl ApiKeyService {
         })
     }
 
-    pub async fn list_keys(&self, tap_id: u64, user_id: u64) -> CoreResult<Vec<ApiKeyDto>> {
-        self.check_tap_ownership(tap_id, user_id).await?;
+    pub async fn list_keys(&self, tap_id: TapId, user_id: UserId) -> CoreResult<Vec<ApiKeyDto>> {
+        self.check_tap_ownership(tap_id.clone(), user_id.clone())
+            .await?;
 
         let keys = self.repo.list_by_tap(tap_id).await?;
         Ok(keys
             .into_iter()
             .map(|k| ApiKeyDto {
-                id: k.id.0.to_string(),
-                tap_id: k.tap_id.0.to_string(),
+                id: k.id.0.clone(),
+                tap_id: k.tap_id.0.clone(),
                 label: k.label,
                 expires_at: k.expires_at,
                 last_used_at: k.last_used_at,
@@ -118,27 +120,28 @@ impl ApiKeyService {
 
     pub async fn update_key(
         &self,
-        tap_id: u64,
-        key_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        key_id: ApiKeyId,
+        user_id: UserId,
         dto: UpdateApiKeyDto,
     ) -> CoreResult<ApiKeyDto> {
-        self.check_tap_ownership(tap_id, user_id).await?;
+        self.check_tap_ownership(tap_id.clone(), user_id.clone())
+            .await?;
 
         let mut key = self
             .repo
-            .find_by_id(key_id)
+            .find_by_id(key_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("API Key not found".to_string()))?;
 
-        if key.tap_id.0 != tap_id {
+        if key.tap_id != tap_id {
             return Err(CoreError::NotFound("API Key not found".to_string()));
         }
 
         let mut changes = serde_json::Map::new();
         changes.insert(
             "key_id".to_string(),
-            serde_json::Value::String(key_id.to_string()),
+            serde_json::Value::String(key_id.0.clone()),
         );
 
         if let Some(label) = &dto.label {
@@ -162,16 +165,16 @@ impl ApiKeyService {
         let _ = self
             .audit_log
             .log(
-                tap_id,
-                Some(user_id),
+                tap_id.0,
+                Some(user_id.0),
                 "api_key.update".to_string(),
                 Some(serde_json::Value::Object(changes)),
             )
             .await;
 
         Ok(ApiKeyDto {
-            id: updated.id.0.to_string(),
-            tap_id: updated.tap_id.0.to_string(),
+            id: updated.id.0.clone(),
+            tap_id: updated.tap_id.0.clone(),
             label: updated.label,
             expires_at: updated.expires_at,
             last_used_at: updated.last_used_at,
@@ -179,28 +182,34 @@ impl ApiKeyService {
         })
     }
 
-    pub async fn delete_key(&self, tap_id: u64, key_id: u64, user_id: u64) -> CoreResult<()> {
-        self.check_tap_ownership(tap_id, user_id).await?;
+    pub async fn delete_key(
+        &self,
+        tap_id: TapId,
+        key_id: ApiKeyId,
+        user_id: UserId,
+    ) -> CoreResult<()> {
+        self.check_tap_ownership(tap_id.clone(), user_id.clone())
+            .await?;
 
         let key = self
             .repo
-            .find_by_id(key_id)
+            .find_by_id(key_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("API Key not found".to_string()))?;
 
-        if key.tap_id.0 != tap_id {
+        if key.tap_id != tap_id {
             return Err(CoreError::NotFound("API Key not found".to_string()));
         }
 
-        self.repo.delete(key_id).await?;
+        self.repo.delete(key_id.clone()).await?;
 
         let _ = self
             .audit_log
             .log(
-                tap_id,
-                Some(user_id),
+                tap_id.0,
+                Some(user_id.0),
                 "api_key.delete".to_string(),
-                Some(serde_json::json!({ "key_id": key_id.to_string(), "label": key.label })),
+                Some(serde_json::json!({ "key_id": key_id.0, "label": key.label })),
             )
             .await;
 
@@ -209,19 +218,20 @@ impl ApiKeyService {
 
     pub async fn regenerate_key(
         &self,
-        tap_id: u64,
-        key_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        key_id: ApiKeyId,
+        user_id: UserId,
     ) -> CoreResult<ApiKeyResponseDto> {
-        self.check_tap_ownership(tap_id, user_id).await?;
+        self.check_tap_ownership(tap_id.clone(), user_id.clone())
+            .await?;
 
         let mut key = self
             .repo
-            .find_by_id(key_id)
+            .find_by_id(key_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("API Key not found".to_string()))?;
 
-        if key.tap_id.0 != tap_id {
+        if key.tap_id != tap_id {
             return Err(CoreError::NotFound("API Key not found".to_string()));
         }
 
@@ -233,17 +243,17 @@ impl ApiKeyService {
         let _ = self
             .audit_log
             .log(
-                tap_id,
-                Some(user_id),
+                tap_id.0,
+                Some(user_id.0),
                 "api_key.regenerate".to_string(),
-                Some(serde_json::json!({ "key_id": key_id.to_string() })),
+                Some(serde_json::json!({ "key_id": key_id.0 })),
             )
             .await;
 
         Ok(ApiKeyResponseDto {
             api_key: ApiKeyDto {
-                id: updated.id.0.to_string(),
-                tap_id: updated.tap_id.0.to_string(),
+                id: updated.id.0.clone(),
+                tap_id: updated.tap_id.0.clone(),
                 label: updated.label,
                 expires_at: updated.expires_at,
                 last_used_at: updated.last_used_at,
@@ -264,7 +274,7 @@ impl ApiKeyService {
 
             key.last_used_at = Some(Utc::now());
             let _ = self.repo.update(&key).await;
-            return self.tap_repo.find_by_id(key.tap_id.0).await;
+            return self.tap_repo.find_by_id(key.tap_id.clone()).await;
         }
         Ok(None)
     }

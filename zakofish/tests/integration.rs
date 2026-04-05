@@ -144,7 +144,7 @@ async fn test_zakofish_flow() {
     let tap = Arc::new(ZakofishTap::new(client_config).unwrap());
     let tap_handler = Arc::new(TestTapHandler);
 
-    let tap_id = TapId(343456);
+    let tap_id = TapId("343456".to_string());
 
     let hello_info = TapClientHello {
         tap_id: tap_id.clone(),

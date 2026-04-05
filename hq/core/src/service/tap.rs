@@ -3,8 +3,8 @@ use crate::service::audit_log::AuditLogService;
 use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
-    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapStatsDto,
-    TapWithAccessDto, TimeSeriesPointDto, UserSummaryDto,
+    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapStatsDto,
+    TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
 use std::sync::Arc;
 use zako3_states::{TapMetricKey, TapMetricsStateService};
@@ -32,11 +32,15 @@ impl TapService {
         }
     }
 
-    pub async fn create(&self, owner_id: u64, dto: CreateTapDto) -> CoreResult<Tap> {
+    pub async fn create(&self, owner_id: UserId, dto: CreateTapDto) -> CoreResult<Tap> {
         validate_tap_name(&dto.name)?;
         validate_tap_description(&dto.description)?;
 
-        let mut tap = Tap::new(hq_types::hq::next_id(), owner_id, dto.name.clone());
+        let mut tap = Tap::new(
+            hq_types::hq::next_id().to_string(),
+            owner_id.0.clone(),
+            dto.name.clone(),
+        );
         tap.description = dto.description.clone();
         if let Some(permission) = dto.permission.clone() {
             tap.permission = permission;
@@ -50,8 +54,8 @@ impl TapService {
         let _ = self
             .audit_log
             .log(
-                created_tap.id.0,
-                Some(owner_id),
+                created_tap.id.0.clone(),
+                Some(owner_id.0),
                 "tap.create".to_string(),
                 Some(serde_json::json!({ "name": dto.name, "description": dto.description, "roles": dto.roles, "permission": dto.permission })),
             )
@@ -62,9 +66,9 @@ impl TapService {
 
     pub async fn list_by_user(
         &self,
-        user_id: u64,
+        user_id: UserId,
     ) -> CoreResult<PaginatedResponseDto<TapWithAccessDto>> {
-        let taps = self.tap_repo.list_by_owner(user_id).await?;
+        let taps = self.tap_repo.list_by_owner(user_id.clone()).await?;
         let user = self
             .user_repo
             .find_by_id(user_id)
@@ -75,20 +79,20 @@ impl TapService {
         for tap in taps {
             let total_uses = self
                 .tap_metrics_state
-                .get_metric(tap.id, TapMetricKey::TotalUses)
+                .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
                 .await
                 .unwrap_or(0);
             let cache_hits = self
                 .tap_metrics_state
-                .get_metric(tap.id, TapMetricKey::CacheHits)
+                .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
                 .await
                 .unwrap_or(0);
 
             let tap_dto = TapDto {
-                id: tap.id.0.to_string(),
+                id: tap.id.0.clone(),
                 name: tap.name.0.clone(),
                 description: tap.description.clone().unwrap_or_default(),
-                owner_id: tap.owner_id.0.to_string(),
+                owner_id: tap.owner_id.0.clone(),
                 occupation: tap.occupation.clone(),
                 permission: tap.permission.clone(),
                 roles: tap.roles.clone(),
@@ -102,7 +106,7 @@ impl TapService {
                 tap: tap_dto,
                 has_access: true,
                 owner: UserSummaryDto {
-                    id: user.id.0.to_string(),
+                    id: user.id.0.clone(),
                     username: user.username.0.clone(),
                     avatar: user.avatar_url.clone().unwrap_or_default(),
                 },
@@ -125,8 +129,8 @@ impl TapService {
 
     pub async fn get_tap_with_access(
         &self,
-        tap_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        user_id: UserId,
     ) -> CoreResult<TapWithAccessDto> {
         let tap = self
             .tap_repo
@@ -136,28 +140,28 @@ impl TapService {
 
         let owner = self
             .user_repo
-            .find_by_id(tap.owner_id.0)
+            .find_by_id(tap.owner_id.clone())
             .await?
             .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
 
-        let has_access = tap.owner_id.0 == user_id; // Simple permission logic for now
+        let has_access = tap.owner_id == user_id; // Simple permission logic for now
 
         let total_uses = self
             .tap_metrics_state
-            .get_metric(tap.id, TapMetricKey::TotalUses)
+            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
             .await
             .unwrap_or(0);
         let cache_hits = self
             .tap_metrics_state
-            .get_metric(tap.id, TapMetricKey::CacheHits)
+            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
 
         let tap_dto = TapDto {
-            id: tap.id.0.to_string(),
+            id: tap.id.0.clone(),
             name: tap.name.0.clone(),
             description: tap.description.clone().unwrap_or_default(),
-            owner_id: tap.owner_id.0.to_string(),
+            owner_id: tap.owner_id.0.clone(),
             occupation: tap.occupation.clone(),
             permission: tap.permission.clone(),
             roles: tap.roles.clone(),
@@ -171,46 +175,45 @@ impl TapService {
             tap: tap_dto,
             has_access,
             owner: UserSummaryDto {
-                id: owner.id.0.to_string(),
+                id: owner.id.0.clone(),
                 username: owner.username.0.clone(),
                 avatar: owner.avatar_url.clone().unwrap_or_default(),
             },
         })
     }
 
-    pub async fn get_tap_stats(&self, tap_id: u64, user_id: u64) -> CoreResult<TapStatsDto> {
+    pub async fn get_tap_stats(&self, tap_id: TapId, user_id: UserId) -> CoreResult<TapStatsDto> {
         let tap = self
             .tap_repo
-            .find_by_id(tap_id)
+            .find_by_id(tap_id.clone())
             .await?
             .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
 
-        if tap.owner_id.0 != user_id {
+        if tap.owner_id != user_id {
             return Err(CoreError::Forbidden(
                 "You do not have access to this tap's stats".to_string(),
             ));
         }
 
         // Fetch real data from tap_metric service (Redis for real-time)
-        let tap_id_typed = hq_types::hq::TapId(tap_id);
         let total_uses = self
             .tap_metrics_state
-            .get_metric(tap_id_typed, TapMetricKey::TotalUses)
+            .get_metric(tap_id.clone(), TapMetricKey::TotalUses)
             .await
             .unwrap_or(0);
         let active_now = self
             .tap_metrics_state
-            .get_metric(tap_id_typed, TapMetricKey::ActiveNow)
+            .get_metric(tap_id.clone(), TapMetricKey::ActiveNow)
             .await
             .unwrap_or(0);
         let unique_users = self
             .tap_metrics_state
-            .get_unique_users_count(tap_id_typed)
+            .get_unique_users_count(tap_id.clone())
             .await
             .unwrap_or(0);
         let cache_hits = self
             .tap_metrics_state
-            .get_metric(tap_id_typed, TapMetricKey::CacheHits)
+            .get_metric(tap_id.clone(), TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
 
@@ -232,7 +235,7 @@ impl TapService {
         }
 
         Ok(TapStatsDto {
-            tap_id: tap.id.0.to_string(),
+            tap_id: tap.id.0.clone(),
             currently_active: active_now,
             total_uses,
             cache_hits,
@@ -244,17 +247,17 @@ impl TapService {
 
     pub async fn update_tap(
         &self,
-        tap_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        user_id: UserId,
         dto: hq_types::hq::UpdateTapDto,
     ) -> CoreResult<Tap> {
         let mut tap = self
             .tap_repo
-            .find_by_id(tap_id)
+            .find_by_id(tap_id.clone())
             .await?
             .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
 
-        if tap.owner_id.0 != user_id {
+        if tap.owner_id != user_id {
             return Err(CoreError::Forbidden(
                 "You do not have permission to update this tap".to_string(),
             ));
@@ -296,8 +299,8 @@ impl TapService {
         let _ = self
             .audit_log
             .log(
-                tap_id,
-                Some(user_id),
+                tap_id.0,
+                Some(user_id.0),
                 "tap.update".to_string(),
                 Some(serde_json::Value::Object(changes)),
             )
@@ -306,28 +309,28 @@ impl TapService {
         Ok(updated_tap)
     }
 
-    pub async fn delete_tap(&self, tap_id: u64, user_id: u64) -> CoreResult<()> {
+    pub async fn delete_tap(&self, tap_id: TapId, user_id: UserId) -> CoreResult<()> {
         let tap = self
             .tap_repo
-            .find_by_id(tap_id)
+            .find_by_id(tap_id.clone())
             .await?
             .ok_or(CoreError::NotFound("Tap not found".to_string()))?;
-        if tap.owner_id.0 != user_id {
+        if tap.owner_id != user_id {
             return Err(CoreError::Forbidden(
                 "You do not have permission to delete this tap".to_string(),
             ));
         }
-        self.tap_repo.delete(tap_id).await?;
+        self.tap_repo.delete(tap_id.clone()).await?;
 
         let _ = self
             .audit_log
-            .log(tap_id, Some(user_id), "tap.delete".to_string(), None)
+            .log(tap_id.0, Some(user_id.0), "tap.delete".to_string(), None)
             .await;
 
         Ok(())
     }
 
-    pub async fn get_tap_internal(&self, tap_id: u64) -> CoreResult<Option<Tap>> {
+    pub async fn get_tap_internal(&self, tap_id: TapId) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
     }
 
@@ -335,11 +338,11 @@ impl TapService {
         self.tap_repo.list_all().await
     }
 
-    pub async fn list_taps_by_owner(&self, owner_id: u64) -> CoreResult<Vec<Tap>> {
+    pub async fn list_taps_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>> {
         self.tap_repo.list_by_owner(owner_id).await
     }
 
-    pub async fn delete_tap_internal(&self, tap_id: u64) -> CoreResult<()> {
+    pub async fn delete_tap_internal(&self, tap_id: TapId) -> CoreResult<()> {
         self.tap_repo.delete(tap_id).await
     }
 

@@ -20,7 +20,7 @@ pub trait CacheRepository: Send + Sync {
     async fn set(&self, key: &str, value: &str);
     async fn incr(&self, key: &str) -> Result<i64>;
     async fn decr(&self, key: &str) -> Result<i64>;
-    async fn pfadd(&self, key: &str, element: u64) -> Result<()>;
+    async fn pfadd(&self, key: &str, element: &str) -> Result<()>;
     async fn pfcount(&self, key: &str) -> Result<u64>;
     async fn sadd(&self, key: &str, member: &str) -> Result<()>;
     async fn smembers(&self, key: &str) -> Result<Vec<String>>;
@@ -41,16 +41,7 @@ impl TapHubStateService {
     pub async fn get_tap_id_by_name(&self, tap_name: &TapName) -> Result<Option<TapId>> {
         let name_key = format!("tap_name:{}", tap_name.0);
         let id_str = self.cache_repository.get(&name_key).await;
-        match id_str {
-            Some(id) => {
-                if let Ok(num) = id.parse::<u64>() {
-                    Ok(Some(TapId(num)))
-                } else {
-                    Ok(None)
-                }
-            }
-            None => Ok(None),
-        }
+        Ok(id_str.map(TapId))
     }
 
     pub async fn get_tap_states(&self, tap_id: &TapId) -> Result<OnlineTapStates> {
@@ -76,12 +67,10 @@ impl TapHubStateService {
     }
 
     pub async fn set_connection_state(&self, state: OnlineTapState) -> Result<()> {
-        let tap_id = state.tap_id;
+        let tap_id = state.tap_id.clone();
 
         let name_key = format!("tap_name:{}", state.tap_name.0);
-        self.cache_repository
-            .set(&name_key, &tap_id.0.to_string())
-            .await;
+        self.cache_repository.set(&name_key, &tap_id.0).await;
 
         let mut states = self.get_tap_states(&state.tap_id).await?;
 
@@ -172,7 +161,7 @@ impl TapMetricsStateService {
 
     pub async fn record_unique_user(&self, tap_id: TapId, user_id: UserId) -> Result<()> {
         let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
-        self.cache_repository.pfadd(&key, user_id.0).await?;
+        self.cache_repository.pfadd(&key, &user_id.0).await?;
         Ok(())
     }
 
@@ -201,11 +190,7 @@ impl TapMetricsStateService {
     pub async fn get_known_taps(&self) -> Result<Vec<TapId>> {
         let key = "metrics:known_taps";
         let members = self.cache_repository.smembers(key).await?;
-        Ok(members
-            .into_iter()
-            .filter_map(|s| s.parse::<u64>().ok())
-            .map(TapId)
-            .collect())
+        Ok(members.into_iter().map(TapId).collect())
     }
 }
 
@@ -255,7 +240,7 @@ impl CacheRepository for RedisCacheRepository {
         Ok(val)
     }
 
-    async fn pfadd(&self, key: &str, element: u64) -> Result<()> {
+    async fn pfadd(&self, key: &str, element: &str) -> Result<()> {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let _: () = conn.pfadd(key, element).await?;

@@ -6,7 +6,10 @@ use sqlx::{PgPool, Row};
 #[async_trait]
 pub trait VerificationRepository: Send + Sync {
     async fn create(&self, request: &VerificationRequest) -> CoreResult<VerificationRequest>;
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<VerificationRequest>>;
+    async fn find_by_id(
+        &self,
+        id: VerificationRequestId,
+    ) -> CoreResult<Option<VerificationRequest>>;
     async fn list_all(
         &self,
         status: Option<VerificationStatus>,
@@ -15,11 +18,14 @@ pub trait VerificationRepository: Send + Sync {
     ) -> CoreResult<(Vec<VerificationRequest>, u64)>;
     async fn update_status(
         &self,
-        id: u64,
+        id: VerificationRequestId,
         status: VerificationStatus,
         rejection_reason: Option<String>,
     ) -> CoreResult<VerificationRequest>;
-    async fn find_pending_by_tap_id(&self, tap_id: u64) -> CoreResult<Option<VerificationRequest>>;
+    async fn find_pending_by_tap_id(
+        &self,
+        tap_id: TapId,
+    ) -> CoreResult<Option<VerificationRequest>>;
 }
 
 pub struct PgVerificationRepository {
@@ -35,9 +41,9 @@ impl PgVerificationRepository {
 #[async_trait]
 impl VerificationRepository for PgVerificationRepository {
     async fn create(&self, request: &VerificationRequest) -> CoreResult<VerificationRequest> {
-        let id = request.id.0 as i64;
-        let tap_id = request.tap_id.0 as i64;
-        let requester_id = request.requester_id.0 as i64;
+        let id = request.id.0.clone();
+        let tap_id = request.tap_id.0.clone();
+        let requester_id = request.requester_id.0.clone();
         let status = serde_json::to_string(&request.status)?
             .trim_matches('"')
             .to_string();
@@ -62,7 +68,10 @@ impl VerificationRepository for PgVerificationRepository {
         Ok(request.clone())
     }
 
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<VerificationRequest>> {
+    async fn find_by_id(
+        &self,
+        id: VerificationRequestId,
+    ) -> CoreResult<Option<VerificationRequest>> {
         let row = sqlx::query(
             r#"
             SELECT id, tap_id, requester_id, title, description, status, rejection_reason, created_at, updated_at
@@ -70,7 +79,7 @@ impl VerificationRepository for PgVerificationRepository {
             WHERE id = $1
             "#,
         )
-        .bind(id as i64)
+        .bind(id.0)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -130,7 +139,7 @@ impl VerificationRepository for PgVerificationRepository {
 
     async fn update_status(
         &self,
-        id: u64,
+        id: VerificationRequestId,
         status: VerificationStatus,
         rejection_reason: Option<String>,
     ) -> CoreResult<VerificationRequest> {
@@ -149,7 +158,7 @@ impl VerificationRepository for PgVerificationRepository {
         .bind(status_str)
         .bind(rejection_reason)
         .bind(now)
-        .bind(id as i64)
+        .bind(&id.0)
         .execute(&self.pool)
         .await?;
 
@@ -159,7 +168,10 @@ impl VerificationRepository for PgVerificationRepository {
         Ok(updated)
     }
 
-    async fn find_pending_by_tap_id(&self, tap_id: u64) -> CoreResult<Option<VerificationRequest>> {
+    async fn find_pending_by_tap_id(
+        &self,
+        tap_id: TapId,
+    ) -> CoreResult<Option<VerificationRequest>> {
         let row = sqlx::query(
             r#"
             SELECT id, tap_id, requester_id, title, description, status, rejection_reason, created_at, updated_at
@@ -167,7 +179,7 @@ impl VerificationRepository for PgVerificationRepository {
             WHERE tap_id = $1 AND status = 'pending'
             "#,
         )
-        .bind(tap_id as i64)
+        .bind(tap_id.0)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -181,9 +193,9 @@ impl VerificationRepository for PgVerificationRepository {
 
 impl PgVerificationRepository {
     fn row_to_request(&self, row: sqlx::postgres::PgRow) -> CoreResult<VerificationRequest> {
-        let id: i64 = row.try_get("id")?;
-        let tap_id: i64 = row.try_get("tap_id")?;
-        let requester_id: i64 = row.try_get("requester_id")?;
+        let id: String = row.try_get("id")?;
+        let tap_id: String = row.try_get("tap_id")?;
+        let requester_id: String = row.try_get("requester_id")?;
         let title: String = row.try_get("title")?;
         let description: String = row.try_get("description")?;
         let status_str: String = row.try_get("status")?;
@@ -193,9 +205,9 @@ impl PgVerificationRepository {
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
         Ok(VerificationRequest {
-            id: VerificationRequestId(id as u64),
-            tap_id: TapId(tap_id as u64),
-            requester_id: UserId(requester_id as u64),
+            id: VerificationRequestId(id),
+            tap_id: TapId(tap_id),
+            requester_id: UserId(requester_id),
             title,
             description,
             status,

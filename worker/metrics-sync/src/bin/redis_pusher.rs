@@ -35,8 +35,8 @@ async fn main() -> Result<()> {
 
     for row in latest_snapshots {
         use sqlx::Row;
-        let tap_id_val: i64 = row.get("tap_id");
-        let tap_id = TapId(tap_id_val as u64);
+        let tap_id_val: String = row.get("tap_id");
+        let tap_id = TapId(tap_id_val);
         info!("Restoring metrics for tap {}...", tap_id.0);
 
         let total_uses: i64 = row.get("total_uses");

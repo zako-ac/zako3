@@ -30,18 +30,18 @@ impl VerificationService {
 
     pub async fn request_verification(
         &self,
-        tap_id: u64,
-        user_id: u64,
+        tap_id: TapId,
+        user_id: UserId,
         dto: CreateVerificationRequestDto,
     ) -> CoreResult<VerificationRequest> {
         validate_verification_request(&dto.title, &dto.description)?;
         let tap = self
             .tap_repo
-            .find_by_id(tap_id)
+            .find_by_id(tap_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("Tap not found".to_string()))?;
 
-        if tap.owner_id.0 != user_id {
+        if tap.owner_id != user_id {
             return Err(CoreError::Forbidden(
                 "You do not have permission to request verification for this tap".to_string(),
             ));
@@ -50,7 +50,7 @@ impl VerificationService {
         // Check for existing pending request
         if self
             .verification_repo
-            .find_pending_by_tap_id(tap_id)
+            .find_pending_by_tap_id(tap_id.clone())
             .await?
             .is_some()
         {
@@ -59,12 +59,12 @@ impl VerificationService {
             ));
         }
 
-        let id = hq_types::hq::next_id();
+        let id = hq_types::hq::next_id().to_string();
         let now = chrono::Utc::now();
         let request = VerificationRequest {
             id: VerificationRequestId(id),
-            tap_id: TapId(tap_id),
-            requester_id: UserId(user_id),
+            tap_id: tap_id.clone(),
+            requester_id: user_id.clone(),
             title: dto.title,
             description: dto.description,
             status: VerificationStatus::Pending,
@@ -78,8 +78,8 @@ impl VerificationService {
         let _ = self
             .audit_log
             .log(
-                tap_id,
-                Some(user_id),
+                tap_id.0,
+                Some(user_id.0),
                 "tap.verification_requested".to_string(),
                 None,
             )
@@ -101,12 +101,12 @@ impl VerificationService {
 
     pub async fn approve_verification(
         &self,
-        request_id: u64,
-        admin_id: u64,
+        request_id: VerificationRequestId,
+        admin_id: UserId,
     ) -> CoreResult<VerificationRequest> {
         let request = self
             .verification_repo
-            .find_by_id(request_id)
+            .find_by_id(request_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("Verification request not found".to_string()))?;
 
@@ -125,7 +125,7 @@ impl VerificationService {
         // 2. Update Tap occupation
         let mut tap = self
             .tap_repo
-            .find_by_id(request.tap_id.0)
+            .find_by_id(request.tap_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("Tap not found".to_string()))?;
 
@@ -138,7 +138,7 @@ impl VerificationService {
             .audit_log
             .log(
                 request.tap_id.0,
-                Some(admin_id),
+                Some(admin_id.0),
                 "tap.verification_approved".to_string(),
                 None,
             )
@@ -149,13 +149,13 @@ impl VerificationService {
 
     pub async fn reject_verification(
         &self,
-        request_id: u64,
-        admin_id: u64,
+        request_id: VerificationRequestId,
+        admin_id: UserId,
         reason: String,
     ) -> CoreResult<VerificationRequest> {
         let request = self
             .verification_repo
-            .find_by_id(request_id)
+            .find_by_id(request_id.clone())
             .await?
             .ok_or_else(|| CoreError::NotFound("Verification request not found".to_string()))?;
 
@@ -178,7 +178,7 @@ impl VerificationService {
             .audit_log
             .log(
                 request.tap_id.0,
-                Some(admin_id),
+                Some(admin_id.0),
                 "tap.verification_rejected".to_string(),
                 Some(serde_json::json!({ "reason": reason })),
             )

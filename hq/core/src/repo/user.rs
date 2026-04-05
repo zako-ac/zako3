@@ -7,9 +7,9 @@ use sqlx::{PgPool, Row};
 pub trait UserRepository: Send + Sync {
     async fn find_by_discord_id(&self, discord_id: &str) -> CoreResult<Option<User>>;
     async fn create(&self, user: &User) -> CoreResult<User>;
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<User>>;
+    async fn find_by_id(&self, id: UserId) -> CoreResult<Option<User>>;
     async fn list_all(&self) -> CoreResult<Vec<User>>;
-    async fn update_permissions(&self, id: u64, permissions: Vec<String>) -> CoreResult<User>;
+    async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User>;
 }
 
 pub struct PgUserRepository {
@@ -33,8 +33,7 @@ impl UserRepository for PgUserRepository {
         .await?;
 
         if let Some(row) = row {
-            let id: i64 = row.try_get("id")?;
-            let id = id as u64;
+            let id: String = row.try_get("id")?;
             let discord_user_id: String = row.try_get("discord_user_id")?;
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
@@ -61,7 +60,7 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn create(&self, user: &User) -> CoreResult<User> {
-        let id = user.id.0 as i64;
+        let id = user.id.0.clone();
         let discord_id: String = user.discord_user_id.clone().into();
         let username: String = user.username.clone().into();
         let avatar_url = user.avatar_url.clone();
@@ -90,15 +89,14 @@ impl UserRepository for PgUserRepository {
         Ok(user.clone())
     }
 
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<User>> {
+    async fn find_by_id(&self, id: UserId) -> CoreResult<Option<User>> {
         let row = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, permissions, created_at, updated_at FROM users WHERE id = $1")
-            .bind(id as i64)
+            .bind(id.0)
             .fetch_optional(&self.pool)
             .await?;
 
         if let Some(row) = row {
-            let id: i64 = row.try_get("id")?;
-            let id = id as u64;
+            let id: String = row.try_get("id")?;
             let discord_user_id: String = row.try_get("discord_user_id")?;
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
@@ -131,8 +129,7 @@ impl UserRepository for PgUserRepository {
 
         let mut users = Vec::new();
         for row in rows {
-            let id: i64 = row.try_get("id")?;
-            let id = id as u64;
+            let id: String = row.try_get("id")?;
             let discord_user_id: String = row.try_get("discord_user_id")?;
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
@@ -157,18 +154,17 @@ impl UserRepository for PgUserRepository {
         Ok(users)
     }
 
-    async fn update_permissions(&self, id: u64, permissions: Vec<String>) -> CoreResult<User> {
+    async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User> {
         let row = sqlx::query(
             "UPDATE users SET permissions = $1, updated_at = $2 WHERE id = $3 RETURNING id, discord_user_id, username, avatar_url, email, permissions, created_at, updated_at",
         )
         .bind(&permissions)
         .bind(chrono::Utc::now())
-        .bind(id as i64)
+        .bind(id.0)
         .fetch_one(&self.pool)
         .await?;
 
-        let id_val: i64 = row.try_get("id")?;
-        let id_val = id_val as u64;
+        let id_val: String = row.try_get("id")?;
         let discord_user_id: String = row.try_get("discord_user_id")?;
         let username: String = row.try_get("username")?;
         let avatar_url: Option<String> = row.try_get("avatar_url")?;

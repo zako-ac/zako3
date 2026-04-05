@@ -149,7 +149,7 @@ impl SessionControl {
                 AudioStopFilter::All => s.get_all_track_ids(),
                 AudioStopFilter::Music => s.get_all_track_ids_by_queue_name_prefix("music"),
                 AudioStopFilter::TTS(user_id) => {
-                    s.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", u64::from(user_id)))
+                    s.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", user_id))
                 }
             })
             .unwrap_or_default();

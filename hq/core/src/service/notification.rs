@@ -1,7 +1,8 @@
 use crate::repo::NotificationRepository;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
-    CreateNotificationDto, Notification, NotificationDto, PaginatedResponseDto, PaginationMetaDto,
+    CreateNotificationDto, Notification, NotificationDto, NotificationId, PaginatedResponseDto,
+    PaginationMetaDto, UserId,
 };
 use std::sync::Arc;
 
@@ -16,13 +17,9 @@ impl NotificationService {
     }
 
     pub async fn create(&self, dto: CreateNotificationDto) -> CoreResult<Notification> {
-        let user_id = dto
-            .user_id
-            .parse::<u64>()
-            .map_err(|_| CoreError::InvalidInput("Invalid user ID".to_string()))?;
         let n = Notification::new(
-            hq_types::hq::next_id(),
-            user_id,
+            hq_types::hq::next_id().to_string(),
+            dto.user_id,
             dto.r#type,
             dto.title,
             dto.message,
@@ -32,14 +29,14 @@ impl NotificationService {
 
     pub async fn list_by_user(
         &self,
-        user_id: u64,
+        user_id: UserId,
     ) -> CoreResult<PaginatedResponseDto<NotificationDto>> {
         let notifications = self.repo.list_by_user(user_id).await?;
         let dtos: Vec<NotificationDto> = notifications
             .into_iter()
             .map(|n| NotificationDto {
-                id: n.id.0.to_string(),
-                user_id: n.user_id.0.to_string(),
+                id: n.id.0.clone(),
+                user_id: n.user_id.0.clone(),
                 r#type: n.r#type,
                 title: n.title,
                 message: n.message,
@@ -60,7 +57,11 @@ impl NotificationService {
         })
     }
 
-    pub async fn mark_as_read(&self, id: u64, user_id: u64) -> CoreResult<NotificationDto> {
+    pub async fn mark_as_read(
+        &self,
+        id: NotificationId,
+        user_id: UserId,
+    ) -> CoreResult<NotificationDto> {
         let n = self
             .repo
             .mark_as_read(id, user_id)
@@ -68,8 +69,8 @@ impl NotificationService {
             .ok_or_else(|| CoreError::NotFound("Notification not found".to_string()))?;
 
         Ok(NotificationDto {
-            id: n.id.0.to_string(),
-            user_id: n.user_id.0.to_string(),
+            id: n.id.0.clone(),
+            user_id: n.user_id.0.clone(),
             r#type: n.r#type,
             title: n.title,
             message: n.message,

@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use hq_core::Service;
-use hq_types::hq::audit_log::PaginatedAuditLogsDto;
+use hq_types::hq::{TapId, audit_log::PaginatedAuditLogsDto};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ pub struct AuditLogQuery {
         (status = 404, description = "Tap not found")
     ),
     params(
-        ("id" = u64, Path, description = "Tap ID"),
+        ("id" = String, Path, description = "Tap ID"),
         ("page" = Option<i64>, Query, description = "Page number (default 1)"),
         ("limit" = Option<i64>, Query, description = "Items per page (default 50)")
     ),
@@ -36,7 +36,7 @@ pub struct AuditLogQuery {
 pub async fn get_tap_audit_logs(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(id): Path<u64>,
+    Path(id): Path<TapId>,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<Json<PaginatedAuditLogsDto>, axum::http::StatusCode> {
     let page = query.page.unwrap_or(1).max(1);
@@ -44,7 +44,7 @@ pub async fn get_tap_audit_logs(
 
     let tap = service
         .tap
-        .get_tap_with_access(id, user_id)
+        .get_tap_with_access(id.clone(), user_id)
         .await
         .map_err(|e| match e {
             hq_core::CoreError::NotFound(_) => axum::http::StatusCode::NOT_FOUND,

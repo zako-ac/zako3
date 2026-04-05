@@ -3,11 +3,12 @@ use hq_core::service::auth::AuthService;
 use hq_core::service::tap::TapService;
 use hq_types::ZakoResult;
 use hq_types::hq::rpc::HqRpcServer;
-use hq_types::hq::{Tap, User};
+use hq_types::hq::{Tap, TapId, User, UserId};
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee::types::ErrorObjectOwned;
 use std::future::Future;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::Service;
@@ -113,7 +114,7 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn get_tap_internal(&self, tap_id: String) -> RpcResult<Option<Tap>> {
-        let id = match tap_id.parse::<u64>() {
+        let id = match TapId::from_str(&tap_id) {
             Ok(u) => u,
             Err(_) => return Ok(None),
         };
@@ -141,7 +142,7 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn get_user(&self, user_id: String) -> RpcResult<Option<User>> {
-        let id = match user_id.parse::<u64>() {
+        let id = match UserId::from_str(&user_id) {
             Ok(u) => u,
             Err(_) => return Ok(None),
         };
@@ -157,8 +158,7 @@ impl HqRpcServer for HqRpcImpl {
         user_id: String,
         permissions: Vec<String>,
     ) -> RpcResult<User> {
-        let id = user_id
-            .parse::<u64>()
+        let id = UserId::from_str(&user_id)
             .map_err(|e| ErrorObjectOwned::owned(-32602, e.to_string(), None::<()>))?;
         let res = self
             .auth_service
@@ -172,8 +172,7 @@ impl HqRpcServer for HqRpcImpl {
 
     async fn list_taps(&self, owner_id: Option<String>) -> RpcResult<Vec<Tap>> {
         let res = if let Some(oid_str) = owner_id {
-            let oid = oid_str
-                .parse::<u64>()
+            let oid = UserId::from_str(&oid_str)
                 .map_err(|e| ErrorObjectOwned::owned(-32602, e.to_string(), None::<()>))?;
             self.tap_service.list_taps_by_owner(oid).await
         } else {
@@ -187,7 +186,7 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn get_tap(&self, tap_id: String) -> RpcResult<Option<Tap>> {
-        let id = match tap_id.parse::<u64>() {
+        let id = match TapId::from_str(&tap_id) {
             Ok(u) => u,
             Err(_) => return Ok(None),
         };
@@ -199,8 +198,7 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn delete_tap(&self, tap_id: String) -> RpcResult<()> {
-        let id = tap_id
-            .parse::<u64>()
+        let id = TapId::from_str(&tap_id)
             .map_err(|e| ErrorObjectOwned::owned(-32602, e.to_string(), None::<()>))?;
         let res = self.tap_service.delete_tap_internal(id).await;
         match res {

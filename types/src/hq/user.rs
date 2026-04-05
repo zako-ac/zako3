@@ -3,22 +3,21 @@ use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, From, Into, Serialize, Deserialize, ToSchema, Copy)]
-pub struct UserId(pub u64);
-
-impl std::fmt::Display for UserId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::str::FromStr for UserId {
-    type Err = std::num::ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.parse()?))
-    }
-}
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    From,
+    Into,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    Display,
+    FromStr,
+)]
+pub struct UserId(pub String);
 
 #[derive(
     Debug,
@@ -51,9 +50,9 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(id: u64, discord_user_id: String, username: String) -> Self {
+    pub fn new(id: impl Into<String>, discord_user_id: String, username: String) -> Self {
         Self {
-            id: UserId(id),
+            id: UserId(id.into()),
             discord_user_id: DiscordUserId(discord_user_id),
             username: Username(username),
             avatar_url: None,

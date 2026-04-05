@@ -31,3 +31,4 @@ refer hq todo
 - [ ] Add Cache hit rate in cache hits card
 - [ ] Make all cards in settings as component
 - [ ] Add "load failed" 
+- [ ] Dashboard status (my taps, total uses, active users, uptime)

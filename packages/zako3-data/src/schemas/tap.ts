@@ -190,6 +190,8 @@ export const verificationRequestFullSchema = z.object({
   status: verificationStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
+  reviewedAt: z.string().optional(),
+  reviewedBy: z.string().optional(),
   rejectionReason: z.string().optional(),
 });
 

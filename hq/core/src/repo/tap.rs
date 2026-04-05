@@ -6,10 +6,10 @@ use sqlx::{PgPool, Row};
 #[async_trait]
 pub trait TapRepository: Send + Sync {
     async fn create(&self, tap: &Tap) -> CoreResult<Tap>;
-    async fn list_by_owner(&self, owner_id: u64) -> CoreResult<Vec<Tap>>;
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<Tap>>;
+    async fn list_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>>;
+    async fn find_by_id(&self, id: TapId) -> CoreResult<Option<Tap>>;
     async fn update(&self, tap: &Tap) -> CoreResult<Tap>;
-    async fn delete(&self, id: u64) -> CoreResult<()>;
+    async fn delete(&self, id: TapId) -> CoreResult<()>;
     async fn list_all(&self) -> CoreResult<Vec<Tap>>;
 }
 
@@ -26,8 +26,8 @@ impl PgTapRepository {
 #[async_trait]
 impl TapRepository for PgTapRepository {
     async fn create(&self, tap: &Tap) -> CoreResult<Tap> {
-        let id = tap.id.0 as i64;
-        let owner_id = tap.owner_id.0 as i64;
+        let id = tap.id.0.clone();
+        let owner_id = tap.owner_id.0.clone();
         let name = tap.name.0.clone();
         let description = tap.description.clone();
         let occupation = serde_json::to_string(&tap.occupation)?
@@ -57,7 +57,7 @@ impl TapRepository for PgTapRepository {
         Ok(tap.clone())
     }
 
-    async fn list_by_owner(&self, owner_id: u64) -> CoreResult<Vec<Tap>> {
+    async fn list_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>> {
         let rows = sqlx::query(
             r#"
             SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
@@ -65,17 +65,15 @@ impl TapRepository for PgTapRepository {
             WHERE owner_id = $1
             "#,
         )
-        .bind(owner_id as i64)
+        .bind(owner_id.0)
         .fetch_all(&self.pool)
         .await?;
 
         let taps = rows
             .into_iter()
             .map(|row| {
-                let id: i64 = row.try_get("id")?;
-                let id = id as u64;
-                let owner_id: i64 = row.try_get("owner_id")?;
-                let owner_id = owner_id as u64;
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
                 let name: String = row.try_get("name")?;
                 let description: Option<String> = row.try_get("description")?;
 
@@ -110,7 +108,7 @@ impl TapRepository for PgTapRepository {
         Ok(taps)
     }
 
-    async fn find_by_id(&self, id: u64) -> CoreResult<Option<Tap>> {
+    async fn find_by_id(&self, id: TapId) -> CoreResult<Option<Tap>> {
         let row = sqlx::query(
             r#"
             SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
@@ -118,15 +116,13 @@ impl TapRepository for PgTapRepository {
             WHERE id = $1
             "#,
         )
-        .bind(id as i64)
+        .bind(id.0)
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row {
-            let id: i64 = row.try_get("id")?;
-            let id = id as u64;
-            let owner_id: i64 = row.try_get("owner_id")?;
-            let owner_id = owner_id as u64;
+            let id: String = row.try_get("id")?;
+            let owner_id: String = row.try_get("owner_id")?;
             let name: String = row.try_get("name")?;
             let description: Option<String> = row.try_get("description")?;
 
@@ -161,7 +157,7 @@ impl TapRepository for PgTapRepository {
     }
 
     async fn update(&self, tap: &Tap) -> CoreResult<Tap> {
-        let id = tap.id.0 as i64;
+        let id = tap.id.0.clone();
         let name = tap.name.0.clone();
         let description = tap.description.clone();
         let occupation = serde_json::to_string(&tap.occupation)?
@@ -190,9 +186,9 @@ impl TapRepository for PgTapRepository {
         Ok(tap.clone())
     }
 
-    async fn delete(&self, id: u64) -> CoreResult<()> {
+    async fn delete(&self, id: TapId) -> CoreResult<()> {
         sqlx::query("DELETE FROM taps WHERE id = $1")
-            .bind(id as i64)
+            .bind(id.0)
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -212,10 +208,8 @@ impl TapRepository for PgTapRepository {
         let taps = rows
             .into_iter()
             .map(|row| {
-                let id: i64 = row.try_get("id")?;
-                let id = id as u64;
-                let owner_id: i64 = row.try_get("owner_id")?;
-                let owner_id = owner_id as u64;
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
                 let name: String = row.try_get("name")?;
                 let description: Option<String> = row.try_get("description")?;
 

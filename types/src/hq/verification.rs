@@ -1,12 +1,23 @@
 use super::{TapId, UserId};
-use derive_more::{From, FromStr, Into};
+use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr, Copy,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    PartialEq,
+    Eq,
+    ToSchema,
+    Hash,
+    FromStr,
+    Display,
 )]
-pub struct VerificationRequestId(pub u64);
+pub struct VerificationRequestId(pub String);
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq,

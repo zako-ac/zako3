@@ -97,7 +97,7 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
                 "music" => AudioStopFilter::Music,
                 "tts" => {
                     let uid = user_id.context("user_id is required for tts filter")?;
-                    AudioStopFilter::TTS(UserId::from(uid))
+                    AudioStopFilter::TTS(UserId::from(uid.to_string()))
                 }
                 _ => {
                     return Err(anyhow::anyhow!(

@@ -28,14 +28,12 @@ impl TapHubBridgeHandler for TapHub {
         if let Err(e) = self.metrics_service.inc_total_uses(tap_id.clone()).await {
             tracing::warn!(%e, "Failed to increment total_uses metric");
         }
-        if let Ok(user_id_u64) = request.discord_user_id.0.parse::<u64>() {
-            if let Err(e) = self
-                .metrics_service
-                .record_unique_user(tap_id.clone(), UserId(user_id_u64))
-                .await
-            {
-                tracing::warn!(%e, "Failed to record unique_user metric");
-            }
+        if let Err(e) = self
+            .metrics_service
+            .record_unique_user(tap_id.clone(), UserId(request.discord_user_id.0.clone()))
+            .await
+        {
+            tracing::warn!(%e, "Failed to record unique_user metric");
         }
 
         let tap = self

@@ -27,7 +27,16 @@ export type ApiKeyResponseDto = z.infer<typeof ApiKeyResponseDtoSchema>;
 export const AuditLogDtoSchema = z.object({
   id: z.string(),
   tapId: z.string(),
-  actorId: z.string(),
+  actor: z.discriminatedUnion('type', [z.object({
+  type: z.literal('User'),
+  data: z.object({
+  id: z.string(),
+  username: z.string(),
+  avatar: z.string()
+})
+}), z.object({
+  type: z.literal('System')
+})]),
   actionType: z.string(),
   metadata: z.any().nullable(),
   createdAt: z.string().datetime()
@@ -137,6 +146,7 @@ export const TapDtoSchema = z.object({
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
   totalUses: z.number(),
+  cacheHits: z.number(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });
@@ -198,6 +208,7 @@ export const TapWithAccessDtoSchema = z.object({
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
   totalUses: z.number(),
+  cacheHits: z.number(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 }),
