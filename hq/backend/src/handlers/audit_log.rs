@@ -6,7 +6,6 @@ use hq_core::Service;
 use hq_types::hq::audit_log::PaginatedAuditLogsDto;
 use serde::Deserialize;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::middleware::auth::AuthUser;
 
@@ -26,7 +25,7 @@ pub struct AuditLogQuery {
         (status = 404, description = "Tap not found")
     ),
     params(
-        ("id" = Uuid, Path, description = "Tap ID"),
+        ("id" = u64, Path, description = "Tap ID"),
         ("page" = Option<i64>, Query, description = "Page number (default 1)"),
         ("limit" = Option<i64>, Query, description = "Items per page (default 50)")
     ),
@@ -37,7 +36,7 @@ pub struct AuditLogQuery {
 pub async fn get_tap_audit_logs(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(id): Path<Uuid>,
+    Path(id): Path<u64>,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<Json<PaginatedAuditLogsDto>, axum::http::StatusCode> {
     let page = query.page.unwrap_or(1).max(1);

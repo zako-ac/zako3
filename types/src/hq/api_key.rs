@@ -3,12 +3,11 @@ use chrono::{DateTime, Utc};
 use derive_more::{From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr,
+    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr, Copy,
 )]
-pub struct ApiKeyId(pub Uuid);
+pub struct ApiKeyId(pub u64);
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ApiKey {

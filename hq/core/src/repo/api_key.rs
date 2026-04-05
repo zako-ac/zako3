@@ -2,16 +2,15 @@ use crate::CoreResult;
 use async_trait::async_trait;
 use hq_types::hq::{ApiKey, ApiKeyId, TapId};
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
 
 #[async_trait]
 pub trait ApiKeyRepository: Send + Sync {
     async fn create(&self, key: &ApiKey) -> CoreResult<ApiKey>;
-    async fn list_by_tap(&self, tap_id: Uuid) -> CoreResult<Vec<ApiKey>>;
-    async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<ApiKey>>;
+    async fn list_by_tap(&self, tap_id: u64) -> CoreResult<Vec<ApiKey>>;
+    async fn find_by_id(&self, id: u64) -> CoreResult<Option<ApiKey>>;
     async fn find_by_key_hash(&self, hash: &str) -> CoreResult<Option<ApiKey>>;
     async fn update(&self, key: &ApiKey) -> CoreResult<ApiKey>;
-    async fn delete(&self, id: Uuid) -> CoreResult<()>;
+    async fn delete(&self, id: u64) -> CoreResult<()>;
 }
 
 pub struct PgApiKeyRepository {
@@ -27,8 +26,8 @@ impl PgApiKeyRepository {
 #[async_trait]
 impl ApiKeyRepository for PgApiKeyRepository {
     async fn create(&self, key: &ApiKey) -> CoreResult<ApiKey> {
-        let id = key.id.0;
-        let tap_id = key.tap_id.0;
+        let id = key.id.0 as i64;
+        let tap_id = key.tap_id.0 as i64;
         let label = key.label.clone();
         let key_hash = key.key_hash.clone();
         let expires_at = key.expires_at;
@@ -51,8 +50,8 @@ impl ApiKeyRepository for PgApiKeyRepository {
         .await?;
 
         Ok(ApiKey {
-            id: ApiKeyId(row.try_get("id")?),
-            tap_id: TapId(row.try_get("tap_id")?),
+            id: ApiKeyId(row.try_get::<i64, _>("id")? as u64),
+            tap_id: TapId(row.try_get::<i64, _>("tap_id")? as u64),
             label: row.try_get("label")?,
             key_hash: row.try_get("key_hash")?,
             expires_at: row.try_get("expires_at")?,
@@ -61,7 +60,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
         })
     }
 
-    async fn list_by_tap(&self, tap_id: Uuid) -> CoreResult<Vec<ApiKey>> {
+    async fn list_by_tap(&self, tap_id: u64) -> CoreResult<Vec<ApiKey>> {
         let rows = sqlx::query(
             r#"
             SELECT id, tap_id, label, key_hash, expires_at, last_used_at, created_at
@@ -70,15 +69,15 @@ impl ApiKeyRepository for PgApiKeyRepository {
             ORDER BY created_at DESC
             "#,
         )
-        .bind(tap_id)
+        .bind(tap_id as i64)
         .fetch_all(&self.pool)
         .await?;
 
         let mut keys = Vec::new();
         for row in rows {
             keys.push(ApiKey {
-                id: ApiKeyId(row.try_get("id")?),
-                tap_id: TapId(row.try_get("tap_id")?),
+                id: ApiKeyId(row.try_get::<i64, _>("id")? as u64),
+                tap_id: TapId(row.try_get::<i64, _>("tap_id")? as u64),
                 label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
                 expires_at: row.try_get("expires_at")?,
@@ -89,7 +88,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
         Ok(keys)
     }
 
-    async fn find_by_id(&self, id: Uuid) -> CoreResult<Option<ApiKey>> {
+    async fn find_by_id(&self, id: u64) -> CoreResult<Option<ApiKey>> {
         let row_opt = sqlx::query(
             r#"
             SELECT id, tap_id, label, key_hash, expires_at, last_used_at, created_at
@@ -97,14 +96,14 @@ impl ApiKeyRepository for PgApiKeyRepository {
             WHERE id = $1
             "#,
         )
-        .bind(id)
+        .bind(id as i64)
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row_opt {
             Ok(Some(ApiKey {
-                id: ApiKeyId(row.try_get("id")?),
-                tap_id: TapId(row.try_get("tap_id")?),
+                id: ApiKeyId(row.try_get::<i64, _>("id")? as u64),
+                tap_id: TapId(row.try_get::<i64, _>("tap_id")? as u64),
                 label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
                 expires_at: row.try_get("expires_at")?,
@@ -130,8 +129,8 @@ impl ApiKeyRepository for PgApiKeyRepository {
 
         if let Some(row) = row_opt {
             Ok(Some(ApiKey {
-                id: ApiKeyId(row.try_get("id")?),
-                tap_id: TapId(row.try_get("tap_id")?),
+                id: ApiKeyId(row.try_get::<i64, _>("id")? as u64),
+                tap_id: TapId(row.try_get::<i64, _>("tap_id")? as u64),
                 label: row.try_get("label")?,
                 key_hash: row.try_get("key_hash")?,
                 expires_at: row.try_get("expires_at")?,
@@ -144,7 +143,7 @@ impl ApiKeyRepository for PgApiKeyRepository {
     }
 
     async fn update(&self, key: &ApiKey) -> CoreResult<ApiKey> {
-        let id = key.id.0;
+        let id = key.id.0 as i64;
         let label = key.label.clone();
         let key_hash = key.key_hash.clone();
         let expires_at = key.expires_at;
@@ -167,8 +166,8 @@ impl ApiKeyRepository for PgApiKeyRepository {
         .await?;
 
         Ok(ApiKey {
-            id: ApiKeyId(row.try_get("id")?),
-            tap_id: TapId(row.try_get("tap_id")?),
+            id: ApiKeyId(row.try_get::<i64, _>("id")? as u64),
+            tap_id: TapId(row.try_get::<i64, _>("tap_id")? as u64),
             label: row.try_get("label")?,
             key_hash: row.try_get("key_hash")?,
             expires_at: row.try_get("expires_at")?,
@@ -177,9 +176,9 @@ impl ApiKeyRepository for PgApiKeyRepository {
         })
     }
 
-    async fn delete(&self, id: Uuid) -> CoreResult<()> {
+    async fn delete(&self, id: u64) -> CoreResult<()> {
         sqlx::query("DELETE FROM api_keys WHERE id = $1")
-            .bind(id)
+            .bind(id as i64)
             .execute(&self.pool)
             .await?;
         Ok(())

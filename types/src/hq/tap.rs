@@ -2,12 +2,11 @@ use super::{ResourceTimestamp, UserId};
 use derive_more::{From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr,
+    Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema, Hash, FromStr, Copy,
 )]
-pub struct TapId(pub Uuid);
+pub struct TapId(pub u64);
 
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]
 pub struct TapName(pub String);
@@ -61,7 +60,7 @@ pub struct Tap {
 }
 
 impl Tap {
-    pub fn new(id: Uuid, owner_id: Uuid, name: String) -> Self {
+    pub fn new(id: u64, owner_id: u64, name: String) -> Self {
         Self {
             id: TapId(id),
             name: TapName(name),

@@ -63,8 +63,8 @@ export const createNotification = (
     const level = CATEGORY_LEVELS[category]
 
     return {
-        id: faker.string.uuid(),
-        userId: faker.string.uuid(),
+        id: faker.string.numeric(18),
+        userId: faker.string.numeric(18),
         category,
         level,
         title: CATEGORY_TITLES[category],
@@ -80,9 +80,9 @@ export const createAuditLogEntry = (
     tapId: string,
     overrides?: Partial<AuditLogEntry>
 ): AuditLogEntry => ({
-    id: faker.string.uuid(),
+    id: faker.string.numeric(18),
     tapId,
-    actorId: faker.string.uuid(),
+    actorId: faker.string.numeric(18),
     action: faker.helpers.arrayElement([
         'tap.created',
         'tap.updated',
@@ -111,12 +111,12 @@ export const createTapAuditLogEntry = (
     const isSystem = faker.datatype.boolean({ probability: 0.1 });
     
     return {
-        id: faker.string.uuid(),
+        id: faker.string.numeric(18),
         tapId,
         actor: isSystem ? { type: 'system' } : {
             type: 'user',
             data: {
-                id: faker.string.uuid(),
+                id: faker.string.numeric(18),
                 username: faker.internet.username(),
                 avatar: faker.image.avatar(),
             }

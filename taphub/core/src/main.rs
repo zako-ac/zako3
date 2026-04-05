@@ -3,7 +3,6 @@ use dashmap::DashMap;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
 use tracing::Level;
-use uuid::Uuid;
 use zako3_states::CacheRepository;
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
@@ -11,7 +10,7 @@ use zako3_taphub_core::hub::TapHub;
 use zako3_taphub_core::infra::hq::RpcHqRepository;
 use zako3_taphub_core::repository::HqRepository;
 use zako3_taphub_transport_server::TransportServer;
-use zako3_types::hq::{ResourceTimestamp, Tap, TapOccupation, TapPermission};
+use zako3_types::hq::{ResourceTimestamp, Tap, TapId, TapOccupation, TapPermission, UserId};
 
 #[allow(dead_code)]
 struct StubHqRepository;
@@ -20,10 +19,10 @@ struct StubHqRepository;
 impl HqRepository for StubHqRepository {
     async fn authenticate_tap(&self, _token: &str) -> Option<Tap> {
         Tap {
-            id: Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into(),
+            id: TapId(0x67e55044_10b1_426f),
             name: "mytap".to_string().into(),
             description: "This is a stub tap for testing".to_string().into(),
-            owner_id: Uuid::new_v4().into(),
+            owner_id: UserId(1),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
@@ -33,10 +32,10 @@ impl HqRepository for StubHqRepository {
     }
     async fn get_tap(&self, _tap_id: &str) -> Option<Tap> {
         Tap {
-            id: Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into(),
+            id: TapId(0x67e55044_10b1_426f),
             name: "mytap".to_string().into(),
             description: "This is a stub tap for testing".to_string().into(),
-            owner_id: Uuid::new_v4().into(),
+            owner_id: UserId(1),
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],

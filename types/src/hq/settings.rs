@@ -17,7 +17,6 @@ pub struct EmojiMappingRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, zod_gen_derive::ZodSchema)]
-
 #[serde(rename_all = "snake_case")]
 pub enum TextReadingRule {
     Always,
@@ -26,7 +25,6 @@ pub enum TextReadingRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, zod_gen_derive::ZodSchema)]
-
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum UserJoinLeaveAlert {
     Auto,

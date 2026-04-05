@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use zako3_taphub_transport_server::TapHubBridgeHandler;
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
-    CachedAudioRequest,
+    CachedAudioRequest, hq::TapId,
 };
 
 use crate::hub::TapHub;
@@ -18,7 +18,7 @@ impl TapHubBridgeHandler for TapHub {
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
         let states = &self
             .state_service
-            .get_tap_states(&uuid::Uuid::from_u128(0x67e55044_10b1_426f_9247_bb680e5fe0c8).into())
+            .get_tap_states(&TapId(0x67e55044_10b1_426f))
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
         tracing::info!("Got tap states: {:?}", states);

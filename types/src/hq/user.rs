@@ -2,10 +2,9 @@ use super::ResourceTimestamp;
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, From, Into, Serialize, Deserialize, ToSchema)]
-pub struct UserId(pub Uuid);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, From, Into, Serialize, Deserialize, ToSchema, Copy)]
+pub struct UserId(pub u64);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, From, Into, Serialize, Deserialize, ToSchema)]
 pub struct DiscordUserId(pub String);
@@ -25,7 +24,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(id: Uuid, discord_user_id: String, username: String) -> Self {
+    pub fn new(id: u64, discord_user_id: String, username: String) -> Self {
         Self {
             id: UserId(id),
             discord_user_id: DiscordUserId(discord_user_id),

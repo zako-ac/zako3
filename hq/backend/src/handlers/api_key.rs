@@ -6,7 +6,6 @@ use axum::{
 use hq_core::{CoreError, Service};
 use hq_types::hq::{ApiKeyDto, ApiKeyResponseDto, CreateApiKeyDto, UpdateApiKeyDto};
 use std::sync::Arc;
-use uuid::Uuid;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     match e {
@@ -22,7 +21,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
 pub async fn create_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
     Json(dto): Json<CreateApiKeyDto>,
 ) -> Result<Json<ApiKeyResponseDto>, (axum::http::StatusCode, String)> {
     let res = service
@@ -36,7 +35,7 @@ pub async fn create_key(
 pub async fn list_keys(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
 ) -> Result<Json<Vec<ApiKeyDto>>, (axum::http::StatusCode, String)> {
     let res = service
         .api_key
@@ -49,7 +48,7 @@ pub async fn list_keys(
 pub async fn update_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(Uuid, Uuid)>,
+    Path((tap_id, key_id)): Path<(u64, u64)>,
     Json(dto): Json<UpdateApiKeyDto>,
 ) -> Result<Json<ApiKeyDto>, (axum::http::StatusCode, String)> {
     let res = service
@@ -63,7 +62,7 @@ pub async fn update_key(
 pub async fn delete_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(Uuid, Uuid)>,
+    Path((tap_id, key_id)): Path<(u64, u64)>,
 ) -> Result<axum::http::StatusCode, (axum::http::StatusCode, String)> {
     service
         .api_key
@@ -76,7 +75,7 @@ pub async fn delete_key(
 pub async fn regenerate_key(
     State(service): State<Arc<Service>>,
     AuthUser(user): AuthUser,
-    Path((tap_id, key_id)): Path<(Uuid, Uuid)>,
+    Path((tap_id, key_id)): Path<(u64, u64)>,
 ) -> Result<Json<ApiKeyResponseDto>, (axum::http::StatusCode, String)> {
     let res = service
         .api_key

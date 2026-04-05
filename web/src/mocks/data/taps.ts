@@ -22,7 +22,7 @@ const TAP_PERMISSION_TYPES = [
 export const createUserSummary = (
   overrides?: Partial<UserSummary>
 ): UserSummary => ({
-  id: faker.string.uuid(),
+  id: faker.string.numeric(18),
   username: faker.internet.username(),
   avatar: faker.image.avatar(),
   ...overrides,
@@ -45,13 +45,13 @@ export const createTap = (overrides?: Partial<Tap>): Tap => {
   } else if (permissionType === 'whitelisted') {
     const userIds = Array.from(
       { length: faker.number.int({ min: 1, max: 10 }) },
-      () => faker.string.uuid()
+      () => faker.string.numeric(18)
     )
     permission = { type: 'whitelisted', userIds }
   } else {
     const userIds = Array.from(
       { length: faker.number.int({ min: 1, max: 5 }) },
-      () => faker.string.uuid()
+      () => faker.string.numeric(18)
     )
     permission = { type: 'blacklisted', userIds }
   }
@@ -65,7 +65,7 @@ export const createTap = (overrides?: Partial<Tap>): Tap => {
     description: faker.lorem.paragraph(),
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
-    ownerId: faker.string.uuid(),
+    ownerId: faker.string.numeric(18),
     occupation: faker.helpers.arrayElement(TAP_OCCUPATIONS),
     roles: faker.helpers.arrayElements(TAP_ROLES, { min: 1, max: 2 }),
     permission,

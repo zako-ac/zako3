@@ -7,7 +7,6 @@ use hq_core::{CoreError, Service};
 use hq_types::hq::{TapDto, TapOccupation};
 use serde::Deserialize;
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct VerifyTapDto {
@@ -30,7 +29,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     path = "/api/v1/admin/taps/{id}/verify",
     request_body = VerifyTapDto,
     params(
-        ("id" = Uuid, Path, description = "Tap ID"),
+        ("id" = u64, Path, description = "Tap ID"),
     ),
     responses(
         (status = 200, description = "Tap verified", body = TapDto)
@@ -42,7 +41,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
 pub async fn verify_tap(
     State(service): State<Arc<Service>>,
     AdminUser(admin_id): AdminUser,
-    Path(id): Path<Uuid>,
+    Path(id): Path<u64>,
     Json(payload): Json<VerifyTapDto>,
 ) -> Result<Json<TapDto>, (axum::http::StatusCode, String)> {
     let tap = service

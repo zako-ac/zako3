@@ -3,7 +3,6 @@ use crate::repo::audit_log::AuditLogRepo;
 use hq_types::hq::audit_log::{ActorDto, AuditLogDto, CreateAuditLogDto, PaginatedAuditLogsDto};
 use hq_types::hq::dtos::{PaginationMetaDto, UserSummaryDto};
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AuditLogService {
@@ -17,8 +16,8 @@ impl AuditLogService {
 
     pub async fn log(
         &self,
-        tap_id: Uuid,
-        actor_id: Option<Uuid>,
+        tap_id: u64,
+        actor_id: Option<u64>,
         action_type: String,
         metadata: Option<serde_json::Value>,
     ) -> CoreResult<()> {
@@ -34,7 +33,7 @@ impl AuditLogService {
 
     pub async fn get_tap_logs(
         &self,
-        tap_id: Uuid,
+        tap_id: u64,
         page: i64,
         limit: i64,
     ) -> CoreResult<PaginatedAuditLogsDto> {

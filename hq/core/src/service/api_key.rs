@@ -7,10 +7,9 @@ use hq_types::hq::{
 };
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use uuid::Uuid;
 
 fn generate_api_key_secret() -> String {
-    format!("zk_{}", Uuid::new_v4().to_string().replace("-", ""))
+    format!("zk_{}", uuid::Uuid::new_v4().to_string().replace("-", ""))
 }
 
 fn hash_api_key(key: &str) -> String {
@@ -39,7 +38,7 @@ impl ApiKeyService {
         }
     }
 
-    async fn check_tap_ownership(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<()> {
+    async fn check_tap_ownership(&self, tap_id: u64, user_id: u64) -> CoreResult<()> {
         let tap = self
             .tap_repo
             .find_by_id(tap_id)
@@ -57,8 +56,8 @@ impl ApiKeyService {
 
     pub async fn create_key(
         &self,
-        tap_id: Uuid,
-        user_id: Uuid,
+        tap_id: u64,
+        user_id: u64,
         dto: CreateApiKeyDto,
     ) -> CoreResult<ApiKeyResponseDto> {
         self.check_tap_ownership(tap_id, user_id).await?;
@@ -67,7 +66,7 @@ impl ApiKeyService {
         let key_hash = hash_api_key(&secret);
 
         let key = ApiKey {
-            id: ApiKeyId(Uuid::new_v4()),
+            id: ApiKeyId(hq_types::hq::next_id()),
             tap_id: TapId(tap_id),
             label: dto.label.clone(),
             key_hash,
@@ -98,7 +97,7 @@ impl ApiKeyService {
         })
     }
 
-    pub async fn list_keys(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<Vec<ApiKeyDto>> {
+    pub async fn list_keys(&self, tap_id: u64, user_id: u64) -> CoreResult<Vec<ApiKeyDto>> {
         self.check_tap_ownership(tap_id, user_id).await?;
 
         let keys = self.repo.list_by_tap(tap_id).await?;
@@ -117,9 +116,9 @@ impl ApiKeyService {
 
     pub async fn update_key(
         &self,
-        tap_id: Uuid,
-        key_id: Uuid,
-        user_id: Uuid,
+        tap_id: u64,
+        key_id: u64,
+        user_id: u64,
         dto: UpdateApiKeyDto,
     ) -> CoreResult<ApiKeyDto> {
         self.check_tap_ownership(tap_id, user_id).await?;
@@ -177,7 +176,7 @@ impl ApiKeyService {
         })
     }
 
-    pub async fn delete_key(&self, tap_id: Uuid, key_id: Uuid, user_id: Uuid) -> CoreResult<()> {
+    pub async fn delete_key(&self, tap_id: u64, key_id: u64, user_id: u64) -> CoreResult<()> {
         self.check_tap_ownership(tap_id, user_id).await?;
 
         let key = self
@@ -207,9 +206,9 @@ impl ApiKeyService {
 
     pub async fn regenerate_key(
         &self,
-        tap_id: Uuid,
-        key_id: Uuid,
-        user_id: Uuid,
+        tap_id: u64,
+        key_id: u64,
+        user_id: u64,
     ) -> CoreResult<ApiKeyResponseDto> {
         self.check_tap_ownership(tap_id, user_id).await?;
 

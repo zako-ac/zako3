@@ -2,9 +2,8 @@ use crate::hq::dtos::{PaginationMetaDto, UserSummaryDto};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-pub type AuditLogId = Uuid;
+pub type AuditLogId = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase")]
@@ -17,8 +16,8 @@ pub enum ActorDto {
 #[serde(rename_all = "camelCase")]
 pub struct AuditLog {
     pub id: AuditLogId,
-    pub tap_id: Uuid,
-    pub actor_id: Option<Uuid>,
+    pub tap_id: u64,
+    pub actor_id: Option<u64>,
     pub action_type: String,
     pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
@@ -38,8 +37,8 @@ pub struct AuditLogDto {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAuditLogDto {
-    pub tap_id: Uuid,
-    pub actor_id: Option<Uuid>,
+    pub tap_id: u64,
+    pub actor_id: Option<u64>,
     pub action_type: String,
     pub metadata: Option<serde_json::Value>,
 }

@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use thiserror::Error;
-use uuid::Uuid;
 use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId};
 
 #[derive(Error, Debug)]
@@ -38,8 +37,8 @@ impl TapHubStateService {
         let id_str = self.cache_repository.get(&name_key).await;
         match id_str {
             Some(id) => {
-                if let Ok(uuid) = Uuid::parse_str(&id) {
-                    Ok(Some(TapId(uuid)))
+                if let Ok(num) = id.parse::<u64>() {
+                    Ok(Some(TapId(num)))
                 } else {
                     Ok(None)
                 }

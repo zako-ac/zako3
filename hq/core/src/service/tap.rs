@@ -7,7 +7,6 @@ use hq_types::hq::{
     TapWithAccessDto, TimeSeriesPointDto, UserSummaryDto,
 };
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct TapService {
@@ -32,8 +31,8 @@ impl TapService {
         }
     }
 
-    pub async fn create(&self, owner_id: Uuid, dto: CreateTapDto) -> CoreResult<Tap> {
-        let mut tap = Tap::new(Uuid::new_v4(), owner_id, dto.name.clone());
+    pub async fn create(&self, owner_id: u64, dto: CreateTapDto) -> CoreResult<Tap> {
+        let mut tap = Tap::new(hq_types::hq::next_id(), owner_id, dto.name.clone());
         tap.description = dto.description.clone();
         if let Some(permission) = dto.permission.clone() {
             tap.permission = permission;
@@ -59,7 +58,7 @@ impl TapService {
 
     pub async fn list_by_user(
         &self,
-        user_id: Uuid,
+        user_id: u64,
     ) -> CoreResult<PaginatedResponseDto<TapWithAccessDto>> {
         let taps = self.tap_repo.list_by_owner(user_id).await?;
         let user = self
@@ -110,8 +109,8 @@ impl TapService {
 
     pub async fn get_tap_with_access(
         &self,
-        tap_id: Uuid,
-        user_id: Uuid,
+        tap_id: u64,
+        user_id: u64,
     ) -> CoreResult<TapWithAccessDto> {
         let tap = self
             .tap_repo
@@ -151,7 +150,7 @@ impl TapService {
         })
     }
 
-    pub async fn get_tap_stats(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<TapStatsDto> {
+    pub async fn get_tap_stats(&self, tap_id: u64, user_id: u64) -> CoreResult<TapStatsDto> {
         let tap = self
             .tap_repo
             .find_by_id(tap_id)
@@ -197,8 +196,8 @@ impl TapService {
 
     pub async fn update_tap(
         &self,
-        tap_id: Uuid,
-        user_id: Uuid,
+        tap_id: u64,
+        user_id: u64,
         dto: hq_types::hq::UpdateTapDto,
     ) -> CoreResult<Tap> {
         let mut tap = self
@@ -259,8 +258,8 @@ impl TapService {
 
     pub async fn verify_tap(
         &self,
-        tap_id: Uuid,
-        admin_id: Uuid,
+        tap_id: u64,
+        admin_id: u64,
         occupation: hq_types::hq::TapOccupation,
     ) -> CoreResult<Tap> {
         let mut tap = self
@@ -288,7 +287,7 @@ impl TapService {
         Ok(updated_tap)
     }
 
-    pub async fn delete_tap(&self, tap_id: Uuid, user_id: Uuid) -> CoreResult<()> {
+    pub async fn delete_tap(&self, tap_id: u64, user_id: u64) -> CoreResult<()> {
         let tap = self
             .tap_repo
             .find_by_id(tap_id)
@@ -309,7 +308,7 @@ impl TapService {
         Ok(())
     }
 
-    pub async fn get_tap_internal(&self, tap_id: Uuid) -> CoreResult<Option<Tap>> {
+    pub async fn get_tap_internal(&self, tap_id: u64) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
     }
 }

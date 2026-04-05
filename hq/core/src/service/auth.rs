@@ -1,11 +1,10 @@
 use crate::repo::UserRepository;
 use crate::{AppConfig, CoreError, CoreResult};
 use hq_types::hq::{AuthResponseDto, AuthUserDto, LoginResponseDto, User};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -155,8 +154,11 @@ impl AuthService {
                 Ok(u)
             }
             None => {
-                let mut new_user =
-                    User::new(Uuid::new_v4(), discord_id.to_string(), username.to_string());
+                let mut new_user = User::new(
+                    hq_types::hq::next_id(),
+                    discord_id.to_string(),
+                    username.to_string(),
+                );
 
                 if let Some(a) = avatar {
                     new_user.avatar_url = Some(format!(
@@ -172,11 +174,12 @@ impl AuthService {
     }
 
     pub async fn get_user(&self, id: &str) -> CoreResult<AuthUserDto> {
-        let uuid = Uuid::parse_str(id)
+        let user_id = id
+            .parse::<u64>()
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
         let user = self
             .user_repo
-            .find_by_id(uuid)
+            .find_by_id(user_id)
             .await?
             .ok_or(CoreError::NotFound("User not found".to_string()))?;
 
@@ -191,12 +194,13 @@ impl AuthService {
     }
 
     pub async fn refresh_token(&self, id: &str) -> CoreResult<AuthResponseDto> {
-        let uuid = Uuid::parse_str(id)
+        let user_id = id
+            .parse::<u64>()
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
 
         let user = self
             .user_repo
-            .find_by_id(uuid)
+            .find_by_id(user_id)
             .await?
             .ok_or(CoreError::NotFound("User not found".to_string()))?;
 

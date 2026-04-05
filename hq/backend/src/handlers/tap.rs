@@ -6,7 +6,6 @@ use axum::{
 use hq_core::{CoreError, Service};
 use hq_types::hq::{CreateTapDto, PaginatedResponseDto, Tap, TapStatsDto, TapWithAccessDto};
 use std::sync::Arc;
-use uuid::Uuid;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     match e {
@@ -67,7 +66,7 @@ pub async fn list_taps(
     get,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = Uuid, Path, description = "Tap ID")
+        ("id" = u64, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap details", body = TapWithAccessDto)
@@ -79,7 +78,7 @@ pub async fn list_taps(
 pub async fn get_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
 ) -> Result<Json<TapWithAccessDto>, (axum::http::StatusCode, String)> {
     let tap = service
         .tap
@@ -94,7 +93,7 @@ pub async fn get_tap(
     get,
     path = "/api/v1/taps/{id}/stats",
     params(
-        ("id" = Uuid, Path, description = "Tap ID")
+        ("id" = u64, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap statistics", body = TapStatsDto)
@@ -106,7 +105,7 @@ pub async fn get_tap(
 pub async fn get_tap_stats(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
 ) -> Result<Json<TapStatsDto>, (axum::http::StatusCode, String)> {
     let stats = service
         .tap
@@ -121,7 +120,7 @@ pub async fn get_tap_stats(
     patch,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = Uuid, Path, description = "Tap ID")
+        ("id" = u64, Path, description = "Tap ID")
     ),
     request_body = hq_types::hq::UpdateTapDto,
     responses(
@@ -134,7 +133,7 @@ pub async fn get_tap_stats(
 pub async fn update_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
     Json(payload): Json<hq_types::hq::UpdateTapDto>,
 ) -> Result<Json<Tap>, (axum::http::StatusCode, String)> {
     let tap = service
@@ -150,7 +149,7 @@ pub async fn update_tap(
     delete,
     path = "/api/v1/taps/{id}",
     params(
-        ("id" = Uuid, Path, description = "Tap ID")
+        ("id" = u64, Path, description = "Tap ID")
     ),
     responses(
         (status = 200, description = "Tap deleted")
@@ -162,7 +161,7 @@ pub async fn update_tap(
 pub async fn delete_tap(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
-    Path(tap_id): Path<Uuid>,
+    Path(tap_id): Path<u64>,
 ) -> Result<Json<()>, (axum::http::StatusCode, String)> {
     service
         .tap

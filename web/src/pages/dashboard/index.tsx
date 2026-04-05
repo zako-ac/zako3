@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Compass, Plus, TrendingUp, Users, Activity, Boxes, Box, Settings } from 'lucide-react'
+import { Compass, Plus, TrendingUp, Users, Activity, Box } from 'lucide-react'
 import { useMyTaps } from '@/features/taps'
 import { useNotifications } from '@/features/notifications'
 import { useAuthStore } from '@/features/auth'

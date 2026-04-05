@@ -6,7 +6,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::mpsc;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
 use zako3_types::{AudioCachePolicy, AudioCacheType};
@@ -144,7 +144,7 @@ async fn test_zakofish_flow() {
     let tap = Arc::new(ZakofishTap::new(client_config).unwrap());
     let tap_handler = Arc::new(TestTapHandler);
 
-    let tap_id = TapId(uuid::Uuid::new_v4());
+    let tap_id = TapId(343456);
 
     let hello_info = TapClientHello {
         tap_id: tap_id.clone(),

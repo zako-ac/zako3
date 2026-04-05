@@ -1,12 +1,11 @@
 use hq_core::service::api_key::ApiKeyService;
 use hq_core::service::tap::TapService;
-use hq_types::hq::rpc::HqRpcServer;
-use hq_types::hq::Tap;
 use hq_types::ZakoResult;
-use jsonrpsee::core::async_trait;
+use hq_types::hq::Tap;
+use hq_types::hq::rpc::HqRpcServer;
 use jsonrpsee::core::RpcResult;
+use jsonrpsee::core::async_trait;
 use jsonrpsee::types::ErrorObjectOwned;
-use uuid::Uuid;
 
 pub struct HqRpcImpl {
     api_key_service: ApiKeyService,
@@ -33,11 +32,11 @@ impl HqRpcServer for HqRpcImpl {
     }
 
     async fn get_tap_internal(&self, tap_id: String) -> RpcResult<Option<Tap>> {
-        let uuid = match Uuid::parse_str(&tap_id) {
+        let id = match tap_id.parse::<u64>() {
             Ok(u) => u,
             Err(_) => return Ok(None),
         };
-        let res = self.tap_service.get_tap_internal(uuid).await;
+        let res = self.tap_service.get_tap_internal(id).await;
         match res {
             Ok(tap) => Ok(tap),
             Err(e) => Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
