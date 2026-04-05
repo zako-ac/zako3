@@ -1,5 +1,5 @@
-use ringbuf::traits::consumer::Consumer;
 use std::time::Duration;
+use zako3_audio_engine_audio::ringbuf::traits::consumer::Consumer;
 
 use crate::types::TrackId;
 use zako3_audio_engine_audio::{
@@ -10,7 +10,7 @@ use zako3_audio_engine_audio::{
 async fn test_mixer_add_remove_source() {
     let (output_prod, mut output_cons) = create_opus_ringbuf_pair();
     // Drain output to prevent blocking the mixer thread
-    tokio::spawn(async move { while let Some(_) = output_cons.try_pop() {} });
+    tokio::spawn(async move { while let Some(_) = Consumer::try_pop(&mut output_cons) {} });
     let mixer = create_thread_mixer(output_prod);
 
     let track_id = TrackId::from(1);

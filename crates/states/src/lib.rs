@@ -22,6 +22,8 @@ pub trait CacheRepository: Send + Sync {
     async fn decr(&self, key: &str) -> Result<i64>;
     async fn pfadd(&self, key: &str, element: u64) -> Result<()>;
     async fn pfcount(&self, key: &str) -> Result<u64>;
+    async fn sadd(&self, key: &str, member: &str) -> Result<()>;
+    async fn smembers(&self, key: &str) -> Result<Vec<String>>;
 }
 
 pub type CacheRepositoryRef = Arc<dyn CacheRepository>;
@@ -187,6 +189,24 @@ impl TapMetricsStateService {
             None => Ok(0),
         }
     }
+
+    pub async fn register_tap(&self, tap_id: TapId) -> Result<()> {
+        let key = "metrics:known_taps";
+        self.cache_repository
+            .sadd(key, &tap_id.0.to_string())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_known_taps(&self) -> Result<Vec<TapId>> {
+        let key = "metrics:known_taps";
+        let members = self.cache_repository.smembers(key).await?;
+        Ok(members
+            .into_iter()
+            .filter_map(|s| s.parse::<u64>().ok())
+            .map(TapId)
+            .collect())
+    }
 }
 
 #[cfg(feature = "redis")]
@@ -246,6 +266,20 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let val: u64 = conn.pfcount(key).await?;
+        Ok(val)
+    }
+
+    async fn sadd(&self, key: &str, member: &str) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: () = conn.sadd(key, member).await?;
+        Ok(())
+    }
+
+    async fn smembers(&self, key: &str) -> Result<Vec<String>> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: Vec<String> = conn.smembers(key).await?;
         Ok(val)
     }
 }

@@ -10,5 +10,6 @@ pub mod error;
 pub mod util;
 pub use util::*;
 pub mod metrics;
+pub use ringbuf;
 
 mod speed_control;

@@ -5,7 +5,7 @@ pub mod formatter;
 use anyhow::Result;
 use cli::{HqCommands, HqSubcommand, TapSubcommand, UserSubcommand};
 use client::HqClient;
-use hq_types::hq::rpc::HqRpcClient;
+use zako3_types::hq::rpc::HqRpcClient;
 
 pub async fn handle_command(
     hq_addr: String,

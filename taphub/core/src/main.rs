@@ -105,6 +105,22 @@ impl CacheRepository for StubCacheRepository {
     async fn pfcount(&self, key: &str) -> Result<u64, zako3_states::StateServiceError> {
         Ok(self.hll.get(key).map(|v| v.len() as u64).unwrap_or(0))
     }
+
+    async fn sadd(&self, key: &str, member: &str) -> Result<(), zako3_states::StateServiceError> {
+        self.data
+            .insert(format!("{}:set:{}", key, member), "true".to_string());
+        Ok(())
+    }
+
+    async fn smembers(&self, key: &str) -> Result<Vec<String>, zako3_states::StateServiceError> {
+        let prefix = format!("{}:set:", key);
+        Ok(self
+            .data
+            .iter()
+            .filter(|kv| kv.key().starts_with(&prefix))
+            .map(|kv| kv.key().strip_prefix(&prefix).unwrap().to_string())
+            .collect())
+    }
 }
 
 use std::fs::File;

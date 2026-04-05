@@ -1,5 +1,5 @@
 use comfy_table::{Attribute, Cell, Color, Table};
-use hq_types::hq::{Tap, User};
+use zako3_types::hq::{Tap, User};
 
 pub fn format_user_list(users: &[User]) -> String {
     let mut table = Table::new();

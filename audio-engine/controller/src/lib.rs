@@ -1,18 +1,62 @@
-use std::result::Result;
 use std::sync::Arc;
-use tonic::{Request, Response, Status};
 
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+use jsonrpsee::types::ErrorObjectOwned;
 use tracing::instrument;
-use zako3_audio_engine_protos as proto;
-use zako3_audio_engine_protos::audio_engine_server::AudioEngine;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
+use zako3_audio_engine_core::error::ZakoError;
 use zako3_audio_engine_core::types::{
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, TrackId, UserId,
-    Volume, hq::DiscordUserId,
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
+    TrackId, Volume, hq::DiscordUserId,
 };
 
 pub mod config;
+
+fn to_rpc_error(e: ZakoError) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)
+}
+
+#[rpc(server, client)]
+pub trait AudioEngineRpc {
+    #[method(name = "join")]
+    async fn join(&self, guild_id: GuildId, channel_id: ChannelId) -> RpcResult<bool>;
+
+    #[method(name = "leave")]
+    async fn leave(&self, guild_id: GuildId) -> RpcResult<bool>;
+
+    #[method(name = "play")]
+    async fn play(
+        &self,
+        guild_id: GuildId,
+        queue_name: QueueName,
+        tap_name: TapName,
+        audio_request_string: AudioRequestString,
+        volume: Volume,
+        discord_user_id: DiscordUserId,
+    ) -> RpcResult<TrackId>;
+
+    #[method(name = "set_volume")]
+    async fn set_volume(
+        &self,
+        guild_id: GuildId,
+        track_id: TrackId,
+        volume: Volume,
+    ) -> RpcResult<bool>;
+
+    #[method(name = "stop")]
+    async fn stop(&self, guild_id: GuildId, track_id: TrackId) -> RpcResult<bool>;
+
+    #[method(name = "stop_many")]
+    async fn stop_many(&self, guild_id: GuildId, filter: AudioStopFilter) -> RpcResult<bool>;
+
+    #[method(name = "next_music")]
+    async fn next_music(&self, guild_id: GuildId) -> RpcResult<bool>;
+
+    #[method(name = "get_session_state")]
+    async fn get_session_state(&self, guild_id: GuildId) -> RpcResult<SessionState>;
+}
 
 pub struct AudioEngineServer {
     pub session_manager: Arc<SessionManager>,
@@ -24,232 +68,128 @@ impl AudioEngineServer {
     }
 }
 
-#[tonic::async_trait]
-impl AudioEngine for AudioEngineServer {
+#[jsonrpsee::core::async_trait]
+impl AudioEngineRpcServer for AudioEngineServer {
     #[instrument(skip(self))]
-    async fn join(
-        &self,
-        request: Request<proto::JoinRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-        let channel_id: ChannelId = ChannelId::from(req.channel_id);
-
+    async fn join(&self, guild_id: GuildId, channel_id: ChannelId) -> RpcResult<bool> {
         self.session_manager
             .join(guild_id, channel_id)
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(to_rpc_error)?;
 
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn leave(
-        &self,
-        request: Request<proto::LeaveRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+    async fn leave(&self, guild_id: GuildId) -> RpcResult<bool> {
         self.session_manager
             .leave(guild_id)
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(to_rpc_error)?;
 
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
     async fn play(
         &self,
-        request: Request<proto::PlayRequest>,
-    ) -> Result<Response<proto::PlayResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+        guild_id: GuildId,
+        queue_name: QueueName,
+        tap_name: TapName,
+        audio_request_string: AudioRequestString,
+        volume: Volume,
+        discord_user_id: DiscordUserId,
+    ) -> RpcResult<TrackId> {
         let session = self
             .session_manager
             .get_session(guild_id)
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
 
         let track_id = session
             .play(
-                QueueName::from(req.queue_name),
-                TapName::from(req.tap_name),
-                AudioRequestString::from(req.audio_request_string),
-                Volume::from(req.volume),
-                DiscordUserId::from(req.discord_user_id),
+                queue_name,
+                tap_name,
+                audio_request_string,
+                volume,
+                discord_user_id,
             )
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(to_rpc_error)?;
 
-        let id: u64 = track_id.into();
-        Ok(Response::new(proto::PlayResponse {
-            result: Some(proto::play_response::Result::TrackId(id)),
-        }))
+        Ok(track_id)
     }
 
     #[instrument(skip(self))]
     async fn set_volume(
         &self,
-        request: Request<proto::SetVolumeRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+        guild_id: GuildId,
+        track_id: TrackId,
+        volume: Volume,
+    ) -> RpcResult<bool> {
         let session = self
             .session_manager
             .get_session(guild_id)
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
 
         session
-            .set_volume(TrackId::from(req.track_id), Volume::from(req.volume))
+            .set_volume(track_id, volume)
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(to_rpc_error)?;
 
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn stop(
-        &self,
-        request: Request<proto::StopRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+    async fn stop(&self, guild_id: GuildId, track_id: TrackId) -> RpcResult<bool> {
         let session = self
             .session_manager
             .get_session(guild_id)
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
 
-        let track_id_str = req.track_id;
-        let track_id_u64 = track_id_str
-            .parse::<u64>()
-            .map_err(|_| Status::invalid_argument("Invalid track ID format"))?;
+        session.stop(track_id).await.map_err(to_rpc_error)?;
 
-        session
-            .stop(TrackId::from(track_id_u64))
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn stop_many(
-        &self,
-        request: Request<proto::StopManyRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+    async fn stop_many(&self, guild_id: GuildId, filter: AudioStopFilter) -> RpcResult<bool> {
         let session = self
             .session_manager
             .get_session(guild_id)
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
 
-        let filter_msg = req
-            .filter
-            .ok_or_else(|| Status::invalid_argument("Missing filter"))?;
+        session.stop_many(filter).await.map_err(to_rpc_error)?;
 
-        let filter = match filter_msg.filter_type {
-            Some(proto::audio_stop_filter::FilterType::All(_)) => AudioStopFilter::All,
-            Some(proto::audio_stop_filter::FilterType::Music(_)) => AudioStopFilter::Music,
-            Some(proto::audio_stop_filter::FilterType::Tts(tts)) => {
-                AudioStopFilter::TTS(UserId::from(tts.user_id))
-            }
-            None => return Err(Status::invalid_argument("Invalid stop filter type")),
-        };
-
-        session
-            .stop_many(filter)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn next_music(
-        &self,
-        request: Request<proto::NextMusicRequest>,
-    ) -> Result<Response<proto::OkResponse>, Status> {
-        let req = request.into_inner();
-        let guild_id: GuildId = GuildId::from(req.guild_id);
-
+    async fn next_music(&self, guild_id: GuildId) -> RpcResult<bool> {
         let session = self
             .session_manager
             .get_session(guild_id)
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
 
-        session
-            .next_music()
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+        session.next_music().await.map_err(to_rpc_error)?;
 
-        Ok(Response::new(proto::OkResponse {
-            result: Some(proto::ok_response::Result::Success(true)),
-        }))
+        Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn get_session_state(
-        &self,
-        request: Request<proto::GetSessionStateRequest>,
-    ) -> Result<Response<proto::SessionStateResponse>, Status> {
+    async fn get_session_state(&self, guild_id: GuildId) -> RpcResult<SessionState> {
         let session = self
             .session_manager
-            .get_session(request.get_ref().guild_id.into())
-            .ok_or_else(|| Status::not_found("Session not found"))?;
+            .get_session(guild_id)
+            .ok_or_else(|| ErrorObjectOwned::owned(-32001, "Session not found", None::<()>))?;
+
         let state = session
             .session_state()
             .await
-            .map_err(|e| Status::internal(e.to_string()))?
-            .ok_or_else(|| Status::not_found("Session state not found"))?;
+            .map_err(to_rpc_error)?
+            .ok_or_else(|| {
+                ErrorObjectOwned::owned(-32002, "Session state not found", None::<()>)
+            })?;
 
-        let queues = state
-            .queues
-            .into_iter()
-            .map(|(name, tracks)| proto::Queue {
-                name: name.into(),
-                tracks: tracks
-                    .into_iter()
-                    .map(|track| track_to_proto(track))
-                    .collect(),
-            })
-            .collect();
-
-        Ok(Response::new(proto::SessionStateResponse {
-            result: Some(proto::session_state_response::Result::State(
-                proto::SessionState {
-                    guild_id: request.into_inner().guild_id,
-                    channel_id: state.channel_id.into(),
-                    queues,
-                },
-            )),
-        }))
-    }
-}
-
-fn track_to_proto(track: zako3_audio_engine_core::types::Track) -> proto::Track {
-    proto::Track {
-        track_id: track.track_id.into(),
-        description: todo!(), // TODO implement track description
-        queue_name: track.queue_name.into(),
-        audio_request_string: track.request.audio_request.into(),
-        cache_key: todo!(), // TODO remove cache key from proto
-        tap_name: track.request.tap_name.into(),
-        volume: track.volume.into(),
+        Ok(state)
     }
 }

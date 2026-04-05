@@ -10,9 +10,10 @@ use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
-    AudioResponse, CachedAudioRequest, ChannelId, DiscordUserId, GuildId, QueueName, SessionState,
-    TapName, Track, TrackId, Volume,
+    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, TapName, Track,
+    TrackId, Volume,
 };
+use zako3_types::hq::DiscordUserId;
 
 // Helper to create a dummy track
 fn create_dummy_track(id: u64, queue: &str) -> Track {

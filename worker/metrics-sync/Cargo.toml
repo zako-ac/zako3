@@ -3,4 +3,23 @@ name = "metrics-sync"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "metrics-sync"
+path = "src/main.rs"
+
+[[bin]]
+name = "redis-pusher"
+path = "src/bin/redis_pusher.rs"
+
 [dependencies]
+anyhow.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+dotenvy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"] }
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zako3-states = { version = "0.1.0", path = "../../crates/states", features = ["redis"] }
+zako3-types = { version = "0.1.0", path = "../../types" }

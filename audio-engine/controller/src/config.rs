@@ -6,6 +6,7 @@ pub struct AppConfig {
     pub discord_token: String,
     pub port: u16,
     pub host: String,
+    pub ae_token: String,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]

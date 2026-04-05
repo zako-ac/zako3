@@ -49,6 +49,9 @@ impl HubHandler for TapHubConnectionHandler {
                 };
 
                 let tap_id = tap.id.clone();
+                if let Err(e) = self.metrics_service.register_tap(tap_id.clone()).await {
+                    tracing::warn!(%e, "Failed to register tap in metrics service");
+                }
                 if let Err(e) = self.metrics_service.inc_active_now(tap_id).await {
                     tracing::warn!(%e, "Failed to increment active_now metric");
                 }

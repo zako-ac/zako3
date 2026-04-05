@@ -18,6 +18,8 @@ pub struct Config {
 pub struct Context {
     pub name: String,
     pub ae_addr: String,
+    #[serde(default)]
+    pub ae_token: Option<String>,
     #[serde(default = "default_hq_addr")]
     pub hq_addr: String,
     #[serde(default)]
@@ -41,6 +43,7 @@ impl Default for Config {
             contexts: vec![Context {
                 name: "default".to_string(),
                 ae_addr: "http://127.0.0.1:50051".to_string(),
+                ae_token: None,
                 hq_addr: default_hq_addr(),
                 hq_admin_token: None,
                 default_guild_id: None,
@@ -90,12 +93,14 @@ impl Config {
         &mut self,
         name: String,
         ae_addr: String,
+        ae_token: Option<String>,
         hq_addr: String,
         hq_admin_token: Option<String>,
         default_guild_id: Option<String>,
     ) {
         if let Some(ctx) = self.contexts.iter_mut().find(|c| c.name == name) {
             ctx.ae_addr = ae_addr;
+            ctx.ae_token = ae_token;
             ctx.hq_addr = hq_addr;
             ctx.hq_admin_token = hq_admin_token;
             ctx.default_guild_id = default_guild_id;
@@ -103,6 +108,7 @@ impl Config {
             self.contexts.push(Context {
                 name,
                 ae_addr,
+                ae_token,
                 hq_addr,
                 hq_admin_token,
                 default_guild_id,

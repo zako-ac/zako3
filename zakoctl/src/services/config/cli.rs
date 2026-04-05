@@ -21,8 +21,10 @@ pub enum ConfigSubcommands {
     SetContext {
         #[arg(help = "Name of the context")]
         name: String,
-        #[arg(long, help = "Address of the Audio Engine gRPC server")]
+        #[arg(long, help = "Address of the Audio Engine server")]
         ae_addr: String,
+        #[arg(long, help = "Token for Audio Engine authentication")]
+        ae_token: Option<String>,
         #[arg(long, help = "Address of the HQ RPC server")]
         hq_addr: String,
         #[arg(long, help = "Admin token for HQ RPC server")]

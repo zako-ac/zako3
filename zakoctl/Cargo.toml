@@ -7,11 +7,10 @@ edition = "2024"
 tokio = { version = "1.37", features = ["full"] }
 clap = { version = "4.5", features = ["derive", "string", "color", "env", "wrap_help"] }
 clap_complete = "4.5"
-tonic = "0.14.2"
-prost = "0.14.1"
 anyhow = "1.0"
 colored = "2.1"
-zako3-audio-engine-protos = { workspace = true }
+zako3-audio-engine-controller = { workspace = true }
+zako3-types = { workspace = true }
 dotenvy = "0.15"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.10"
@@ -20,7 +19,6 @@ serde_yaml = "0.9.34"
 comfy-table = "7.2.1"
 jsonrpsee = { version = "0.24", features = ["http-client", "macros"] }
 http = "1.0"
-hq-types = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 
 [[bin]]
