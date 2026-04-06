@@ -239,6 +239,10 @@ impl UserSettingsStateService {
 pub struct VoiceChannelLocation {
     pub guild_id: u64,
     pub channel_id: u64,
+    #[serde(default)]
+    pub guild_name: String,
+    #[serde(default)]
+    pub channel_name: String,
 }
 
 #[derive(Clone)]
@@ -260,10 +264,12 @@ impl VoiceStateService {
         discord_user_id: &str,
         guild_id: u64,
         channel_id: u64,
+        guild_name: String,
+        channel_name: String,
     ) -> Result<()> {
         let mut locations = self.get_user_channels(discord_user_id).await?;
         locations.retain(|loc| loc.guild_id != guild_id);
-        locations.push(VoiceChannelLocation { guild_id, channel_id });
+        locations.push(VoiceChannelLocation { guild_id, channel_id, guild_name, channel_name });
         let serialized =
             serde_json::to_string(&locations).map_err(|_| StateServiceError::CacheError)?;
         self.cache_repository.set(&Self::key(discord_user_id), &serialized).await;

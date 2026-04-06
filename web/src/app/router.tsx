@@ -20,6 +20,7 @@ import {
   AdminTapDetailPage,
   AdminNotificationsPage,
   AdminVerificationsPage,
+  VoiceChannelPage,
 } from '@/pages'
 import { HotkeyTest } from '@/pages/hotkey-test'
 import { ROUTES } from '@/lib/constants'
@@ -61,6 +62,7 @@ export const AppRouter = () => {
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
           <Route path={ROUTES.TAPS_MINE} element={<MyTapsPage />} />
           <Route path={ROUTES.TAPS_CREATE} element={<CreateTapPage />} />
+          <Route path="/voice/:guildId/:channelId" element={<VoiceChannelPage />} />
           <Route element={<TapLayout />}>
             <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
             <Route path="/taps/:tapId/api-keys" element={<TapApiKeysPage />} />

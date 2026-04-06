@@ -14,7 +14,6 @@ refer hq todo
 
 
 # Other
-- [ ] otel and prometheus and logging(promtail)
 - [x] AE Track proto handling (todo!)
 - [x] migrate AE-TH comms to jsonrpsee
 - [x] Make AE work without TH (atleast no crash)
@@ -24,21 +23,22 @@ refer hq todo
 - [x] Make HQ RPC for zakoctl, and use it to make someone admin
 - [x] verify tap in web
 - [x] AE init rmq AFTER init discord
+- [x] AE Hang on no join
+- [x] Add timeout to audio request
+- [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 
+- [ ] otel and prometheus and logging(promtail)
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 - [ ] implement ban
 
-- [x] AE Hang on no join
 - [ ] AE re-join on boot
 - [ ] Gauge metrics reset on TH boot
-
 - [ ] Add track finish to AE queue
-
 - [ ] Add timeout to AE client
-- [x] Add timeout to audio request
-
-- [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
+- [ ] Add search API for tap (like youtube search)
+- [ ] Make TH connection ID (online count) tracking better
+- [ ] Make cache removation command
 
 ## Text Preprocessing
 - [ ] ㅏ -> 아
@@ -58,4 +58,7 @@ refer hq todo
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
 
 ## Discord
+- [ ] Separate embeds and add theme color
+- [ ] Don't read itself
+- [ ] Use plain text for everyday messages, for friendly UX.
 - [ ] Tap list command: max 10 minutes live update

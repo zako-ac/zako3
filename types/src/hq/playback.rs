@@ -13,7 +13,7 @@ pub struct AudioMetadataDto {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackDto {
-    pub track_id: u64,
+    pub track_id: String,
     pub queue_name: String,
     pub metadata: Vec<AudioMetadataDto>,
     pub tap_name: String,
@@ -26,7 +26,9 @@ pub struct TrackDto {
 #[serde(rename_all = "camelCase")]
 pub struct GuildPlaybackStateDto {
     pub guild_id: String,
+    pub guild_name: String,
     pub channel_id: String,
+    pub channel_name: String,
     pub queues: HashMap<String, Vec<TrackDto>>,
 }
 
@@ -48,7 +50,7 @@ pub struct PlaybackActionDto {
 pub struct StopTrackDto {
     pub guild_id: String,
     pub channel_id: String,
-    pub track_id: u64,
+    pub track_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
@@ -63,7 +65,7 @@ pub struct SkipDto {
 pub struct QueueOperation {
     /// "remove" or "set_volume"
     pub op: String,
-    pub track_id: u64,
+    pub track_id: String,
     pub target_index: Option<usize>,
     pub volume: Option<f32>,
 }

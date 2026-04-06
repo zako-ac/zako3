@@ -1,8 +1,10 @@
 pub mod auth;
 pub mod tap;
 pub mod validation;
+pub mod discord_resolver;
 
 pub use auth::AuthService;
+pub use discord_resolver::{DiscordNameResolver, DiscordNameResolverSlot, make_resolver_slot};
 pub mod api_key;
 pub use api_key::ApiKeyService;
 pub mod audit_log;
@@ -36,6 +38,7 @@ pub struct Service {
     pub user_settings: UserSettingsService,
     pub voice_state: VoiceStateService,
     pub playback: PlaybackService,
+    pub name_resolver_slot: DiscordNameResolverSlot,
 }
 
 impl Service {
@@ -84,10 +87,12 @@ impl Service {
 
         let voice_state = VoiceStateService::new(redis_repo.clone());
         let playback_action_repo = Arc::new(PgPlaybackActionRepo::new(pool.clone()));
+        let name_resolver_slot = make_resolver_slot();
         let playback = PlaybackService::new(
             audio_engine,
             voice_state.clone(),
             playback_action_repo,
+            name_resolver_slot.clone(),
         );
 
         Ok(Self {
@@ -102,6 +107,7 @@ impl Service {
             user_settings: UserSettingsService::new(user_repo.clone(), user_settings_cache),
             voice_state,
             playback,
+            name_resolver_slot,
         })
     }
 }

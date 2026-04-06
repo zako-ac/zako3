@@ -39,6 +39,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import clsx from 'clsx'
+import { VoiceSidebarSection } from './voice-sidebar-section'
 
 export const AppSidebar = () => {
     const { t } = useTranslation()
@@ -153,7 +154,8 @@ export const AppSidebar = () => {
             </SidebarHeader>
 
             <SidebarContent>
-                {navSections.map((section) => (
+                {user && <VoiceSidebarSection />}
+            {navSections.map((section) => (
                     <SidebarGroup key={section.title}>
                         <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
                         <SidebarGroupContent>

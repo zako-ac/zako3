@@ -1,9 +1,10 @@
 use axum::{
-    Router,
+    Extension, Router,
     routing::{get, post},
 };
 use hq_core::Service;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
@@ -116,7 +117,7 @@ use handlers::users;
 )]
 pub struct ApiDoc;
 
-pub fn app(service: Service) -> Router {
+pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
     let state = Arc::new(service.clone());
 
     let rpc_impl = rpc::HqRpcImpl::new(
@@ -221,6 +222,8 @@ pub fn app(service: Service) -> Router {
         .route("/api/v1/playback/queue", axum::routing::patch(playback::edit_queue))
         .route("/api/v1/playback/undo/:action_id", post(playback::undo_action))
         .route("/api/v1/playback/history", get(playback::get_history))
+        .route("/api/v1/playback/ws", get(playback::playback_ws))
+        .layer(Extension(event_tx))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

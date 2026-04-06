@@ -198,6 +198,18 @@ impl TapHubBridgeHandler for TapHub {
 
         self.verify_permission(&tap, &req.discord_user_id).await?;
 
+        // Skip preload if already cached
+        let cache_item = build_cache_item(tap_id.clone(), &req.cache_key, &req.audio_request);
+        if let Some(ref item) = cache_item {
+            if let Some(entry) = self.audio_cache.get_entry(&item.tap_id, &item.key).await {
+                tracing::info!("Preload cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
+                return Ok(AudioMetaResponse {
+                    metadatas: entry.metadatas,
+                    cache_key: entry.cache_key,
+                });
+            }
+        }
+
         // Connection selection
         let states = self
             .state_service
@@ -247,7 +259,7 @@ impl TapHubBridgeHandler for TapHub {
         self.audio_preload.preload(preload_id, rel_rx);
 
         // Determine finalization action
-        let action = match build_cache_item(tap_id, &succ.cache, &req.audio_request) {
+        let action = match cache_item {
             Some(item) => PreloadReadEndAction::MoveToCache {
                 item,
                 metadatas: succ.metadatas.clone(),
@@ -313,6 +325,17 @@ impl TapHubBridgeHandler for TapHub {
             .ok_or_else(|| "Tap metadata not found".to_string())?;
 
         self.verify_permission(&tap, &req.discord_user_id).await?;
+
+        // Check cache for metadata
+        let meta_hash = hex::encode(Sha256::digest(req.request.to_string().as_bytes()));
+        let meta_key = AudioCacheItemKey::ARHash(meta_hash);
+        if let Some(entry) = self.audio_cache.get_entry(&tap_id, &meta_key).await {
+            tracing::info!("Metadata cache hit for tap_id={}", tap_id.0);
+            return Ok(AudioMetaResponse {
+                metadatas: entry.metadatas,
+                cache_key: entry.cache_key,
+            });
+        }
 
         let states = self
             .state_service

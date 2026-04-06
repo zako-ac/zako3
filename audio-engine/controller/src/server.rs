@@ -206,6 +206,22 @@ impl AudioEngineServer {
 
                 let data = serde_json::to_vec(&response).unwrap_or_default();
                 let _ = client.publish(reply, data.into()).await;
+
+                // Publish state-changed event for mutating operations that succeeded
+                let is_mutation = matches!(
+                    response,
+                    AudioEngineResponse::SuccessBool(true) | AudioEngineResponse::SuccessTrackId(_)
+                );
+                if is_mutation {
+                    let event = serde_json::json!({
+                        "guild_id": guild_id,
+                        "channel_id": channel_id
+                    });
+                    let subject = format!("playback.state_changed.{}.{}", guild_id, channel_id);
+                    if let Ok(payload) = serde_json::to_vec(&event) {
+                        let _ = client.publish(subject, payload.into()).await;
+                    }
+                }
             }
 
             info!("Session consumer for {} stopped", subject);

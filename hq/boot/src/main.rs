@@ -1,7 +1,9 @@
+use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
 use hq_core::{AppConfig, Service, get_pool, run_migrations};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::broadcast;
 use tracing::info;
 
 #[tokio::main]
@@ -18,10 +20,37 @@ async fn main() -> anyhow::Result<()> {
 
     let service = Service::new(pool, config.clone()).await?;
 
+    // Set up NATS→broadcast channel for playback state events
+    let (event_tx, _) = broadcast::channel::<String>(128);
+    let event_tx_nats = event_tx.clone();
+    let nats_url = config.nats_url.clone();
+    tokio::spawn(async move {
+        let nc = match async_nats::connect(&nats_url).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to connect NATS for playback events: {}", e);
+                return;
+            }
+        };
+        let mut sub = match nc.subscribe("playback.state_changed.>").await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("Failed to subscribe to playback NATS events: {}", e);
+                return;
+            }
+        };
+        info!("Listening for playback state changes on NATS");
+        while let Some(msg) = sub.next().await {
+            let payload = String::from_utf8_lossy(&msg.payload).into_owned();
+            let _ = event_tx_nats.send(payload);
+        }
+    });
+
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();
+    let event_tx_backend = event_tx.clone();
     let backend_task = tokio::spawn(async move {
-        let app = hq_backend::app(service_backend);
+        let app = hq_backend::app(service_backend, event_tx_backend);
 
         let listener = TcpListener::bind(&backend_address)
             .await
@@ -49,9 +78,10 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let service_bot = service.clone();
+    let resolver_slot = service.name_resolver_slot.clone();
     let bot_task = tokio::spawn(async move {
         info!("Starting bot...");
-        if let Err(e) = hq_bot::run(service_bot).await {
+        if let Err(e) = hq_bot::run(service_bot, resolver_slot).await {
             tracing::error!("Bot error: {}", e);
         }
     });

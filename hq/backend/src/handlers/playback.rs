@@ -1,13 +1,16 @@
 use axum::{
-    Json,
-    extract::{Path, State},
+    Extension, Json,
+    extract::{Path, Query, State, ws::{Message, WebSocket, WebSocketUpgrade}},
     http::StatusCode,
+    response::IntoResponse,
 };
-use hq_core::{CoreError, Service};
+use hq_core::{Claims, CoreError, Service};
 use hq_types::hq::playback::{
     EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, SkipDto, StopTrackDto,
 };
-use std::sync::Arc;
+use jsonwebtoken::{DecodingKey, Validation, decode};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::broadcast;
 
 use crate::middleware::auth::AuthUser;
 
@@ -80,7 +83,7 @@ pub async fn stop_track(
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid channel_id".to_string()))?;
     let action = service
         .playback
-        .stop_track(guild_id, channel_id, payload.track_id, &discord_id)
+        .stop_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
     Ok(Json(action))
@@ -184,4 +187,49 @@ pub async fn get_history(
         .await
         .map_err(map_error)?;
     Ok(Json(history))
+}
+
+pub async fn playback_ws(
+    ws: WebSocketUpgrade,
+    State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let token = params.get("token").cloned().unwrap_or_default();
+    let secret = &service.config.jwt_secret;
+
+    let token_data = match decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    ) {
+        Ok(data) => data,
+        Err(_) => return (StatusCode::UNAUTHORIZED, "Invalid token").into_response(),
+    };
+
+    let user_id = token_data.claims.sub;
+    if service.auth.get_user(&user_id).await.is_err() {
+        return (StatusCode::UNAUTHORIZED, "Unknown user").into_response();
+    }
+
+    ws.on_upgrade(move |socket| handle_ws(socket, event_tx))
+        .into_response()
+}
+
+async fn handle_ws(mut socket: WebSocket, event_tx: broadcast::Sender<String>) {
+    let mut rx = event_tx.subscribe();
+    loop {
+        tokio::select! {
+            Ok(msg) = rx.recv() => {
+                if socket.send(Message::Text(msg.into())).await.is_err() {
+                    break;
+                }
+            }
+            msg = socket.recv() => {
+                if msg.is_none() {
+                    break;
+                }
+            }
+        }
+    }
 }

@@ -6,7 +6,7 @@ export const audioMetadataSchema = z.object({
 });
 
 export const trackSchema = z.object({
-    trackId: z.number(),
+    trackId: z.string(),
     queueName: z.string(),
     metadata: z.array(audioMetadataSchema),
     tapName: z.string(),
@@ -17,7 +17,9 @@ export const trackSchema = z.object({
 
 export const guildPlaybackStateSchema = z.object({
     guildId: z.string(),
+    guildName: z.string().default(''),
     channelId: z.string(),
+    channelName: z.string().default(''),
     queues: z.record(z.string(), z.array(trackSchema)),
 });
 
@@ -35,7 +37,7 @@ export const playbackActionSchema = z.object({
 export const stopTrackSchema = z.object({
     guildId: z.string(),
     channelId: z.string(),
-    trackId: z.number(),
+    trackId: z.string(),
 });
 
 export const skipSchema = z.object({
@@ -45,7 +47,7 @@ export const skipSchema = z.object({
 
 export const queueOperationSchema = z.object({
     op: z.enum(['remove', 'set_volume']),
-    trackId: z.number(),
+    trackId: z.string(),
     targetIndex: z.number().optional(),
     volume: z.number().optional(),
 });

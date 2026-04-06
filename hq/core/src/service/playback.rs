@@ -13,6 +13,7 @@ use zako3_states::VoiceStateService;
 use crate::{
     CoreError, CoreResult,
     repo::{CreatePlaybackAction, PlaybackAction, PlaybackActionRepo},
+    service::DiscordNameResolverSlot,
 };
 
 fn metadata_to_dto(m: &AudioMetadata) -> AudioMetadataDto {
@@ -44,6 +45,7 @@ pub struct PlaybackService {
     audio_engine: Arc<AudioEngineRpcClient>,
     voice_state: VoiceStateService,
     repo: Arc<dyn PlaybackActionRepo>,
+    name_resolver_slot: DiscordNameResolverSlot,
 }
 
 impl PlaybackService {
@@ -51,8 +53,9 @@ impl PlaybackService {
         audio_engine: Arc<AudioEngineRpcClient>,
         voice_state: VoiceStateService,
         repo: Arc<dyn PlaybackActionRepo>,
+        name_resolver_slot: DiscordNameResolverSlot,
     ) -> Self {
-        Self { audio_engine, voice_state, repo }
+        Self { audio_engine, voice_state, repo, name_resolver_slot }
     }
 
     pub async fn get_state_for_user(
@@ -70,11 +73,21 @@ impl PlaybackService {
             let guild_id = GuildId::from(loc.guild_id);
             let channel_id = ChannelId::from(loc.channel_id);
 
-            let state = self
-                .audio_engine
-                .get_session_state(guild_id, channel_id)
-                .await
-                .map_err(|e| CoreError::Internal(e.to_string()))?;
+            let state = match self.audio_engine.get_session_state(guild_id, channel_id).await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::debug!(%e, guild_id = %loc.guild_id, channel_id = %loc.channel_id, "No audio session for channel, skipping");
+                    continue;
+                }
+            };
+
+            let resolver = self.name_resolver_slot.get();
+            let guild_name = resolver
+                .and_then(|r| r.guild_name(loc.guild_id))
+                .unwrap_or_else(|| loc.guild_name.clone());
+            let channel_name = resolver
+                .and_then(|r| r.channel_name(loc.guild_id, loc.channel_id))
+                .unwrap_or_else(|| loc.channel_name.clone());
 
             let queues = state
                 .queues
@@ -83,7 +96,7 @@ impl PlaybackService {
                     let dtos = tracks
                         .iter()
                         .map(|t| TrackDto {
-                            track_id: t.track_id.into(),
+                            track_id: t.track_id.to_string(),
                             queue_name: t.queue_name.to_string(),
                             metadata: t.metadatas.iter().map(metadata_to_dto).collect(),
                             tap_name: t.request.tap_name.to_string(),
@@ -98,7 +111,9 @@ impl PlaybackService {
 
             results.push(GuildPlaybackStateDto {
                 guild_id: loc.guild_id.to_string(),
+                guild_name,
                 channel_id: loc.channel_id.to_string(),
+                channel_name,
                 queues,
             });
         }
@@ -110,9 +125,12 @@ impl PlaybackService {
         &self,
         guild_id: u64,
         channel_id: u64,
-        track_id: u64,
+        track_id: &str,
         actor_discord_user_id: &str,
     ) -> CoreResult<PlaybackActionDto> {
+        let tid: u64 = track_id
+            .parse()
+            .map_err(|_| CoreError::InvalidInput("invalid track_id".into()))?;
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
@@ -123,13 +141,13 @@ impl PlaybackService {
             .map_err(|e| CoreError::Internal(e.to_string()))?;
 
         let track = state
-            .find_track(TrackId::from(track_id))
-            .ok_or_else(|| CoreError::NotFound(format!("track {}", track_id)))?;
+            .find_track(TrackId::from(tid))
+            .ok_or_else(|| CoreError::NotFound(format!("track {}", tid)))?;
 
         let snapshot = serde_json::to_value(track)?;
 
         self.audio_engine
-            .stop(g, c, TrackId::from(track_id))
+            .stop(g, c, TrackId::from(tid))
             .await
             .map_err(|e| CoreError::Internal(e.to_string()))?;
 
@@ -218,7 +236,11 @@ impl PlaybackService {
         let queue_snapshot = serde_json::to_value(&state.queues)?;
 
         for op in &dto.operations {
-            let track_id = TrackId::from(op.track_id);
+            let tid: u64 = op
+                .track_id
+                .parse()
+                .map_err(|_| CoreError::InvalidInput("invalid track_id".into()))?;
+            let track_id = TrackId::from(tid);
             match op.op.as_str() {
                 "remove" => {
                     self.audio_engine
@@ -241,8 +263,7 @@ impl PlaybackService {
             }
         }
 
-        let first_track_id =
-            dto.operations.first().map(|op| op.track_id).unwrap_or(0);
+        let first_track_id = dto.operations.first().map(|op| op.track_id.as_str()).unwrap_or("");
         let track_snapshot = serde_json::json!({ "first_track_id": first_track_id });
 
         let action = self

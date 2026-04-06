@@ -31,4 +31,5 @@ export const ROUTES = {
   ADMIN_TAP: (tapId: string) => `/admin/taps/${tapId}`,
   ADMIN_NOTIFICATIONS: '/admin/notifications',
   ADMIN_VERIFICATIONS: '/admin/verifications',
+  VOICE_CHANNEL: (guildId: string, channelId: string) => `/voice/${guildId}/${channelId}`,
 } as const;

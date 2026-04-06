@@ -10,6 +10,7 @@ export {
   TapVerificationPage,
 } from './taps'
 export { SettingsPage } from './settings'
+export { VoiceChannelPage } from './voice'
 export {
   AdminDashboardPage,
   AdminUsersPage,
