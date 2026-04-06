@@ -8,15 +8,15 @@ refer hq todo
 - [ ] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [ ] Implement text preprocessing
 - [ ] implement cache: max cache size, score-based cache eviction worker
-- [ ] add reconnection logic
-- [ ] processing time measurement
+- [x] add reconnection logic
+- [ ] Add uptime and active users
+
 
 # Other
 - [ ] otel and prometheus and logging(promtail)
 - [x] AE Track proto handling (todo!)
 - [x] migrate AE-TH comms to jsonrpsee
-- [ ] Make AE work without TH (atleast no crash)
-- [ ] Migrate vendor to fork
+- [x] Make AE work without TH (atleast no crash)
 - [x] change IDs from Uuid to String
 - [x] check admin verification api
 - [x] Make background metrics saver
@@ -41,7 +41,6 @@ refer hq todo
 - [x] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
 - [ ] unread-count
 - [ ] Improve chart
-- [ ] Add Cache hit rate in cache hits card
 - [ ] Make all cards in settings as component
 - [ ] Add "load failed" 
 - [ ] Dashboard status (my taps, total uses, active users, uptime)
