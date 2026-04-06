@@ -117,9 +117,8 @@ impl TapHubService for StubTapHubService {
                     } else {
                         0.0
                     };
-                    let sample_i16 = sample as i16;
-                    chunk.push(sample_i16);
-                    chunk.push(sample_i16);
+                    chunk.push(sample);
+                    chunk.push(sample);
 
                     if is_sine {
                         phase += frequency / sample_rate;

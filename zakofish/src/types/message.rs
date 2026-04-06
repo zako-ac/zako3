@@ -27,6 +27,7 @@ pub struct AudioRequestSuccessMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioMetadataSuccessMessage {
     pub metadatas: Vec<AudioMetadata>,
+    pub cache: AudioCachePolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

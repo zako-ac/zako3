@@ -1,9 +1,11 @@
 use bytes::Bytes;
 use protofish2::compression::CompressionType;
-use protofish2::connection::{ClientConfig, ProtofishClient};
+use protofish2::config::ReconnectConfig;
+use protofish2::connection::{ClientConfig, ProtofishClient, ReconnectingConnection};
 use protofish2::{Timestamp, TransferMode};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::error::{Result, ZakofishError};
@@ -59,10 +61,21 @@ impl ZakofishTap {
         hello_info: TapClientHello,
         handler: Arc<dyn TapHandler>,
     ) -> Result<()> {
-        let mut conn = self
-            .client
-            .connect(hub_addr, server_name, HashMap::new())
-            .await?;
+        let recon_config = ReconnectConfig {
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(15),
+            backoff_multiplier: 2.0,
+            max_retries: None, // Keep trying indefinitely
+        };
+
+        let mut conn = ReconnectingConnection::connect(
+            self.client.clone(),
+            hub_addr,
+            server_name.to_string(),
+            HashMap::new(),
+            recon_config,
+        )
+        .await?;
 
         // 1. Control Stream
         let mut control_stream = conn.open_mani().await?;

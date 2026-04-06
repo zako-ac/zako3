@@ -7,7 +7,9 @@ refer hq todo
 
 - [ ] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [ ] Implement text preprocessing
-- [ ] implement cache
+- [ ] implement cache: max cache size, score-based cache eviction worker
+- [ ] add reconnection logic
+- [ ] processing time measurement
 
 # Other
 - [ ] otel and prometheus and logging(promtail)
@@ -16,13 +18,18 @@ refer hq todo
 - [ ] Make AE work without TH (atleast no crash)
 - [ ] Migrate vendor to fork
 - [x] change IDs from Uuid to String
-- [ ] check admin verification api
+- [x] check admin verification api
 - [x] Make background metrics saver
-- [ ] Make HQ RPC for zakoctl, and use it to make someone admin
+- [x] Make HQ RPC for zakoctl, and use it to make someone admin
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
-- [ ] verify tap in web
+- [x] verify tap in web
 - [ ] implement ban
+- [ ] AE Hang on no join
+- [ ] AE re-join on boot
+- [ ] AE init rmq AFTER init discord
+- [ ] Add timeout to AE client
+- [ ] Add track finish to AE queue
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 

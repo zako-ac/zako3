@@ -1,0 +1,16 @@
+[package]
+name = "zako3-preload-cache"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+bytes = "1.11"
+chrono.workspace = true
+hex = "0.4"
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio = { workspace = true }
+tracing.workspace = true
+zako3-types = { workspace = true }

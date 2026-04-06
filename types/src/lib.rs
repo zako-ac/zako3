@@ -10,6 +10,9 @@ pub use error::*;
 pub mod session_state;
 pub use session_state::*;
 
+pub mod cache;
+pub use cache::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
 #[display("{_0}")]
 pub struct GuildId(u64);
@@ -53,7 +56,7 @@ pub struct AudioRequestString(String);
 pub struct AudioResponse {
     pub cache_key: Option<AudioCachePolicy>,
     pub metadatas: Vec<AudioMetadata>,
-    pub stream: tokio::sync::mpsc::Receiver<Vec<i16>>,
+    pub stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

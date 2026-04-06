@@ -85,7 +85,7 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
         let mut source_buffer = [0f32; BUFFER_SIZE];
 
         for source in sources.iter_mut() {
-            if !source.consumer.write_is_held() {
+            if !source.consumer.write_is_held() && source.consumer.is_empty() {
                 ended_sources.push(source.track_id);
                 let _ = source.end_tx.try_send(source.track_id);
                 continue;

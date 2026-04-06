@@ -178,6 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &config.zakofish_bind_addr,
         &config.cert_file,
         &config.key_file,
+        config.cache_dir.clone(),
     )?;
     let tap_hub = Arc::new(tap_hub);
 

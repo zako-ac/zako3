@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -9,6 +9,7 @@ pub struct AppConfig {
     pub cert_file: String,
     pub key_file: String,
     pub redis_url: String,
+    pub cache_dir: PathBuf,
 }
 
 impl AppConfig {
@@ -27,6 +28,9 @@ impl AppConfig {
             key_file: env::var("ZK_TH_KEY_FILE").unwrap_or_else(|_| "key.pem".to_string()),
             redis_url: env::var("ZK_TH_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+            cache_dir: PathBuf::from(
+                env::var("ZK_TH_CACHE_DIR").unwrap_or_else(|_| "/tmp/zako3-cache".to_string()),
+            ),
         })
     }
 }

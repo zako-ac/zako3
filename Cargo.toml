@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/client", "worker/emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish", "worker/metrics-sync", "crates/states"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/protos", "audio-engine/telemetry", "audio-engine/client", "worker/emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish", "worker/metrics-sync", "crates/states", "crates/preload-cache"]
 
 [workspace.dependencies]
 zako3-audio-engine-controller = { path = "audio-engine/controller" }
@@ -48,6 +48,7 @@ anyhow = "1.0"
 mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["server", "http-client", "macros"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
+protofish2 = { version = "0.6.1", features = ["opus", "jitter"] }
 
 [profile.dev]
 incremental = false
@@ -67,3 +68,6 @@ opt-level = 0
 
 [patch.crates-io.zod_gen]
 path = "vendor/zod_gen"
+
+#[patch.crates-io.protofish2]
+#path = "/home/allen/projects/protofish2-rs"

@@ -194,7 +194,7 @@ impl AudioEngineServer {
             }
 
             if skipped {
-                tracing::info!(
+                tracing::debug!(
                     "No eligible Audio Engine found for request {:?} (retry count: {})",
                     payload,
                     retry_count

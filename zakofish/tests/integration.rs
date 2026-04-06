@@ -90,7 +90,10 @@ impl TapHandler for TestTapHandler {
         _headers: HashMap<String, String>,
     ) -> Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage> {
         if ars.to_string() == "test:metadata" {
-            Ok(AudioMetadataSuccessMessage { metadatas: vec![] })
+            Ok(AudioMetadataSuccessMessage {
+                metadatas: vec![],
+                cache: AudioCachePolicy { cache_type: AudioCacheType::None, ttl_seconds: None },
+            })
         } else {
             Err(AudioRequestFailureMessage {
                 reason: "Not found".to_string(),

@@ -1,6 +1,6 @@
 use protofish2::compression::CompressionType;
-use protofish2::config::ProtofishConfig;
-use protofish2::connection::{ClientConfig, ProtofishClient};
+use protofish2::config::{ProtofishConfig, ReconnectConfig};
+use protofish2::connection::{ClientConfig, ProtofishClient, ReconnectingConnection};
 use protofish2::mani::transfer::jitter::OpusJitterBuffer;
 use rustls::pki_types::CertificateDer;
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioReq
 
 pub struct TransportClient {
     client: Arc<ProtofishClient>,
-    conn: Arc<Mutex<Option<protofish2::connection::ProtofishConnection>>>,
+    conn: Arc<Mutex<Option<ReconnectingConnection>>>,
     server_addr: SocketAddr,
     server_name: String,
 }
@@ -51,11 +51,22 @@ impl TransportClient {
     }
 
     pub async fn connect(&self) -> Result<(), String> {
-        let conn = self
-            .client
-            .connect(self.server_addr, &self.server_name, HashMap::new())
-            .await
-            .map_err(|e| e.to_string())?;
+        let config = ReconnectConfig {
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(15),
+            backoff_multiplier: 2.0,
+            max_retries: None,
+        };
+
+        let conn = ReconnectingConnection::connect(
+            self.client.clone(),
+            self.server_addr,
+            self.server_name.clone(),
+            HashMap::new(),
+            config,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         let mut lock = self.conn.lock().await;
         *lock = Some(conn);
@@ -78,8 +89,6 @@ impl TransportClient {
         let resp: TapHubResponse =
             rmp_serde::from_slice(&resp_payload).map_err(|e| e.to_string())?;
 
-        // Return response, but wait, for AudioReady we need the stream to accept transfer
-        // Let's modify logic to return the stream if it's AudioReady
         Ok(resp)
     }
 

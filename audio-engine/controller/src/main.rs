@@ -4,7 +4,9 @@ use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
 
-use zako3_audio_engine_controller::{server::AudioEngineServer, config::AppConfig};
+use zako3_audio_engine_controller::{
+    config::AppConfig, ready_waiter::create_ready_waiter, server::AudioEngineServer,
+};
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
@@ -32,8 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;
 
+    let (ready_waiter, mut ready_recv) = create_ready_waiter();
+
     let intents = GatewayIntents::GUILD_VOICE_STATES;
     let mut client = Client::builder(&config.discord_token, intents)
+        .event_handler_arc(ready_waiter)
         .register_songbird()
         .await
         .expect("Err creating client");
@@ -78,7 +83,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Audio Engine connecting to RabbitMQ at {}", rabbitmq_url);
 
-    let engine_server = Arc::new(AudioEngineServer::new(session_manager, rabbitmq_url, max_retries));
+    let engine_server = Arc::new(AudioEngineServer::new(
+        session_manager,
+        rabbitmq_url,
+        max_retries,
+    ));
+
+    ready_recv.recv().await;
+
+    tracing::info!("Audio Engine is ready and connected to Discord!");
 
     telemetry.healthy();
 

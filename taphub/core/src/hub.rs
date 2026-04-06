@@ -1,4 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -8,6 +11,8 @@ use zakofish::{
     hub::{HubHandler, ZakofishHub},
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
+
+use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 use crate::{app::App, routing::DynamicSampler};
 use zako3_states::{TapHubStateService, TapMetricsStateService};
@@ -109,6 +114,8 @@ pub struct TapHub {
     pub state_service: TapHubStateService,
     pub metrics_service: TapMetricsStateService,
     pub app: App,
+    pub audio_preload: Arc<AudioPreload>,
+    pub audio_cache: Arc<FileAudioCache>,
 }
 
 impl TapHub {
@@ -117,6 +124,7 @@ impl TapHub {
         bind_address: &str,
         cert_file: impl AsRef<Path>,
         key_file: impl AsRef<Path>,
+        cache_dir: PathBuf,
     ) -> Result<Self, ZakofishError> {
         let server_config = create_server_config(
             bind_address.parse().map_err(|_| {
@@ -140,6 +148,8 @@ impl TapHub {
             state_service: app.tap_state_service.clone(),
             metrics_service: app.tap_metrics_service.clone(),
             app,
+            audio_preload: Arc::new(AudioPreload::new(cache_dir.clone())),
+            audio_cache: Arc::new(FileAudioCache::new(cache_dir)),
         })
     }
 

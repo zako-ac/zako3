@@ -17,7 +17,7 @@ pub trait Decoder: Send + Sync + 'static {
     async fn start_decoding(
         &self,
         track_id: TrackId,
-        stream: tokio::sync::mpsc::Receiver<Vec<i16>>,
+        stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     ) -> ZakoResult<RingCons>;
 }
 
@@ -29,7 +29,7 @@ impl Decoder for PcmDecoder {
     async fn start_decoding(
         &self,
         track_id: TrackId,
-        stream: tokio::sync::mpsc::Receiver<Vec<i16>>,
+        stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     ) -> ZakoResult<RingCons> {
         let (prod, cons) = create_ringbuf_pair();
 
@@ -46,7 +46,7 @@ impl Decoder for PcmDecoder {
 
 async fn spawn_decode_task(
     track_id: TrackId,
-    mut stream: tokio::sync::mpsc::Receiver<Vec<i16>>,
+    mut stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     mut producer: RingProd,
 ) -> ZakoResult<()> {
     tracing::debug!(track_id = %track_id, "Starting PCM decode task");
@@ -80,9 +80,7 @@ async fn spawn_decode_task(
 
             for _ in 0..take {
                 let sample = chunk[idx];
-                let sample_f32 = sample as f32 / 32768.0;
-                if producer.try_push(sample_f32).is_err() {
-                    tracing::debug!(track_id = %track_id, "Producer push failed, consumer likely dropped");
+                if producer.try_push(sample).is_err() {
                     return Ok(());
                 }
                 idx += 1;
