@@ -62,6 +62,7 @@ export const tapBaseSchema = z.object({
     ownerId: z.string(),
     occupation: tapOccupationSchema,
     roles: z.array(tapRoleSchema),
+    baseVolume: z.number().min(0).max(2),
     totalUses: z.number().int().nonnegative(),
     stats: tapStatsSchema,
 });
@@ -151,6 +152,7 @@ export const updateTapSchema = z.object({
         .optional(),
     permission: tapPermissionConfigSchema.optional(),
     occupation: tapOccupationSchema.optional(),
+    baseVolume: z.number().min(0).max(2).optional(),
 });
 
 export const tapReportSchema = z.object({

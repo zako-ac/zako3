@@ -68,6 +68,7 @@ pub struct Tap {
     pub occupation: TapOccupation,
     pub permission: TapPermission,
     pub roles: Vec<TapRole>,
+    pub base_volume: f32,
 
     pub timestamp: ResourceTimestamp,
 }
@@ -82,6 +83,7 @@ impl Tap {
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
+            base_volume: 1.0,
             timestamp: ResourceTimestamp::now(),
         }
     }

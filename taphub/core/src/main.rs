@@ -31,6 +31,7 @@ impl HqRepository for StubHqRepository {
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
+            base_volume: 1.0,
             timestamp: ResourceTimestamp::now(),
         }
         .into()
@@ -44,6 +45,7 @@ impl HqRepository for StubHqRepository {
             occupation: TapOccupation::Base,
             permission: TapPermission::OwnerOnly,
             roles: vec![],
+            base_volume: 1.0,
             timestamp: ResourceTimestamp::now(),
         }
         .into()

@@ -8,7 +8,7 @@ use hex;
 use protofish2::Timestamp;
 use protofish2::mani::transfer::recv::TransferReliableRecvStream;
 use sha2::{Digest, Sha256};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot, watch};
 use zako3_preload_cache::{AudioCache, NextFrame, PreloadId, PreloadReadEndAction};
 use zako3_taphub_transport_server::TapHubBridgeHandler;
 use zako3_types::{
@@ -91,6 +91,7 @@ impl TapHubBridgeHandler for TapHub {
                     let meta = AudioMetaResponse {
                         metadatas: entry.metadatas,
                         cache_key: entry.cache_key,
+                        base_volume: tap.base_volume,
                     };
                     return Ok((meta, rx));
                 } else {
@@ -117,7 +118,7 @@ impl TapHubBridgeHandler for TapHub {
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
         let mut tried: Vec<u64> = Vec::new();
-        let (succ, rel, mut unrel) = loop {
+        let (succ, rel, mut unrel, connection_id) = loop {
             let available: Vec<_> = states
                 .iter()
                 .filter(|s| !tried.contains(&s.connection_id))
@@ -140,7 +141,7 @@ impl TapHubBridgeHandler for TapHub {
             )
             .await
             {
-                Ok(Ok(result)) => break result,
+                Ok(Ok((succ, rel, unrel))) => break (succ, rel, unrel, connection_id),
                 Ok(Err(e)) => {
                     tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
                 }
@@ -156,14 +157,27 @@ impl TapHubBridgeHandler for TapHub {
 
         tracing::info!("Received audio from zakofish for tap_id={}", tap_id.0,);
 
+        // Subscribe to the disconnect signal for this connection so bridge_rel
+        // can distinguish TransferEnd/TransferEndAck completion from a dropped connection.
+        let disconnect_rx = self
+            .connection_signals
+            .lock()
+            .get(&connection_id)
+            .map(|tx| tx.subscribe())
+            .unwrap_or_else(|| {
+                // Connection already gone — treat as immediately disconnected.
+                let (_, rx) = watch::channel(true);
+                rx
+            });
+
         // Cache _rel
-        let rel_rx = bridge_rel(rel);
+        let (rel_rx, done_rx) = bridge_rel(rel, disconnect_rx);
         if let Some(item) = cache_item {
             let cache = Arc::clone(&self.audio_cache);
             let metadatas = succ.metadatas.clone();
             let cache_key = succ.cache.clone();
             tokio::spawn(async move {
-                if let Err(e) = cache.store(item, metadatas, cache_key, rel_rx).await {
+                if let Err(e) = cache.store(item, metadatas, cache_key, rel_rx, done_rx).await {
                     tracing::warn!(%e, "Failed to store audio in cache");
                 }
             });
@@ -172,6 +186,7 @@ impl TapHubBridgeHandler for TapHub {
         let meta = AudioMetaResponse {
             metadatas: succ.metadatas,
             cache_key: succ.cache,
+            base_volume: tap.base_volume,
         };
 
         let (tx, rx) = mpsc::channel(100);
@@ -220,6 +235,7 @@ impl TapHubBridgeHandler for TapHub {
                 return Ok(AudioMetaResponse {
                     metadatas: entry.metadatas,
                     cache_key: entry.cache_key,
+                    base_volume: tap.base_volume,
                 });
             }
         }
@@ -233,7 +249,7 @@ impl TapHubBridgeHandler for TapHub {
 
         let mut tried: Vec<u64> = Vec::new();
         // Request audio from zakofish — only _rel is used for preloading
-        let (succ, rel, _unrel) = loop {
+        let (succ, rel, _unrel, connection_id) = loop {
             let available: Vec<_> = states
                 .iter()
                 .filter(|s| !tried.contains(&s.connection_id))
@@ -256,7 +272,7 @@ impl TapHubBridgeHandler for TapHub {
             )
             .await
             {
-                Ok(Ok(result)) => break result,
+                Ok(Ok((succ, rel, unrel))) => break (succ, rel, unrel, connection_id),
                 Ok(Err(e)) => {
                     tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
                 }
@@ -270,9 +286,19 @@ impl TapHubBridgeHandler for TapHub {
             tried.push(connection_id);
         };
 
+        let disconnect_rx = self
+            .connection_signals
+            .lock()
+            .get(&connection_id)
+            .map(|tx| tx.subscribe())
+            .unwrap_or_else(|| {
+                let (_, rx) = watch::channel(true);
+                rx
+            });
+
         // Preload _rel to disk
         let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
-        let rel_rx = bridge_rel(rel);
+        let (rel_rx, _done_rx) = bridge_rel(rel, disconnect_rx);
         self.audio_preload.preload(preload_id, rel_rx);
 
         // Determine finalization action
@@ -320,6 +346,7 @@ impl TapHubBridgeHandler for TapHub {
         Ok(AudioMetaResponse {
             metadatas: succ.metadatas,
             cache_key: succ.cache,
+            base_volume: tap.base_volume,
         })
     }
 
@@ -351,6 +378,7 @@ impl TapHubBridgeHandler for TapHub {
             return Ok(AudioMetaResponse {
                 metadatas: entry.metadatas,
                 cache_key: entry.cache_key,
+                base_volume: tap.base_volume,
             });
         }
 
@@ -421,6 +449,7 @@ impl TapHubBridgeHandler for TapHub {
         Ok(AudioMetaResponse {
             metadatas: meta.metadatas,
             cache_key: meta.cache,
+            base_volume: tap.base_volume,
         })
     }
 }
@@ -499,17 +528,55 @@ fn build_cache_item(
 }
 
 /// Bridge a reliable stream to an `mpsc::Receiver<Bytes>`.
-/// Each `recv()` on the reliable stream returns a batch of chunks.
-fn bridge_rel(mut rel: TransferReliableRecvStream) -> mpsc::Receiver<Bytes> {
+/// Also returns a oneshot that fires `()` only when the stream ends naturally
+/// via TransferEnd/TransferEndAck AND the Tap has not disconnected.
+/// If the Tap disconnects mid-stream (disconnect_rx becomes `true`) the task
+/// exits without firing done_tx, so `done_rx.await` returns `Err` — preventing
+/// partial audio from being committed to cache.
+fn bridge_rel(
+    mut rel: TransferReliableRecvStream,
+    mut disconnect_rx: watch::Receiver<bool>,
+) -> (mpsc::Receiver<Bytes>, oneshot::Receiver<()>) {
     let (tx, rx) = mpsc::channel(100);
+    let (done_tx, done_rx) = oneshot::channel();
     tokio::spawn(async move {
-        while let Some(chunks) = rel.recv().await {
-            for chunk in chunks {
-                if tx.send(chunk.content).await.is_err() {
-                    return;
+        // Already disconnected before the stream even started.
+        if *disconnect_rx.borrow() {
+            tracing::warn!("Tap already disconnected before stream started; stream will not be cached");
+            return;
+        }
+
+        'outer: loop {
+            tokio::select! {
+                biased;
+                // Disconnect takes priority — checked first each iteration.
+                _ = disconnect_rx.changed() => {
+                    tracing::warn!("Tap disconnected mid-stream; aborting and discarding stream");
+                    break 'outer; // done_tx dropped → cache discards partial data
+                }
+                chunks_opt = rel.recv() => {
+                    match chunks_opt {
+                        Some(chunks) => {
+                            for chunk in chunks {
+                                if tx.send(chunk.content).await.is_err() {
+                                    break 'outer;
+                                }
+                            }
+                        }
+                        None => {
+                            // Stream ended. Only consider it a clean TransferEnd
+                            // if the Tap is still connected at this point.
+                            if !*disconnect_rx.borrow() {
+                                let _ = done_tx.send(());
+                            } else {
+                                tracing::warn!("Stream ended but Tap is already disconnected; discarding");
+                            }
+                            break 'outer;
+                        }
+                    }
                 }
             }
         }
     });
-    rx
+    (rx, done_rx)
 }

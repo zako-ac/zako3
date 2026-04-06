@@ -161,6 +161,7 @@ impl TapHubService for StubTapHubService {
                 cache_type: AudioCacheType::None,
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         })
     }
 
@@ -174,6 +175,7 @@ impl TapHubService for StubTapHubService {
                 cache_type: AudioCacheType::None,
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         };
 
         let duration = start.elapsed();

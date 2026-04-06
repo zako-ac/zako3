@@ -73,6 +73,9 @@ impl SessionControl {
         };
 
         let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
+        tracing::info!("base_volume = {}", meta.base_volume);
+
+        let effective_volume = Volume::from(f32::from(volume) * meta.base_volume);
 
         let queue_name_for_metric = queue_name.clone();
         modify_state_session(&self.state_service, self.guild_id, move |session| {
@@ -85,7 +88,7 @@ impl SessionControl {
                     cache_key: meta.cache_key,
                     discord_user_id,
                 },
-                volume,
+                volume: effective_volume,
                 queue_name: queue_name.clone(),
             };
 

@@ -69,7 +69,6 @@ export const TapCard = ({
                                 <h3 className="truncate font-semibold">{tap.name}</h3>
                                 <OccupationBadge occupation={tap.occupation} />
                             </div>
-                            <CopyableId id={tap.id} />
                         </div>
                         <SetAsMyVoice
                             tapId={tap.id}
@@ -94,6 +93,7 @@ export const TapCard = ({
                             </TooltipProvider>
                         )}
                     </div>
+                    <CopyableId id={tap.id} />
                 </CardHeader>
 
                 <CardContent className="pb-2">

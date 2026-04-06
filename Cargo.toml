@@ -69,5 +69,5 @@ opt-level = 0
 [patch.crates-io.zod_gen]
 path = "vendor/zod_gen"
 
-#[patch.crates-io.protofish2]
-#path = "/home/allen/projects/protofish2-rs"
+[patch.crates-io.protofish2]
+path = "/home/allen/projects/protofish2-rs"

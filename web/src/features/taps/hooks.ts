@@ -88,10 +88,10 @@ export const useUpdateTap = (tapId: string, isAdmin: boolean = false) => {
   return useMutation({
     mutationFn: (data: UpdateTapInput) =>
       isAdmin ? adminApi.updateTap(tapId, data) : tapsApi.updateTap(tapId, data),
-    onSuccess: (updatedTap) => {
+    onSuccess: (_, variables) => {
       queryClient.setQueryData(tapKeys.detail(tapId), (old: any) => {
-        if (!old) return updatedTap
-        return { ...old, ...updatedTap }
+        if (!old) return old
+        return { ...old, ...variables }
       })
       queryClient.invalidateQueries({ queryKey: tapKeys.lists() })
       queryClient.invalidateQueries({ queryKey: tapKeys.myTaps() })

@@ -154,8 +154,6 @@
       "stats": {
         "acrossTaps": "Across all taps",
         "activeUsers": "Active Users",
-        "last24h": "Last 24 hours",
-        "lastMonth": "Last month",
         "myTaps": "My Taps",
         "tapsOwned": "Taps Owned",
         "totalUses": "Total Uses",
@@ -291,6 +289,8 @@
       "form": {
         "addBlacklistedUsers": "Add Blacklisted Users",
         "addWhitelistedUsers": "Add Whitelisted Users",
+        "baseVolume": "Base Volume",
+        "baseVolumeDescription": "Set a base volume for all messages from this tap (0-200%). This adjusts the volume of messages from this tap relative to your default TTS volume.",
         "blacklistedUsers": "Blacklisted Users",
         "blacklistedUsersHelp": "Select users who should be blocked from using this tap",
         "description": "Description",
@@ -308,6 +308,11 @@
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
+      "occupations": {
+        "base": "Base",
+        "official": "Official",
+        "verified": "Verified"
+      },
       "permission": "Permission",
       "permissions": {
         "blacklisted": "Blacklist",

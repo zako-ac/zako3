@@ -10,6 +10,7 @@ pub struct CreateTapDto {
     pub description: Option<String>,
     pub permission: Option<TapPermission>,
     pub roles: Option<Vec<TapRole>>,
+    pub base_volume: Option<f32>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
@@ -19,6 +20,7 @@ pub struct UpdateTapDto {
     pub description: Option<String>,
     pub permission: Option<TapPermission>,
     pub roles: Option<Vec<TapRole>>,
+    pub base_volume: Option<f32>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
@@ -84,6 +86,7 @@ pub struct TapDto {
     pub occupation: TapOccupation,
     pub permission: TapPermission,
     pub roles: Vec<TapRole>,
+    pub base_volume: f32,
     pub total_uses: u64,
     pub cache_hits: u64,
     pub created_at: DateTime<Utc>,

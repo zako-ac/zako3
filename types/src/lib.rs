@@ -121,6 +121,7 @@ pub struct Track {
 pub struct AudioMetaResponse {
     pub metadatas: Vec<AudioMetadata>,
     pub cache_key: AudioCachePolicy,
+    pub base_volume: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

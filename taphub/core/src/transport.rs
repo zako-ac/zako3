@@ -81,6 +81,7 @@ impl TapHubBridgeHandler for App {
                 cache_type: AudioCacheType::None,
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         };
 
         Ok((meta, rx))
@@ -96,6 +97,7 @@ impl TapHubBridgeHandler for App {
                 cache_type: AudioCacheType::None,
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         })
     }
 
@@ -109,6 +111,7 @@ impl TapHubBridgeHandler for App {
                 cache_type: AudioCacheType::None,
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         })
     }
 }

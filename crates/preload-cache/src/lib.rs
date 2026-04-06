@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use tokio::{
     fs,
     io::{self, AsyncReadExt, AsyncWriteExt, BufReader},
-    sync::mpsc,
+    sync::{mpsc, oneshot},
 };
 use tracing::warn;
 use zako3_types::{
@@ -207,12 +207,15 @@ pub enum PreloadReadEndAction {
 #[async_trait]
 pub trait AudioCache: Send + Sync {
     /// Write frames from stream into cache under `item`.
+    /// `done` must fire `()` when the stream ends naturally; if it is dropped
+    /// without sending, the store is treated as incomplete and cleaned up.
     async fn store(
         &self,
         item: AudioCacheItem,
         metadatas: Vec<AudioMetadata>,
         cache_key: AudioCachePolicy,
         stream: mpsc::Receiver<Bytes>,
+        done: oneshot::Receiver<()>,
     ) -> io::Result<()>;
 
     /// Move/rename a preload .opus file into the cache.
@@ -289,6 +292,7 @@ impl AudioCache for FileAudioCache {
         metadatas: Vec<AudioMetadata>,
         cache_key: AudioCachePolicy,
         mut stream: mpsc::Receiver<Bytes>,
+        done: oneshot::Receiver<()>,
     ) -> io::Result<()> {
         let stem = Self::cache_stem(&item.tap_id, &item.key);
         let opus_path = self.opus_path(&stem);
@@ -304,10 +308,19 @@ impl AudioCache for FileAudioCache {
             file.flush().await?;
             file.sync_data().await?;
 
+            if done.await.is_err() {
+                warn!(tap_id = %item.tap_id, key = %item.key, "stream ended early; discarding partial audio cache");
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "reliable stream ended early; discarding partial audio cache",
+                ));
+            }
+
             let entry = CacheEntry { item, metadatas, cache_key };
             let json = serde_json::to_vec(&entry)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             fs::write(&json_path, json).await?;
+            tracing::info!(tap_id = %entry.item.tap_id, key = %entry.item.key, "audio cached successfully");
 
             io::Result::Ok(())
         }

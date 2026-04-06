@@ -56,6 +56,14 @@ impl TapService {
         if let Some(roles) = dto.roles.clone() {
             tap.roles = roles;
         }
+        if let Some(base_volume) = dto.base_volume {
+            if !(0.0..=2.0).contains(&base_volume) {
+                return Err(CoreError::InvalidInput(
+                    "base_volume must be between 0.0 and 2.0".to_string(),
+                ));
+            }
+            tap.base_volume = base_volume;
+        }
 
         let created_tap = self.tap_repo.create(&tap).await?;
 
@@ -429,6 +437,18 @@ impl TapService {
             );
             tap.roles = roles.clone();
         }
+        if let Some(base_volume) = dto.base_volume {
+            if !(0.0..=2.0).contains(&base_volume) {
+                return Err(CoreError::InvalidInput(
+                    "base_volume must be between 0.0 and 2.0".to_string(),
+                ));
+            }
+            changes.insert(
+                "base_volume".to_string(),
+                serde_json::json!(base_volume),
+            );
+            tap.base_volume = base_volume;
+        }
         tap.timestamp.updated_at = chrono::Utc::now();
 
         Ok((tap.clone(), changes))
@@ -559,6 +579,7 @@ impl TapService {
             occupation: tap.occupation.clone(),
             permission: tap.permission.clone(),
             roles: tap.roles.clone(),
+            base_volume: tap.base_volume,
             total_uses,
             cache_hits,
             created_at: tap.timestamp.created_at,

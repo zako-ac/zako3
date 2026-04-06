@@ -103,7 +103,8 @@ export const CreateTapDtoSchema = z.object({
   type: z.literal('blacklisted'),
   userIds: z.array(z.string())
 })]).nullable(),
-  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable()
+  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable(),
+  baseVolume: z.number().nullable()
 });
 export type CreateTapDto = z.infer<typeof CreateTapDtoSchema>;
 
@@ -149,6 +150,7 @@ export const TapDtoSchema = z.object({
   userIds: z.array(z.string())
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
+  baseVolume: z.number(),
   totalUses: z.number(),
   cacheHits: z.number(),
   createdAt: z.string().datetime(),
@@ -228,6 +230,7 @@ export const TapWithAccessDtoSchema = z.object({
   userIds: z.array(z.string())
 })]),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])),
+  baseVolume: z.number(),
   totalUses: z.number(),
   cacheHits: z.number(),
   createdAt: z.string().datetime(),
@@ -284,7 +287,8 @@ export const UpdateTapDtoSchema = z.object({
   type: z.literal('blacklisted'),
   userIds: z.array(z.string())
 })]).nullable(),
-  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable()
+  roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable(),
+  baseVolume: z.number().nullable()
 });
 export type UpdateTapDto = z.infer<typeof UpdateTapDtoSchema>;
 

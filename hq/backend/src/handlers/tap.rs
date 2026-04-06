@@ -54,6 +54,7 @@ pub async fn create_tap(
         occupation: tap.occupation,
         permission: tap.permission,
         roles: tap.roles,
+        base_volume: tap.base_volume,
         total_uses: 0,
         cache_hits: 0,
         created_at: tap.timestamp.created_at,

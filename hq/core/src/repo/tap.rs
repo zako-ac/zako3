@@ -39,8 +39,8 @@ impl TapRepository for PgTapRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO taps (id, owner_id, name, description, occupation, permission, roles, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO taps (id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(id)
@@ -50,6 +50,7 @@ impl TapRepository for PgTapRepository {
         .bind(occupation)
         .bind(permission)
         .bind(roles)
+        .bind(tap.base_volume)
         .bind(tap.timestamp.created_at)
         .bind(tap.timestamp.updated_at)
         .execute(&self.pool)
@@ -61,7 +62,7 @@ impl TapRepository for PgTapRepository {
     async fn list_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
             FROM taps
             WHERE owner_id = $1
             "#,
@@ -87,6 +88,8 @@ impl TapRepository for PgTapRepository {
                 let roles_val: serde_json::Value = row.try_get("roles")?;
                 let roles = serde_json::from_value(roles_val)?;
 
+                let base_volume: f32 = row.try_get("base_volume")?;
+
                 let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
                 let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -98,6 +101,7 @@ impl TapRepository for PgTapRepository {
                     occupation,
                     permission,
                     roles,
+                    base_volume,
                     timestamp: hq_types::hq::ResourceTimestamp {
                         created_at,
                         updated_at,
@@ -112,7 +116,7 @@ impl TapRepository for PgTapRepository {
     async fn find_by_id(&self, id: TapId) -> CoreResult<Option<Tap>> {
         let row = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
             FROM taps
             WHERE id = $1
             "#,
@@ -136,6 +140,8 @@ impl TapRepository for PgTapRepository {
             let roles_val: serde_json::Value = row.try_get("roles")?;
             let roles = serde_json::from_value(roles_val)?;
 
+            let base_volume: f32 = row.try_get("base_volume")?;
+
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
             let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -147,6 +153,7 @@ impl TapRepository for PgTapRepository {
                 occupation,
                 permission,
                 roles,
+                base_volume,
                 timestamp: hq_types::hq::ResourceTimestamp {
                     created_at,
                     updated_at,
@@ -170,8 +177,8 @@ impl TapRepository for PgTapRepository {
         sqlx::query(
             r#"
             UPDATE taps
-            SET name = $1, description = $2, occupation = $3, permission = $4, roles = $5, updated_at = $6
-            WHERE id = $7
+            SET name = $1, description = $2, occupation = $3, permission = $4, roles = $5, base_volume = $6, updated_at = $7
+            WHERE id = $8
             "#,
         )
         .bind(name)
@@ -179,6 +186,7 @@ impl TapRepository for PgTapRepository {
         .bind(occupation)
         .bind(permission)
         .bind(roles)
+        .bind(tap.base_volume)
         .bind(tap.timestamp.updated_at)
         .bind(id)
         .execute(&self.pool)
@@ -198,7 +206,7 @@ impl TapRepository for PgTapRepository {
     async fn list_all(&self) -> CoreResult<Vec<Tap>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
             FROM taps
             ORDER BY created_at DESC
             "#,
@@ -223,6 +231,8 @@ impl TapRepository for PgTapRepository {
                 let roles_val: serde_json::Value = row.try_get("roles")?;
                 let roles = serde_json::from_value(roles_val)?;
 
+                let base_volume: f32 = row.try_get("base_volume")?;
+
                 let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
                 let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -234,6 +244,7 @@ impl TapRepository for PgTapRepository {
                     occupation,
                     permission,
                     roles,
+                    base_volume,
                     timestamp: hq_types::hq::ResourceTimestamp {
                         created_at,
                         updated_at,
@@ -249,7 +260,7 @@ impl TapRepository for PgTapRepository {
         let ids_str: Vec<String> = ids.into_iter().map(|id| id.0).collect();
         let rows = sqlx::query(
             r#"
-            SELECT id, owner_id, name, description, occupation, permission, roles, created_at, updated_at
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
             FROM taps
             WHERE id = ANY($1)
             "#,
@@ -275,6 +286,8 @@ impl TapRepository for PgTapRepository {
                 let roles_val: serde_json::Value = row.try_get("roles")?;
                 let roles = serde_json::from_value(roles_val)?;
 
+                let base_volume: f32 = row.try_get("base_volume")?;
+
                 let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
                 let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -286,6 +299,7 @@ impl TapRepository for PgTapRepository {
                     occupation,
                     permission,
                     roles,
+                    base_volume,
                     timestamp: hq_types::hq::ResourceTimestamp {
                         created_at,
                         updated_at,

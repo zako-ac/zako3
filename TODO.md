@@ -33,13 +33,16 @@ refer hq todo
 - [ ] implement ban
 
 - [ ] AE re-join on boot
-- [ ] Gauge metrics reset on TH boot
-- [ ] Add track finish to AE queue
-- [ ] Add timeout to AE client
+- [x] Gauge metrics reset on TH boot
+- [x] Add track finish to AE queue
+- [x] Add timeout to AE client
 - [ ] Add search API for tap (like youtube search)
 - [ ] Make TH connection ID (online count) tracking better
 - [ ] Make cache removation command
 - [ ] Add base volume for tap
+
+- [ ] Make cache get removed when early stop
+- [ ] Async decoding performance issue in pf2 maybe?
 
 ## Text Preprocessing
 - [ ] ㅏ -> 아
@@ -57,6 +60,11 @@ refer hq todo
 - [x] Dashboard status (my taps, total uses, active users, uptime)
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
+
+## Mobile
+- [x] Tap card overflow
+- [ ] Make sidebar bigger, close it when selecting something
+- [ ] Add left-drag sidebar
 
 ## Discord
 - [ ] Separate embeds and add theme color

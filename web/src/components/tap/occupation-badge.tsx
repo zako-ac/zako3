@@ -25,6 +25,12 @@ const occupationVariants: Record<
 export const OccupationBadge = ({ occupation, className }: OccupationBadgeProps) => {
     const { t } = useTranslation()
 
+    const occupationTranslations = {
+        official: t('taps.occupations.official'),
+        verified: t('taps.occupations.verified'),
+        base: t('taps.occupations.base'),
+    }
+
     const variant = occupationVariants[occupation]
 
     return (
@@ -36,7 +42,7 @@ export const OccupationBadge = ({ occupation, className }: OccupationBadgeProps)
             ) : occupation === 'verified' ? (
                 <CheckCircle className="h-3 w-3" />
             ) : null}
-            {t(`taps.occupations.${occupation}`)}
+            {occupationTranslations[occupation]}
         </Badge>
     )
 }

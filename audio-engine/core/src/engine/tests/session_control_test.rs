@@ -53,6 +53,7 @@ async fn test_play_success() {
                     cache_type: AudioCacheType::CacheKey("test_key".to_string()),
                     ttl_seconds: None,
                 },
+                base_volume: 1.0,
             })
         });
 
@@ -160,6 +161,7 @@ async fn test_play_queued() {
                 cache_type: AudioCacheType::CacheKey("k2".to_string()),
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         })
     });
 
@@ -614,6 +616,7 @@ async fn test_end_of_track_handling_and_preload() {
                 cache_type: AudioCacheType::CacheKey("".to_string()),
                 ttl_seconds: None,
             },
+            base_volume: 1.0,
         })
     });
 
@@ -691,6 +694,7 @@ async fn test_end_of_track_handling_and_preload() {
                     cache_type: AudioCacheType::None,
                     ttl_seconds: None,
                 },
+                base_volume: 1.0,
             })
         });
 

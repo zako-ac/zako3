@@ -29,6 +29,7 @@ impl TapHubBridgeHandler for MockHandler {
                 AudioMetadata::Title("Test Title".to_string()),
                 AudioMetadata::Artist("Test Artist".to_string()),
             ],
+            base_volume: 1.0,
         };
 
         tokio::spawn(async move {
@@ -48,6 +49,7 @@ impl TapHubBridgeHandler for MockHandler {
                 AudioMetadata::Title("Preload Title".to_string()),
                 AudioMetadata::Artist("Preload Artist".to_string()),
             ],
+            base_volume: 1.0,
         })
     }
 
@@ -64,6 +66,7 @@ impl TapHubBridgeHandler for MockHandler {
                 AudioMetadata::Title("Meta Title".to_string()),
                 AudioMetadata::Artist("Meta Artist".to_string()),
             ],
+            base_volume: 1.0,
         })
     }
 }

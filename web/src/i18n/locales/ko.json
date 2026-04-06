@@ -154,8 +154,6 @@
       "stats": {
         "acrossTaps": "모든 탭에서",
         "activeUsers": "활성 사용자",
-        "last24h": "지난 24시간",
-        "lastMonth": "지난 달",
         "myTaps": "내 탭",
         "tapsOwned": "소유한 탭",
         "totalUses": "총 사용량",
@@ -290,6 +288,8 @@
       "form": {
         "addBlacklistedUsers": "차단된 사용자 추가",
         "addWhitelistedUsers": "허용된 사용자 추가",
+        "baseVolume": "",
+        "baseVolumeDescription": "",
         "blacklistedUsers": "차단된 사용자",
         "blacklistedUsersHelp": "차단된 사용자는 이 탭을 사용할 수 없습니다.",
         "description": "설명",
@@ -307,6 +307,11 @@
       "myTapsDescription": "내가 소유하거나 접근할 수 있는 탭입니다.",
       "noTaps": "탭을 찾을 수 없습니다.",
       "noTapsOwned": "소유한 탭이 없습니다.",
+      "occupations": {
+        "base": "기본",
+        "official": "공식",
+        "verified": "인증됨"
+      },
       "permission": "권한",
       "permissions": {
         "blacklisted": "차단되지 않은 사용자만",

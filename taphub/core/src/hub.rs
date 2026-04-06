@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -6,6 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use tokio::sync::watch;
 use zako3_types::{OnlineTapState, hq::TapId};
 use zakofish::{
     ZakofishError, create_server_config,
@@ -18,10 +20,13 @@ use zako3_preload_cache::{AudioPreload, FileAudioCache};
 use crate::{app::App, routing::DynamicSampler};
 use zako3_states::{TapHubStateService, TapMetricsStateService};
 
+pub(crate) type ConnectionSignals = Arc<Mutex<HashMap<u64, watch::Sender<bool>>>>;
+
 pub struct TapHubConnectionHandler {
     app: App,
     state_service: TapHubStateService,
     metrics_service: TapMetricsStateService,
+    connection_signals: ConnectionSignals,
 }
 
 #[async_trait]
@@ -71,6 +76,9 @@ impl HubHandler for TapHubConnectionHandler {
                         }
                     })?;
 
+                let (disconnect_tx, _) = watch::channel(false);
+                self.connection_signals.lock().insert(connection_id, disconnect_tx);
+
                 Ok(())
             } else {
                 Err(TapServerReject {
@@ -92,6 +100,15 @@ impl HubHandler for TapHubConnectionHandler {
             tap_id,
             connection_id
         );
+
+        if let Some(tx) = self.connection_signals.lock().remove(&connection_id) {
+            tracing::warn!(
+                tap_id = %tap_id.0,
+                connection_id,
+                "Tap disconnected — erroring all active streams for this connection"
+            );
+            let _ = tx.send(true);
+        }
 
         let states = self
             .state_service
@@ -126,6 +143,7 @@ pub struct TapHub {
     pub audio_preload: Arc<AudioPreload>,
     pub audio_cache: Arc<FileAudioCache>,
     pub request_timeout: Duration,
+    pub(crate) connection_signals: ConnectionSignals,
 }
 
 impl TapHub {
@@ -145,10 +163,13 @@ impl TapHub {
             key_file,
         )?;
 
+        let connection_signals: ConnectionSignals = Arc::new(Mutex::new(HashMap::new()));
+
         let handler = TapHubConnectionHandler {
             app: app.clone(),
             state_service: app.tap_state_service.clone(),
             metrics_service: app.tap_metrics_service.clone(),
+            connection_signals: Arc::clone(&connection_signals),
         };
 
         let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
@@ -162,6 +183,7 @@ impl TapHub {
             audio_preload: Arc::new(AudioPreload::new(cache_dir.clone())),
             audio_cache: Arc::new(FileAudioCache::new(cache_dir)),
             request_timeout: Duration::from_millis(request_timeout_ms),
+            connection_signals,
         })
     }
 

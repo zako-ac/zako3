@@ -39,6 +39,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Slider } from '@/components/ui/slider'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/common'
 import { UserListSelector } from '@/components/tap/user-list-selector'
@@ -63,12 +64,14 @@ export const TapSettingsPage = () => {
                 description: tap.description,
                 roles: tap.roles,
                 permission: tap.permission,
+                baseVolume: tap.baseVolume,
             }
             : undefined,
     })
 
     const onSubmit = async (data: UpdateTapInput) => {
         try {
+            console.log(data)
             await updateTap(data)
             toast.success(t('taps.settings.updateSuccess'))
         } catch (error) {
@@ -184,6 +187,35 @@ export const TapSettingsPage = () => {
                                         <FormControl>
                                             <Textarea className="min-h-24 resize-none" {...field} />
                                         </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="baseVolume"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>{t('taps.form.baseVolume')}</FormLabel>
+                                        <FormControl>
+                                            <div className="flex items-center gap-4">
+                                                <Slider
+                                                    className="flex-1"
+                                                    min={0}
+                                                    max={200}
+                                                    step={5}
+                                                    value={[Math.round((field.value ?? 1) * 100)]}
+                                                    onValueChange={([val]) => field.onChange(val / 100)}
+                                                />
+                                                <span className="text-muted-foreground w-12 text-right text-sm">
+                                                    {Math.round((field.value ?? 1) * 100)}%
+                                                </span>
+                                            </div>
+                                        </FormControl>
+                                        <FormDescription>
+                                            {t('taps.form.baseVolumeDescription')}
+                                        </FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                 )}
