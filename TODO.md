@@ -5,12 +5,12 @@ refer hq todo
 # Do Now
 - [x] Implement multiple AE
 
-- [ ] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [ ] Implement text preprocessing
 - [ ] implement cache: max cache size, score-based cache eviction worker
+- [x] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [x] add reconnection logic
-- [ ] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
-- [ ] Add uptime and active users
+- [x] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
+- [x] Add uptime and active users
 
 
 # Other
@@ -29,7 +29,7 @@ refer hq todo
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 - [ ] implement ban
 
-- [ ] AE Hang on no join
+- [x] AE Hang on no join
 - [ ] AE re-join on boot
 - [ ] Gauge metrics reset on TH boot
 
