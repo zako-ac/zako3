@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -131,6 +132,7 @@ pub struct TapHub {
     pub app: App,
     pub audio_preload: Arc<AudioPreload>,
     pub audio_cache: Arc<FileAudioCache>,
+    pub request_timeout: Duration,
 }
 
 impl TapHub {
@@ -140,6 +142,7 @@ impl TapHub {
         cert_file: impl AsRef<Path>,
         key_file: impl AsRef<Path>,
         cache_dir: PathBuf,
+        request_timeout_ms: u64,
     ) -> Result<Self, ZakofishError> {
         let server_config = create_server_config(
             bind_address.parse().map_err(|_| {
@@ -165,6 +168,7 @@ impl TapHub {
             app,
             audio_preload: Arc::new(AudioPreload::new(cache_dir.clone())),
             audio_cache: Arc::new(FileAudioCache::new(cache_dir)),
+            request_timeout: Duration::from_millis(request_timeout_ms),
         })
     }
 

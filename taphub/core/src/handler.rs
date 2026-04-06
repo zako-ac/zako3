@@ -111,22 +111,40 @@ impl TapHubBridgeHandler for TapHub {
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
-        let connection_id = self
-            .sampler
-            .lock()
-            .next_connection_id(&states)
-            .ok_or_else(|| "No available connections for this tap".to_string())?;
+        let mut tried: Vec<u64> = Vec::new();
+        let (succ, rel, mut unrel) = loop {
+            let available: Vec<_> = states
+                .iter()
+                .filter(|s| !tried.contains(&s.connection_id))
+                .cloned()
+                .collect();
+            let connection_id = self
+                .sampler
+                .lock()
+                .next_connection_id(&available)
+                .ok_or_else(|| "No available connections for this tap".to_string())?;
 
-        let (succ, rel, mut unrel) = self
-            .zf_hub
-            .request_audio(
-                tap_id.clone(),
-                connection_id,
-                request.audio_request.clone(),
-                Default::default(),
+            match tokio::time::timeout(
+                self.request_timeout,
+                self.zf_hub.request_audio(
+                    tap_id.clone(),
+                    connection_id,
+                    request.audio_request.clone(),
+                    Default::default(),
+                ),
             )
             .await
-            .map_err(|e| format!("Failed to request audio from hub: {}", e))?;
+            {
+                Ok(Ok(result)) => break result,
+                Ok(Err(e)) => {
+                    tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
+                }
+                Err(_) => {
+                    tracing::warn!(connection_id, "tap request timed out, trying next connection");
+                }
+            }
+            tried.push(connection_id);
+        };
 
         // Cache _rel
         let rel_rx = bridge_rel(rel);
@@ -187,23 +205,41 @@ impl TapHubBridgeHandler for TapHub {
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
-        let connection_id = self
-            .sampler
-            .lock()
-            .next_connection_id(&states)
-            .ok_or_else(|| "No available connections for this tap".to_string())?;
-
+        let mut tried: Vec<u64> = Vec::new();
         // Request audio from zakofish — only _rel is used for preloading
-        let (succ, rel, _unrel) = self
-            .zf_hub
-            .request_audio(
-                tap_id.clone(),
-                connection_id,
-                req.audio_request.clone(),
-                Default::default(),
+        let (succ, rel, _unrel) = loop {
+            let available: Vec<_> = states
+                .iter()
+                .filter(|s| !tried.contains(&s.connection_id))
+                .cloned()
+                .collect();
+            let connection_id = self
+                .sampler
+                .lock()
+                .next_connection_id(&available)
+                .ok_or_else(|| "No available connections for this tap".to_string())?;
+
+            match tokio::time::timeout(
+                self.request_timeout,
+                self.zf_hub.request_audio(
+                    tap_id.clone(),
+                    connection_id,
+                    req.audio_request.clone(),
+                    Default::default(),
+                ),
             )
             .await
-            .map_err(|e| format!("Failed to request audio from hub: {}", e))?;
+            {
+                Ok(Ok(result)) => break result,
+                Ok(Err(e)) => {
+                    tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
+                }
+                Err(_) => {
+                    tracing::warn!(connection_id, "tap request timed out, trying next connection");
+                }
+            }
+            tried.push(connection_id);
+        };
 
         // Preload _rel to disk
         let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
@@ -284,17 +320,36 @@ impl TapHubBridgeHandler for TapHub {
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
-        let connection_id = self
-            .sampler
-            .lock()
-            .next_connection_id(&states)
-            .ok_or_else(|| "No available connections for this tap".to_string())?;
+        let mut tried: Vec<u64> = Vec::new();
+        let meta = loop {
+            let available: Vec<_> = states
+                .iter()
+                .filter(|s| !tried.contains(&s.connection_id))
+                .cloned()
+                .collect();
+            let connection_id = self
+                .sampler
+                .lock()
+                .next_connection_id(&available)
+                .ok_or_else(|| "No available connections for this tap".to_string())?;
 
-        let meta = self
-            .zf_hub
-            .request_audio_metadata(tap_id, connection_id, req.request, Default::default())
+            match tokio::time::timeout(
+                self.request_timeout,
+                self.zf_hub
+                    .request_audio_metadata(tap_id.clone(), connection_id, req.request.clone(), Default::default()),
+            )
             .await
-            .map_err(|e| format!("Failed to request audio metadata: {}", e))?;
+            {
+                Ok(Ok(result)) => break result,
+                Ok(Err(e)) => {
+                    tracing::warn!(connection_id, %e, "tap metadata request failed, trying next connection");
+                }
+                Err(_) => {
+                    tracing::warn!(connection_id, "tap metadata request timed out, trying next connection");
+                }
+            }
+            tried.push(connection_id);
+        };
 
         Ok(AudioMetaResponse {
             metadatas: meta.metadatas,

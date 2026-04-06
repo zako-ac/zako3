@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub key_file: String,
     pub redis_url: String,
     pub cache_dir: PathBuf,
+    pub request_timeout_ms: u64,
 }
 
 impl AppConfig {
@@ -31,6 +32,10 @@ impl AppConfig {
             cache_dir: PathBuf::from(
                 env::var("ZK_TH_CACHE_DIR").unwrap_or_else(|_| "/tmp/zako3-cache".to_string()),
             ),
+            request_timeout_ms: env::var("ZK_TH_REQUEST_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10_000),
         })
     }
 }

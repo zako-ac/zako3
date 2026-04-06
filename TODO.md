@@ -36,7 +36,7 @@ refer hq todo
 - [ ] Add track finish to AE queue
 
 - [ ] Add timeout to AE client
-- [ ] Add timeout to audio request
+- [x] Add timeout to audio request
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 
@@ -50,10 +50,10 @@ refer hq todo
 - [x] Increase border contrast
 - [x] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
 - [ ] unread-count
-- [ ] Improve chart
+- [x] Improve chart
 - [x] Make all cards in settings as component
 - [ ] Add "load failed" 
-- [ ] Dashboard status (my taps, total uses, active users, uptime)
+- [x] Dashboard status (my taps, total uses, active users, uptime)
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
 
