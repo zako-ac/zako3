@@ -17,6 +17,7 @@ use handlers::api_key;
 use handlers::audit_log;
 use handlers::auth;
 use handlers::notification;
+use handlers::playback;
 use handlers::tap;
 use handlers::users;
 
@@ -50,8 +51,14 @@ use handlers::users;
         handlers::admin::update_user_role,
         handlers::tap::request_verification,
         handlers::notification::list_notifications,
-
         handlers::notification::mark_notification_read,
+
+        handlers::playback::get_playback_state,
+        handlers::playback::stop_track,
+        handlers::playback::skip_music,
+        handlers::playback::edit_queue,
+        handlers::playback::undo_action,
+        handlers::playback::get_history,
     ),
     components(
         schemas(
@@ -89,6 +96,15 @@ use handlers::users;
             hq_types::hq::settings::EmojiMappingRule,
             hq_types::hq::settings::TextReadingRule,
             hq_types::hq::settings::UserJoinLeaveAlert,
+
+            hq_types::hq::playback::AudioMetadataDto,
+            hq_types::hq::playback::TrackDto,
+            hq_types::hq::playback::GuildPlaybackStateDto,
+            hq_types::hq::playback::PlaybackActionDto,
+            hq_types::hq::playback::StopTrackDto,
+            hq_types::hq::playback::SkipDto,
+            hq_types::hq::playback::QueueOperation,
+            hq_types::hq::playback::EditQueueDto,
         )
     ),
     tags(
@@ -199,6 +215,12 @@ pub fn app(service: Service) -> Router {
             "/api/v1/taps/:id/api-tokens/:key_id/regenerate",
             post(api_key::regenerate_key),
         )
+        .route("/api/v1/playback/state", get(playback::get_playback_state))
+        .route("/api/v1/playback/stop", post(playback::stop_track))
+        .route("/api/v1/playback/skip", post(playback::skip_music))
+        .route("/api/v1/playback/queue", axum::routing::patch(playback::edit_queue))
+        .route("/api/v1/playback/undo/:action_id", post(playback::undo_action))
+        .route("/api/v1/playback/history", get(playback::get_history))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

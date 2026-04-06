@@ -2,6 +2,8 @@ use hq_core::Service;
 use poise::serenity_prelude as serenity;
 
 pub mod commands;
+pub mod events;
+pub mod util;
 
 pub struct Data {
     pub service: Service,
@@ -12,7 +14,12 @@ pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 pub async fn run(service: Service) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();
-    let intents = serenity::GatewayIntents::non_privileged();
+    let intents = serenity::GatewayIntents::non_privileged()
+        | serenity::GatewayIntents::GUILD_VOICE_STATES;
+
+    let voice_handler = events::VoiceStateHandler {
+        voice_state_service: service.voice_state.clone(),
+    };
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -30,6 +37,7 @@ pub async fn run(service: Service) -> anyhow::Result<()> {
         .build();
 
     let mut client = serenity::ClientBuilder::new(token, intents)
+        .event_handler(voice_handler)
         .framework(framework)
         .await?;
 

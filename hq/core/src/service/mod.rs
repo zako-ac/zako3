@@ -13,13 +13,15 @@ pub mod verification;
 pub use verification::VerificationService;
 pub mod user_settings;
 pub use user_settings::UserSettingsService;
+pub mod playback;
+pub use playback::PlaybackService;
 
-use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgTapRepository, PgUserRepository};
-use crate::{AppConfig, CoreResult};
+use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgPlaybackActionRepo, PgTapRepository, PgUserRepository};
+use crate::{AppConfig, CoreError, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
-
-use zako3_states::{TapHubStateService, TapMetricsStateService, UserSettingsStateService};
+use zako3_audio_engine_client::client::AudioEngineRpcClient;
+use zako3_states::{TapHubStateService, TapMetricsStateService, UserSettingsStateService, VoiceStateService};
 
 #[derive(Clone)]
 pub struct Service {
@@ -32,6 +34,8 @@ pub struct Service {
     pub tap_metrics: TapMetricsStateService,
     pub verification: VerificationService,
     pub user_settings: UserSettingsService,
+    pub voice_state: VoiceStateService,
+    pub playback: PlaybackService,
 }
 
 impl Service {
@@ -72,6 +76,20 @@ impl Service {
             audit_log_service.clone(),
         );
 
+        let audio_engine = Arc::new(
+            AudioEngineRpcClient::new(&config.nats_url)
+                .await
+                .map_err(|e| CoreError::Internal(e.to_string()))?,
+        );
+
+        let voice_state = VoiceStateService::new(redis_repo.clone());
+        let playback_action_repo = Arc::new(PgPlaybackActionRepo::new(pool.clone()));
+        let playback = PlaybackService::new(
+            audio_engine,
+            voice_state.clone(),
+            playback_action_repo,
+        );
+
         Ok(Self {
             config: config.clone(),
             auth: AuthService::new(config.clone(), user_repo.clone()),
@@ -82,6 +100,8 @@ impl Service {
             tap_metrics: tap_metrics_service,
             verification: verification_service,
             user_settings: UserSettingsService::new(user_repo.clone(), user_settings_cache),
+            voice_state,
+            playback,
         })
     }
 }

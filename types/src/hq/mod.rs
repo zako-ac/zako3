@@ -22,5 +22,7 @@ pub mod notification;
 pub use notification::*;
 pub mod verification;
 pub use verification::*;
+pub mod playback;
+pub use playback::*;
 pub mod rpc;
 pub mod zod_impls;

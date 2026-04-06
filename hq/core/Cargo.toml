@@ -26,3 +26,4 @@ sha2 = "0.10"
 hex = "0.4.3"
 jsonrpsee.workspace = true
 zako3-states = { version = "0.1.0", path = "../../crates/states", features = ["redis"] }
+zako3-audio-engine-client = { workspace = true }

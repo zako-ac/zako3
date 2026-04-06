@@ -14,3 +14,4 @@ tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 dotenvy = { workspace = true }
 anyhow = { workspace = true }
+zako3-states = { version = "0.1.0", path = "../../crates/states", features = ["redis"] }

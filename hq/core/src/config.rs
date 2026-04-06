@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub redis_url: String,
     pub rpc_admin_token: String,
     pub zako_website_url: String,
+    pub nats_url: String,
 }
 
 impl AppConfig {
@@ -37,6 +38,8 @@ impl AppConfig {
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
             zako_website_url: env::var("ZAKO_WEBSITE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            nats_url: env::var("NATS_URL")
+                .unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string()),
         })
     }
 }
