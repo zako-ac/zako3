@@ -207,10 +207,10 @@ impl TapService {
             .await
             .unwrap_or(0);
         let active_now = self
-            .tap_metrics_state
-            .get_metric(tap_id.clone(), TapMetricKey::ActiveNow)
+            .tap_hub_state
+            .get_online_count(&tap_id)
             .await
-            .unwrap_or(0);
+            .unwrap_or(0) as u64;
         let unique_users = self
             .tap_metrics_state
             .get_unique_users_count(tap_id.clone())
@@ -520,11 +520,6 @@ impl TapService {
             .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
-        let active_now = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::ActiveNow)
-            .await
-            .unwrap_or(0);
         let unique_users = self
             .tap_metrics_state
             .get_unique_users_count(tap.id.clone())
@@ -540,6 +535,7 @@ impl TapService {
             .get_tap_states(&tap.id)
             .await
             .unwrap_or_default();
+        let active_now = online_states.len() as u64;
         let current_session_secs: u64 = online_states
             .iter()
             .map(|s| {

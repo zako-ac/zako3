@@ -26,8 +26,8 @@ async fn main() -> Result<()> {
     // Using query_as! or query! requires DATABASE_URL at compile time.
     // For now we use the non-macro version to ensure it compiles in this environment.
     let latest_snapshots = sqlx::query(
-        "SELECT DISTINCT ON (tap_id) tap_id, total_uses, active_now, cache_hits 
-         FROM tap_metrics 
+        "SELECT DISTINCT ON (tap_id) tap_id, total_uses, cache_hits
+         FROM tap_metrics
          ORDER BY tap_id, time DESC",
     )
     .fetch_all(&pool)
@@ -40,12 +40,10 @@ async fn main() -> Result<()> {
         info!("Restoring metrics for tap {}...", tap_id.0);
 
         let total_uses: i64 = row.get("total_uses");
-        let active_now: i64 = row.get("active_now");
         let cache_hits: i64 = row.get("cache_hits");
 
         let metrics = [
             ("total_uses", total_uses),
-            ("active_now", active_now),
             ("cache_hits", cache_hits),
         ];
 

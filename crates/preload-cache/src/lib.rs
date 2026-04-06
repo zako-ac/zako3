@@ -231,6 +231,14 @@ pub trait AudioCache: Send + Sync {
     /// Read the full cache entry (item + metadatas + cache_key). Returns `None` if not found or expired.
     async fn get_entry(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> Option<CacheEntry>;
 
+    /// Write only the metadata JSON for an item (no audio frames / no .opus file).
+    async fn store_metadata(
+        &self,
+        item: AudioCacheItem,
+        metadatas: Vec<AudioMetadata>,
+        cache_key: AudioCachePolicy,
+    ) -> io::Result<()>;
+
     /// Delete cached files for the given key.
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()>;
 }
@@ -371,6 +379,20 @@ impl AudioCache for FileAudioCache {
             return None;
         }
         Some(entry)
+    }
+
+    async fn store_metadata(
+        &self,
+        item: AudioCacheItem,
+        metadatas: Vec<AudioMetadata>,
+        cache_key: AudioCachePolicy,
+    ) -> io::Result<()> {
+        let stem = Self::cache_stem(&item.tap_id, &item.key);
+        let json_path = self.json_path(&stem);
+        let entry = CacheEntry { item, metadatas, cache_key };
+        let json = serde_json::to_vec(&entry)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        fs::write(&json_path, json).await
     }
 
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()> {

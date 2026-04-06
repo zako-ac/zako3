@@ -5,7 +5,7 @@ use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info};
-use zako3_states::{RedisCacheRepository, TapMetricKey, TapMetricsStateService};
+use zako3_states::{RedisCacheRepository, TapMetricKey, TapMetricsStateService, TapHubStateService};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -49,8 +49,10 @@ async fn main() -> Result<()> {
         .await?;
 
     info!("Connecting to Redis...");
-    let cache_repo = std::sync::Arc::new(RedisCacheRepository::new(&redis_url).await?);
-    let metrics_service = TapMetricsStateService::new(cache_repo);
+    let cache_repo: std::sync::Arc<dyn zako3_states::CacheRepository> =
+        std::sync::Arc::new(RedisCacheRepository::new(&redis_url).await?);
+    let metrics_service = TapMetricsStateService::new(std::sync::Arc::clone(&cache_repo));
+    let hub_state_service = TapHubStateService::new(cache_repo);
 
     info!("Starting sync loop with interval {}s", sync_interval);
 
@@ -63,10 +65,10 @@ async fn main() -> Result<()> {
                         .get_metric(tap_id.clone(), TapMetricKey::TotalUses)
                         .await
                         .unwrap_or(0);
-                    let active_now = metrics_service
-                        .get_metric(tap_id.clone(), TapMetricKey::ActiveNow)
+                    let active_now = hub_state_service
+                        .get_online_count(tap_id)
                         .await
-                        .unwrap_or(0);
+                        .unwrap_or(0) as u64;
                     let cache_hits = metrics_service
                         .get_metric(tap_id.clone(), TapMetricKey::CacheHits)
                         .await

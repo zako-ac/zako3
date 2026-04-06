@@ -65,6 +65,11 @@ impl TapHubBridgeHandler for TapHub {
                 tracing::info!("Cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
 
                 if let Some(reader) = self.audio_cache.open_reader(&item.tap_id, &item.key).await {
+                    self.metrics_service
+                        .inc_cache_hits(tap_id.clone())
+                        .await
+                        .ok();
+
                     let (tx, rx) = mpsc::channel(100);
                     tokio::spawn(async move {
                         let mut reader = reader;
@@ -140,11 +145,16 @@ impl TapHubBridgeHandler for TapHub {
                     tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
                 }
                 Err(_) => {
-                    tracing::warn!(connection_id, "tap request timed out, trying next connection");
+                    tracing::warn!(
+                        connection_id,
+                        "tap request timed out, trying next connection"
+                    );
                 }
             }
             tried.push(connection_id);
         };
+
+        tracing::info!("Received audio from zakofish for tap_id={}", tap_id.0,);
 
         // Cache _rel
         let rel_rx = bridge_rel(rel);
@@ -202,7 +212,11 @@ impl TapHubBridgeHandler for TapHub {
         let cache_item = build_cache_item(tap_id.clone(), &req.cache_key, &req.audio_request);
         if let Some(ref item) = cache_item {
             if let Some(entry) = self.audio_cache.get_entry(&item.tap_id, &item.key).await {
-                tracing::info!("Preload cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
+                tracing::info!(
+                    "Preload cache hit for tap_id={}, key={}",
+                    item.tap_id.0,
+                    item.key
+                );
                 return Ok(AudioMetaResponse {
                     metadatas: entry.metadatas,
                     cache_key: entry.cache_key,
@@ -247,7 +261,10 @@ impl TapHubBridgeHandler for TapHub {
                     tracing::warn!(connection_id, %e, "tap request failed, trying next connection");
                 }
                 Err(_) => {
-                    tracing::warn!(connection_id, "tap request timed out, trying next connection");
+                    tracing::warn!(
+                        connection_id,
+                        "tap request timed out, trying next connection"
+                    );
                 }
             }
             tried.push(connection_id);
@@ -358,8 +375,12 @@ impl TapHubBridgeHandler for TapHub {
 
             match tokio::time::timeout(
                 self.request_timeout,
-                self.zf_hub
-                    .request_audio_metadata(tap_id.clone(), connection_id, req.request.clone(), Default::default()),
+                self.zf_hub.request_audio_metadata(
+                    tap_id.clone(),
+                    connection_id,
+                    req.request.clone(),
+                    Default::default(),
+                ),
             )
             .await
             {
@@ -368,11 +389,34 @@ impl TapHubBridgeHandler for TapHub {
                     tracing::warn!(connection_id, %e, "tap metadata request failed, trying next connection");
                 }
                 Err(_) => {
-                    tracing::warn!(connection_id, "tap metadata request timed out, trying next connection");
+                    tracing::warn!(
+                        connection_id,
+                        "tap metadata request timed out, trying next connection"
+                    );
                 }
             }
             tried.push(connection_id);
         };
+
+        // Write metadata back to cache
+        let meta_item = AudioCacheItem {
+            key: meta_key,
+            tap_id: tap_id.clone(),
+            expire_at: meta
+                .cache
+                .ttl_seconds
+                .map(|ttl| Utc::now() + chrono::Duration::seconds(ttl as i64)),
+        };
+        {
+            let cache = Arc::clone(&self.audio_cache);
+            let metadatas = meta.metadatas.clone();
+            let cache_key = meta.cache.clone();
+            tokio::spawn(async move {
+                if let Err(e) = cache.store_metadata(meta_item, metadatas, cache_key).await {
+                    tracing::warn!(%e, "Failed to store metadata in cache");
+                }
+            });
+        }
 
         Ok(AudioMetaResponse {
             metadatas: meta.metadatas,

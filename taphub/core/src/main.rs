@@ -188,6 +188,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tap_metrics_service: TapMetricsStateService::new(cache_repo.clone()),
     };
 
+    // Clear stale tap connection states left over from the previous run.
+    // Taps that are still online will reconnect and re-register immediately.
+    let known_taps = app.tap_metrics_service.get_known_taps().await.unwrap_or_default();
+    if let Err(e) = app.tap_state_service.clear_all_tap_states(&known_taps).await {
+        tracing::warn!(%e, "Failed to clear stale tap states on startup");
+    }
+    tracing::info!("Cleared online state for {} known taps", known_taps.len());
+
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,

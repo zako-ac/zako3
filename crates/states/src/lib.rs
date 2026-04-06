@@ -104,11 +104,22 @@ impl TapHubStateService {
 
         Ok(())
     }
+
+    pub async fn get_online_count(&self, tap_id: &TapId) -> Result<usize> {
+        Ok(self.get_tap_states(tap_id).await?.len())
+    }
+
+    pub async fn clear_all_tap_states(&self, tap_ids: &[TapId]) -> Result<()> {
+        for tap_id in tap_ids {
+            let key = format!("tap:{}", tap_id.0);
+            self.cache_repository.del(&key).await;
+        }
+        Ok(())
+    }
 }
 
 pub enum TapMetricKey {
     TotalUses,
-    ActiveNow,
     CacheHits,
     UniqueUsers,
     UptimeSecs,
@@ -118,7 +129,6 @@ impl TapMetricKey {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::TotalUses => "total_uses",
-            Self::ActiveNow => "active_now",
             Self::CacheHits => "cache_hits",
             Self::UniqueUsers => "unique_users",
             Self::UptimeSecs => "uptime_secs",
@@ -143,18 +153,6 @@ impl TapMetricsStateService {
     pub async fn inc_total_uses(&self, tap_id: TapId) -> Result<()> {
         let key = self.get_key(tap_id, TapMetricKey::TotalUses);
         self.cache_repository.incr(&key).await?;
-        Ok(())
-    }
-
-    pub async fn inc_active_now(&self, tap_id: TapId) -> Result<()> {
-        let key = self.get_key(tap_id, TapMetricKey::ActiveNow);
-        self.cache_repository.incr(&key).await?;
-        Ok(())
-    }
-
-    pub async fn dec_active_now(&self, tap_id: TapId) -> Result<()> {
-        let key = self.get_key(tap_id, TapMetricKey::ActiveNow);
-        self.cache_repository.decr(&key).await?;
         Ok(())
     }
 

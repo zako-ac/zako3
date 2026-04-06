@@ -39,6 +39,7 @@ refer hq todo
 - [ ] Add search API for tap (like youtube search)
 - [ ] Make TH connection ID (online count) tracking better
 - [ ] Make cache removation command
+- [ ] Add base volume for tap
 
 ## Text Preprocessing
 - [ ] ㅏ -> 아
