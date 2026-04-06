@@ -14,12 +14,30 @@ import { LanguageToggle } from '@/components/layout/language-toggle'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
+import { useTaps } from '@/features/taps'
+import { UserSettingsCard, defaultUserSettings, useUserSettings, useSaveUserSettings } from '@/features/settings'
+import type { UserSettings } from '@/features/settings'
+import { toast } from 'sonner'
 
 export const SettingsPage = () => {
     const { t } = useTranslation()
     const { user } = useAuthStore()
 
+    const { data: tapsData } = useTaps()
+    const { data: settingsData, isLoading: settingsLoading } = useUserSettings()
+    const { mutateAsync: saveSettings } = useSaveUserSettings()
+
     if (!user) return null
+
+    const handleSaveSettings = async (settings: UserSettings) => {
+        try {
+            await saveSettings(settings)
+            toast.success(t('settings.saveSuccess'))
+        } catch (error) {
+            console.error('Failed to save settings:', error)
+            toast.error(t('settings.saveError'))
+        }
+    }
 
     return (
         <div className="mx-auto max-w-4xl space-y-6">
@@ -84,6 +102,12 @@ export const SettingsPage = () => {
                     </div>
                 </CardContent>
             </Card>
+
+            <UserSettingsCard
+                initialValue={settingsLoading ? defaultUserSettings : (settingsData ?? defaultUserSettings)}
+                taps={tapsData?.data ?? []}
+                onSave={handleSaveSettings}
+            />
 
             <Card>
                 <CardHeader>

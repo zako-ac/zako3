@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub rpc_address: String,
     pub redis_url: String,
     pub rpc_admin_token: String,
+    pub zako_website_url: String,
 }
 
 impl AppConfig {
@@ -34,6 +35,8 @@ impl AppConfig {
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
+            zako_website_url: env::var("ZAKO_WEBSITE_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
         })
     }
 }

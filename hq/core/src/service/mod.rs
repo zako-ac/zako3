@@ -11,13 +11,15 @@ pub use auth::Claims; // Export Claims
 pub use tap::TapService;
 pub mod verification;
 pub use verification::VerificationService;
+pub mod user_settings;
+pub use user_settings::UserSettingsService;
 
 use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgTapRepository, PgUserRepository};
 use crate::{AppConfig, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use zako3_states::TapMetricsStateService;
+use zako3_states::{TapMetricsStateService, UserSettingsStateService};
 
 #[derive(Clone)]
 pub struct Service {
@@ -29,6 +31,7 @@ pub struct Service {
     pub audit_log: AuditLogService,
     pub tap_metrics: TapMetricsStateService,
     pub verification: VerificationService,
+    pub user_settings: UserSettingsService,
 }
 
 impl Service {
@@ -44,8 +47,9 @@ impl Service {
         let notification_service = NotificationService::new(notification_repo);
 
         let redis_url = &config.redis_url;
-        let redis_repo = zako3_states::RedisCacheRepository::new(redis_url).await?;
-        let tap_metrics_service = TapMetricsStateService::new(Arc::new(redis_repo));
+        let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
+        let tap_metrics_service = TapMetricsStateService::new(redis_repo.clone());
+        let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
             tap_repo.clone(),
@@ -74,6 +78,7 @@ impl Service {
             audit_log: audit_log_service,
             tap_metrics: tap_metrics_service,
             verification: verification_service,
+            user_settings: UserSettingsService::new(user_repo.clone(), user_settings_cache),
         })
     }
 }

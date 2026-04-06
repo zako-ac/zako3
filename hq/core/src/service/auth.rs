@@ -1,6 +1,6 @@
 use crate::repo::UserRepository;
 use crate::{AppConfig, CoreError, CoreResult};
-use hq_types::hq::{AuthResponseDto, AuthUserDto, LoginResponseDto, User, UserId};
+use hq_types::hq::{AuthResponseDto, AuthUserDto, User, UserId};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -29,16 +29,20 @@ impl AuthService {
         }
     }
 
-    pub fn get_login_url(&self) -> LoginResponseDto {
-        let redirect_url = format!(
+    pub fn get_login_url(&self, redirect: Option<&str>) -> String {
+        let mut url = format!(
             "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify%20email",
             self.config.discord_client_id,
             urlencoding::encode(&self.config.discord_redirect_uri)
         );
-        LoginResponseDto { redirect_url }
+        if let Some(path) = redirect {
+            url.push_str("&state=");
+            url.push_str(&urlencoding::encode(path));
+        }
+        url
     }
 
-    pub async fn authenticate(&self, code: &str) -> CoreResult<AuthResponseDto> {
+    pub async fn authenticate(&self, code: &str, state: Option<&str>) -> CoreResult<AuthResponseDto> {
         // Exchange code for token
         let params = [
             ("client_id", &self.config.discord_client_id),
@@ -141,9 +145,14 @@ impl AuthService {
             banned: user.banned,
         };
 
+        let redirect_url = state
+            .and_then(|s| urlencoding::decode(s).ok())
+            .map(|s| s.into_owned());
+
         Ok(AuthResponseDto {
             token,
             user: auth_user,
+            redirect_url,
         })
     }
 
@@ -243,6 +252,7 @@ impl AuthService {
         Ok(AuthResponseDto {
             token,
             user: auth_user,
+            redirect_url: None,
         })
     }
 

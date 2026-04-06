@@ -44,7 +44,8 @@ export const AuditLogDtoSchema = z.object({
 export type AuditLogDto = z.infer<typeof AuditLogDtoSchema>;
 
 export const AuthCallbackDtoSchema = z.object({
-  code: z.string()
+  code: z.string(),
+  state: z.string().nullable()
 });
 export type AuthCallbackDto = z.infer<typeof AuthCallbackDtoSchema>;
 
@@ -57,7 +58,8 @@ export const AuthResponseDtoSchema = z.object({
   avatar: z.string(),
   email: z.string().nullable(),
   isAdmin: z.boolean()
-})
+}),
+  redirectUrl: z.string().nullable()
 });
 export type AuthResponseDto = z.infer<typeof AuthResponseDtoSchema>;
 

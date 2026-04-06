@@ -20,6 +20,7 @@ import { UserBadge } from './user-badge'
 import { OccupationBadge } from './occupation-badge'
 import { CopyableId } from './copyable-id'
 import { TapRolesBadge } from './tap-roles-badge'
+import { SetAsMyVoice } from './set-as-my-voice'
 
 interface TapCardProps {
     tap: TapWithAccess
@@ -68,6 +69,11 @@ export const TapCard = ({
                             </div>
                             <CopyableId id={tap.id} />
                         </div>
+                        <SetAsMyVoice
+                            tapId={tap.id}
+                            hasTtsRole={tap.roles.includes('tts')}
+                            hasAccess={tap.hasAccess}
+                        />
                         {onSettingsClick && (
                             <TooltipProvider>
                                 <Tooltip>

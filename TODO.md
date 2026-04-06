@@ -9,6 +9,7 @@ refer hq todo
 - [ ] Implement text preprocessing
 - [ ] implement cache: max cache size, score-based cache eviction worker
 - [x] add reconnection logic
+- [ ] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
 - [ ] Add uptime and active users
 
 
@@ -27,11 +28,15 @@ refer hq todo
 - [ ] implement ban
 - [ ] AE Hang on no join
 - [ ] AE re-join on boot
-- [ ] AE init rmq AFTER init discord
+- [ ] Gauge metrics reset on TH boot
+- [x] AE init rmq AFTER init discord
 - [ ] Add timeout to AE client
 - [ ] Add track finish to AE queue
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
+
+## Text Preprocessing
+- [ ] ㅏ -> 아
 
 ## Web
 - [x] When browsing tap settings or tap stats, make "stats", "settings", "create api key" in sub-sidebar. Separate API key creation UI to component from settings if needed.

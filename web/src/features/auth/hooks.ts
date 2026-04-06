@@ -4,6 +4,7 @@ import { authApi } from './api'
 import { useAuthStore } from './store'
 import { ROUTES } from '@/lib/constants'
 
+
 export const authKeys = {
   all: ['auth'] as const,
   user: () => [...authKeys.all, 'user'] as const,
@@ -25,12 +26,12 @@ export const useCurrentUser = () => {
 }
 
 export const useLogin = () => {
-  return useMutation({
-    mutationFn: authApi.getLoginUrl,
-    onSuccess: (data) => {
-      window.location.href = data.redirectUrl
-    },
-  })
+  return (redirect?: string) => {
+    const url = redirect
+      ? `/api/v1/auth/login?redirect=${encodeURIComponent(redirect)}`
+      : '/api/v1/auth/login'
+    window.location.href = url
+  }
 }
 
 export const useAuthCallback = () => {
@@ -39,11 +40,12 @@ export const useAuthCallback = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (code: string) => authApi.handleCallback(code),
+    mutationFn: ({ code, state }: { code: string; state: string | null }) =>
+      authApi.handleCallback(code, state),
     onSuccess: (data) => {
       login(data.token, data.user)
       queryClient.setQueryData(authKeys.user(), data.user)
-      navigate(ROUTES.DASHBOARD)
+      navigate(data.redirectUrl ?? ROUTES.DASHBOARD)
     },
   })
 }

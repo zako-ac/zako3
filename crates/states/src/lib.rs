@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use thiserror::Error;
-use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId};
+use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId, hq::settings::UserSettings};
 
 #[derive(Error, Debug)]
 pub enum StateServiceError {
@@ -18,6 +18,7 @@ type Result<T> = std::result::Result<T, StateServiceError>;
 pub trait CacheRepository: Send + Sync {
     async fn get(&self, key: &str) -> Option<String>;
     async fn set(&self, key: &str, value: &str);
+    async fn del(&self, key: &str);
     async fn incr(&self, key: &str) -> Result<i64>;
     async fn decr(&self, key: &str) -> Result<i64>;
     async fn pfadd(&self, key: &str, element: &str) -> Result<()>;
@@ -194,6 +195,36 @@ impl TapMetricsStateService {
     }
 }
 
+#[derive(Clone)]
+pub struct UserSettingsStateService {
+    cache_repository: CacheRepositoryRef,
+}
+
+impl UserSettingsStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    fn key(user_id: &UserId) -> String {
+        format!("user_settings:{}", user_id.0)
+    }
+
+    pub async fn get_cached(&self, user_id: &UserId) -> Option<UserSettings> {
+        let raw = self.cache_repository.get(&Self::key(user_id)).await?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    pub async fn set_cached(&self, user_id: &UserId, settings: &UserSettings) {
+        if let Ok(raw) = serde_json::to_string(settings) {
+            self.cache_repository.set(&Self::key(user_id), &raw).await;
+        }
+    }
+
+    pub async fn invalidate(&self, user_id: &UserId) {
+        self.cache_repository.del(&Self::key(user_id)).await;
+    }
+}
+
 #[cfg(feature = "redis")]
 #[derive(Clone)]
 pub struct RedisCacheRepository {
@@ -224,6 +255,12 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let _: redis::RedisResult<()> = conn.set(key, value).await;
+    }
+
+    async fn del(&self, key: &str) {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: redis::RedisResult<()> = conn.del(key).await;
     }
 
     async fn incr(&self, key: &str) -> Result<i64> {

@@ -16,6 +16,7 @@ export const AuthCallbackPage = () => {
     hasAttempted.current = true
 
     const code = searchParams.get('code')
+    const state = searchParams.get('state')
     const error = searchParams.get('error')
 
     if (error) {
@@ -26,7 +27,7 @@ export const AuthCallbackPage = () => {
     }
 
     if (code) {
-      handleCallback(code, {
+      handleCallback({ code, state }, {
         onError: () => {
           toast.error('Failed to verify authentication code')
           navigate(ROUTES.LOGIN, { replace: true })

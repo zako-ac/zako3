@@ -16,7 +16,7 @@ pub async fn run(service: Service) -> anyhow::Result<()> {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![commands::ping(), commands::tap::tap()],
+            commands: vec![commands::ping(), commands::tap::tap(), commands::settings::settings()],
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {

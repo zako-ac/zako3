@@ -31,6 +31,7 @@ pub struct UpdateOccupationDto {
 #[serde(rename_all = "camelCase")]
 pub struct AuthCallbackDto {
     pub code: String,
+    pub state: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
@@ -56,6 +57,7 @@ pub struct UpdateUserRoleDto {
 pub struct AuthResponseDto {
     pub token: String,
     pub user: AuthUserDto,
+    pub redirect_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]

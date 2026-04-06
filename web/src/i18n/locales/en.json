@@ -40,7 +40,8 @@
         "owner": "Owner",
         "subtitle": "Manage all taps in the system",
         "tapDetails": "Tap Details",
-        "title": "Taps"
+        "title": "Taps",
+        "updateSuccess": ""
       },
       "users": {
         "actions": {
@@ -168,6 +169,7 @@
     "errors": {
       "ownerNotFound": "",
       "tapNotFound": "",
+      "updateFailed": "",
       "userNotFound": ""
     },
     "nav": {
@@ -213,21 +215,62 @@
     "settings": {
       "account": "Account",
       "accountSubtitle": "Manage your account settings",
+      "addEmojiRule": "Add emoji rule",
+      "addRule": "Add rule",
       "appearance": "Appearance",
       "appearanceSubtitle": "Customize the look and feel",
+      "caseSensitive": "Case sensitive",
       "darkMode": "Dark Mode",
       "darkModeSubtitle": "Toggle dark mode on or off",
       "deleteAccount": "Delete Account",
       "deleteAccountWarning": "This will permanently delete your account and all associated data.",
+      "emojiId": "Emoji ID",
+      "emojiImageUrl": "Emoji Image URL",
+      "emojiMappings": "Emoji Replacements",
+      "emojiMappingsDescription": "Replace Discord emoji with custom text when reading messages aloud.",
+      "emojiName": "Emoji Name",
+      "enableTtsQueue": "TTS Queue",
+      "enableTtsQueueDescription": "Queue TTS messages instead of interrupting the current one.",
+      "joinLeaveAlert": "Join/Leave Alert",
+      "joinLeaveAlertAuto": "Auto",
+      "joinLeaveAlertCustom": "Custom messages",
+      "joinLeaveAlertJoinMessage": "Join message",
+      "joinLeaveAlertJoinMessagePlaceholder": "e.g. {{name}} has joined",
+      "joinLeaveAlertLeaveMessage": "Leave message",
+      "joinLeaveAlertLeaveMessagePlaceholder": "e.g. {{name}} has left",
+      "joinLeaveAlertOff": "Off",
+      "joinLeaveAlertTapsDescription": "You can use custom messages with {{name}} as a placeholder for the username.",
+      "joinLeaveAlertUsername": "Read as username",
+      "joinLeaveAlertUsernamePlaceholder": "e.g. StreamBot",
+      "joinLeaveAlertWithUsername": "With different username",
       "language": "Language",
       "languageSubtitle": "Select your preferred language",
+      "maxMessageLength": "Max Message Length",
+      "maxMessageLengthDescription": "Messages longer than this will be truncated before being read aloud (1–65535).",
+      "noRules": "No rules added yet.",
       "notifications": "Notifications",
       "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
       "notificationsSubtitle": "Manage how you receive notifications",
+      "pattern": "Pattern",
       "profile": "Profile",
       "profileSubtitle": "Your personal information",
+      "replacement": "Replacement",
+      "save": "Save",
+      "saveError": "Failed to save settings. Please try again.",
+      "saveSuccess": "Settings saved successfully!",
+      "saving": "Saving...",
       "subtitle": "Manage your account settings and preferences",
-      "title": "Settings"
+      "textMappings": "Text Replacements",
+      "textMappingsDescription": "Replace words or phrases with custom text when reading messages aloud.",
+      "textReadingRule": "Read Messages",
+      "textReadingRuleAlways": "Always read messages aloud",
+      "textReadingRuleInVoiceChannel": "Only read messages aloud when I'm in a voice channel",
+      "textReadingRuleOnMicMute": "Only read messages aloud when my mic is muted",
+      "title": "Settings",
+      "tts": "TTS Settings",
+      "ttsSubtitle": "Configure how your messages are read aloud.",
+      "ttsVoice": "TTS Voice",
+      "ttsVoiceNone": "None (use default)"
     },
     "taps": {
       "create": "Create Tap",
@@ -239,6 +282,8 @@
       "deleteConfirmTitle": "Delete Tap",
       "deleteSuccess": "Tap deleted successfully.",
       "explore": "Explore Taps",
+      "setAsMyVoice": "Set as my TTS voice",
+      "setAsMyVoiceUnavailable": "No TTS access",
       "exploreDescription": "Find and use Taps created by the community.",
       "filters": {
         "accessible": "Accessible",
@@ -264,11 +309,6 @@
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
-      "occupations": {
-        "base": "Base",
-        "official": "Official",
-        "verified": "Verified"
-      },
       "permission": "Permission",
       "permissions": {
         "blacklisted": "Blacklist",
@@ -350,10 +390,8 @@
         "auditLog": "Audit Log",
         "cacheHitRate": "Cache Hit Rate",
         "cacheHits": "Cache Hits",
-        "currentlyActive": "",
         "noAuditLogs": "No audit logs found.",
         "title": "Tap Statistics",
-        "totalUses": "",
         "uniqueUsers": "Unique Users",
         "useRate": "Use Rate"
       },
@@ -368,9 +406,7 @@
         "requestSuccess": "Verification request submitted successfully!",
         "status": {
           "approved": "Your tap is verified.",
-          "none": "Your tap is not verified. Verified taps get a badge and better visibility.",
-          "pending": "Your verification request is under review.",
-          "rejected": "Your verification request was rejected."
+          "none": "Your tap is not verified. Verified taps get a badge and better visibility."
         },
         "subtitle": "Get your tap verified for better visibility and trust",
         "title": "Tap Verification",

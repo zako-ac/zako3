@@ -40,7 +40,8 @@
         "owner": "소유자",
         "subtitle": "시스템의 모든 탭 관리",
         "tapDetails": "탭 상세정보",
-        "title": "탭"
+        "title": "탭",
+        "updateSuccess": ""
       },
       "users": {
         "actions": {
@@ -117,7 +118,9 @@
         "statusRejected": "거부됨",
         "subtitle": "사용자 제출 인증 요청을 관리합니다.",
         "tapName": "탭 이름",
-        "title": "인증"
+        "title": "인증",
+        "view": "",
+        "viewDetails": ""
       }
     },
     "auth": {
@@ -165,6 +168,7 @@
     "errors": {
       "ownerNotFound": "소유자를 찾을 수 없습니다.",
       "tapNotFound": "탭을 찾을 수 없습니다.",
+      "updateFailed": "",
       "userNotFound": "사용자를 찾을 수 없습니다."
     },
     "nav": {
@@ -179,7 +183,8 @@
       "notifications": "알림",
       "settings": "설정",
       "taps": "탭",
-      "users": "사용자"
+      "users": "사용자",
+      "verification": ""
     },
     "notifications": {
       "all": "모두",
@@ -209,21 +214,62 @@
     "settings": {
       "account": "계정",
       "accountSubtitle": "계정 설정 관리",
+      "addEmojiRule": "이모지 규칙 추가",
+      "addRule": "규칙 추가",
       "appearance": "외관",
       "appearanceSubtitle": "모양과 느낌을 사용자 정의",
+      "caseSensitive": "대소문자 구분",
       "darkMode": "다크 모드",
       "darkModeSubtitle": "다크 모드 전환",
       "deleteAccount": "계정 삭제",
       "deleteAccountWarning": "계정과 관련된 모든 데이터가 영구적으로 삭제됩니다.",
+      "emojiId": "이모지 ID",
+      "emojiImageUrl": "이모지 이미지 URL",
+      "emojiMappings": "이모지 대체",
+      "emojiMappingsDescription": "Discord 이모지를 어떻게 읽는지 정합니다.",
+      "emojiName": "이모지 이름",
+      "enableTtsQueue": "TTS 대기열",
+      "enableTtsQueueDescription": "현재 TTS를 중단하는 대신 메시지를 대기열에 추가합니다.",
+      "joinLeaveAlert": "입장/퇴장 알림",
+      "joinLeaveAlertAuto": "자동",
+      "joinLeaveAlertCustom": "사용자 정의 메시지",
+      "joinLeaveAlertJoinMessage": "입장 메시지",
+      "joinLeaveAlertJoinMessagePlaceholder": "예: {{name}}님이 입장하셨습니다",
+      "joinLeaveAlertLeaveMessage": "퇴장 메시지",
+      "joinLeaveAlertLeaveMessagePlaceholder": "예: {{name}}님이 퇴장하셨습니다",
+      "joinLeaveAlertOff": "끔",
+      "joinLeaveAlertTapsDescription": "이 설정은 탭에서 입장 및 퇴장 알림이 어떻게 처리되는지 제어합니다.",
+      "joinLeaveAlertUsername": "다른 이름으로 읽기",
+      "joinLeaveAlertUsernamePlaceholder": "예: StreamBot",
+      "joinLeaveAlertWithUsername": "다른 사용자 이름으로",
       "language": "언어",
       "languageSubtitle": "대시보드 언어 선택",
+      "maxMessageLength": "최대 메시지 길이",
+      "maxMessageLengthDescription": "이 길이를 초과하는 메시지는 소리 내어 읽기 전에 잘립니다 (1–65535).",
+      "noRules": "추가된 규칙이 없습니다.",
       "notifications": "알림",
       "notificationsCheckBackLater": "알림 설정은 곧 제공됩니다. 나중에 다시 확인하세요!",
       "notificationsSubtitle": "알림 수신 방법 관리",
+      "pattern": "패턴",
       "profile": "프로필",
       "profileSubtitle": "개인 정보",
+      "replacement": "대체 텍스트",
+      "save": "저장",
+      "saveError": "설정 저장 중 오류가 발생했습니다. 나중에 다시 시도하세요.",
+      "saveSuccess": "설정이 성공적으로 저장되었습니다.",
+      "saving": "저장 중...",
       "subtitle": "계정 설정 및 환경설정 관리",
-      "title": "설정"
+      "textMappings": "텍스트 대체",
+      "textMappingsDescription": "메시지를 소리 내어 읽을 때 단어나 구문을 사용자 정의 텍스트로 교체합니다.",
+      "textReadingRule": "메시지 읽기",
+      "textReadingRuleAlways": "항상 읽기",
+      "textReadingRuleInVoiceChannel": "음성 채널에 있을 때만 읽기",
+      "textReadingRuleOnMicMute": "마이크 음소거 시 읽기",
+      "title": "설정",
+      "tts": "TTS 설정",
+      "ttsSubtitle": "메시지를 소리 내어 읽는 방법을 설정합니다.",
+      "ttsVoice": "TTS 음성",
+      "ttsVoiceNone": "없음 (기본값 사용)"
     },
     "taps": {
       "create": "탭 만들기",
@@ -235,6 +281,8 @@
       "deleteConfirmTitle": "탭 삭제",
       "deleteSuccess": "탭이 성공적으로 삭제되었습니다.",
       "explore": "탭 탐색",
+      "setAsMyVoice": "내 TTS 음성으로 설정",
+      "setAsMyVoiceUnavailable": "TTS 액세스 없음",
       "exploreDescription": "커뮤니티에서 만든 탭을 찾아 사용하세요.",
       "filters": {
         "accessible": "접근 가능",
@@ -260,11 +308,6 @@
       "myTapsDescription": "내가 소유하거나 접근할 수 있는 탭입니다.",
       "noTaps": "탭을 찾을 수 없습니다.",
       "noTapsOwned": "소유한 탭이 없습니다.",
-      "occupations": {
-        "base": "기본",
-        "official": "공식",
-        "verified": "인증됨"
-      },
       "permission": "권한",
       "permissions": {
         "blacklisted": "차단되지 않은 사용자만",
@@ -346,16 +389,29 @@
         "auditLog": "감사 로그",
         "cacheHitRate": "캐시 적중률",
         "cacheHits": "캐시 적중",
-        "currentlyActive": "현재 활성",
         "noAuditLogs": "감사 로그를 찾을 수 없습니다.",
         "title": "탭 통계",
-        "totalUses": "총 사용량",
         "uniqueUsers": "고유 사용자",
         "useRate": "사용률"
       },
       "tapId": "탭 ID",
       "totalUses": "총 사용량",
-      "updatedAt": "업데이트됨"
+      "updatedAt": "업데이트됨",
+      "verification": {
+        "description": "",
+        "descriptionHelp": "",
+        "descriptionPlaceholder": "",
+        "formTitle": "",
+        "requestSuccess": "",
+        "status": {
+          "approved": "",
+          "none": ""
+        },
+        "subtitle": "",
+        "title": "",
+        "titleLabel": "",
+        "titlePlaceholder": ""
+      }
     }
   }
 }

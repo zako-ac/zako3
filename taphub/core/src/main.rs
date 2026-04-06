@@ -79,6 +79,10 @@ impl CacheRepository for StubCacheRepository {
         self.data.insert(key.to_string(), value.to_string());
     }
 
+    async fn del(&self, key: &str) {
+        self.data.remove(key);
+    }
+
     async fn incr(&self, key: &str) -> Result<i64, zako3_states::StateServiceError> {
         let mut val = self
             .data

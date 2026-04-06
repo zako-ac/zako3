@@ -38,6 +38,8 @@ use handlers::users;
         handlers::audit_log::get_tap_audit_logs,
         handlers::users::get_me,
         handlers::users::get_my_taps,
+        handlers::users::get_my_settings,
+        handlers::users::update_my_settings,
         handlers::admin::list_verification_requests,
         handlers::admin::approve_verification,
         handlers::admin::reject_verification,
@@ -59,7 +61,6 @@ use handlers::users;
             hq_types::hq::AuthCallbackDto,
             hq_types::hq::AuthUserDto,
             hq_types::hq::AuthResponseDto,
-            hq_types::hq::LoginResponseDto,
             hq_types::hq::Tap,
             hq_types::hq::TapId,
             hq_types::hq::TapName,
@@ -83,6 +84,11 @@ use handlers::users;
             hq_types::hq::RejectVerificationDto,
             hq_types::hq::UpdateUserRoleDto,
             hq_types::hq::PaginatedResponseDto<hq_types::hq::AuthUserDto>,
+            hq_types::hq::settings::UserSettings,
+            hq_types::hq::settings::TextMappingRule,
+            hq_types::hq::settings::EmojiMappingRule,
+            hq_types::hq::settings::TextReadingRule,
+            hq_types::hq::settings::UserJoinLeaveAlert,
         )
     ),
     tags(
@@ -128,6 +134,10 @@ pub fn app(service: Service) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout_handler))
         .route("/api/v1/users/me", get(users::get_me))
         .route("/api/v1/users/me/taps", get(users::get_my_taps))
+        .route(
+            "/api/v1/users/me/settings",
+            get(users::get_my_settings).put(users::update_my_settings),
+        )
         .route(
             "/api/v1/admin/verifications",
             get(admin::list_verification_requests),

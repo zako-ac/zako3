@@ -1,30 +1,41 @@
 use crate::middleware::auth::AuthUser;
-use axum::{Json, extract::Query, extract::State};
+use axum::{extract::Query, extract::State, response::Redirect, Json};
 use hq_core::Service;
-use hq_types::hq::{AuthCallbackDto, AuthResponseDto, LoginResponseDto};
+use hq_types::hq::{AuthCallbackDto, AuthResponseDto};
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use utoipa;
 
+#[derive(Deserialize)]
+pub struct LoginQuery {
+    pub redirect: Option<String>,
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/auth/login",
+    params(
+        ("redirect" = Option<String>, Query, description = "Path to redirect to after login")
+    ),
     responses(
-        (status = 200, description = "Get discord login url", body = LoginResponseDto)
+        (status = 302, description = "Redirect to Discord OAuth2 authorize")
     )
 )]
 pub async fn login_handler(
     State(service): State<Arc<Service>>,
-) -> Result<Json<LoginResponseDto>, (axum::http::StatusCode, String)> {
-    let url = service.auth.get_login_url();
-    Ok(Json(url))
+    Query(query): Query<LoginQuery>,
+) -> Redirect {
+    let url = service.auth.get_login_url(query.redirect.as_deref());
+    Redirect::temporary(&url)
 }
 
 #[utoipa::path(
     get,
     path = "/api/v1/auth/callback",
     params(
-        ("code" = String, Query, description = "Discord OAuth2 code")
+        ("code" = String, Query, description = "Discord OAuth2 code"),
+        ("state" = Option<String>, Query, description = "OAuth2 state (encoded redirect path)")
     ),
     responses(
         (status = 200, description = "Login successful", body = AuthResponseDto)
@@ -36,7 +47,7 @@ pub async fn callback_handler(
 ) -> Result<Json<AuthResponseDto>, (axum::http::StatusCode, String)> {
     let response = service
         .auth
-        .authenticate(&payload.code)
+        .authenticate(&payload.code, payload.state.as_deref())
         .await
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 

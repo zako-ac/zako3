@@ -2,19 +2,16 @@ import { apiClient } from '@/lib/api-client'
 import { apiCall } from '@/lib/api-helpers'
 import type {
   AuthUser,
-  LoginResponse,
   AuthCallbackResponse,
   RefreshTokenResponse,
 } from '@zako-ac/zako3-data'
 
 export const authApi = {
-  getLoginUrl: async (): Promise<LoginResponse> => {
-    return apiCall(apiClient.get<LoginResponse>('/auth/login'))
-  },
-
-  handleCallback: async (code: string): Promise<AuthCallbackResponse> => {
+  handleCallback: async (code: string, state: string | null): Promise<AuthCallbackResponse> => {
+    const params = new URLSearchParams({ code })
+    if (state) params.set('state', state)
     return apiCall(
-      apiClient.get<AuthCallbackResponse>(`/auth/callback?code=${code}`)
+      apiClient.get<AuthCallbackResponse>(`/auth/callback?${params}`)
     )
   },
 

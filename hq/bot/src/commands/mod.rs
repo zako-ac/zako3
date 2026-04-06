@@ -1,3 +1,4 @@
+pub mod settings;
 pub mod tap;
 
 use crate::{Context, Error};
