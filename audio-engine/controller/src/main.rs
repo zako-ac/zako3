@@ -19,10 +19,9 @@ use zako3_taphub_transport_client::{TransportClient, load_certs};
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
-    let rabbitmq_url = config.rabbitmq_url.clone();
-    let max_retries = config.ae_max_retries;
+    let nats_url = config.nats_url.clone();
 
-    println!("Starting zako3 audio engine (RabbitMQ)...");
+    println!("Starting zako3 audio engine (NATS)...");
 
     let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -81,13 +80,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         taphub_service,
     ));
 
-    tracing::info!("Audio Engine connecting to RabbitMQ at {}", rabbitmq_url);
+    tracing::info!("Audio Engine connecting to NATS at {}", nats_url);
 
-    let engine_server = Arc::new(AudioEngineServer::new(
-        session_manager,
-        rabbitmq_url,
-        max_retries,
-    ));
+    let engine_server = Arc::new(AudioEngineServer::new(session_manager, nats_url));
 
     ready_recv.recv().await;
 

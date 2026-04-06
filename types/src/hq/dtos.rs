@@ -88,6 +88,7 @@ pub struct TapDto {
     pub cache_hits: u64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub stats: TapStatsDto,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
@@ -114,6 +115,7 @@ pub struct TapStatsDto {
     pub total_uses: u64,
     pub cache_hits: u64,
     pub unique_users: u64,
+    pub uptime_percent: f64,
     pub use_rate_history: Vec<TimeSeriesPointDto>,
     pub cache_hit_rate_history: Vec<TimeSeriesPointDto>,
 }

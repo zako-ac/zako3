@@ -273,6 +273,7 @@
       "ttsVoiceNone": "None (use default)"
     },
     "taps": {
+      "activeCount": "{{value}} online",
       "create": "Create Tap",
       "createdAt": "",
       "createFirst": "Create your first Tap",
@@ -282,8 +283,6 @@
       "deleteConfirmTitle": "Delete Tap",
       "deleteSuccess": "Tap deleted successfully.",
       "explore": "Explore Taps",
-      "setAsMyVoice": "Set as my TTS voice",
-      "setAsMyVoiceUnavailable": "No TTS access",
       "exploreDescription": "Find and use Taps created by the community.",
       "filters": {
         "accessible": "Accessible",
@@ -334,6 +333,8 @@
       "roles": {
         "label": "Roles"
       },
+      "setAsMyVoice": "Set as my TTS voice",
+      "setAsMyVoiceUnavailable": "No TTS access",
       "settings": {
         "apiAccess": "API Access",
         "apiAccessDescription": "Manage API tokens for programmatic access to your tap",
@@ -391,6 +392,8 @@
         "cacheHitRate": "Cache Hit Rate",
         "cacheHits": "Cache Hits",
         "noAuditLogs": "No audit logs found.",
+        "noData": "No Data",
+        "noDataSubtext": "Attention is all you need for the tap.",
         "title": "Tap Statistics",
         "uniqueUsers": "Unique Users",
         "useRate": "Use Rate"
@@ -398,6 +401,7 @@
       "tapId": "Tap ID",
       "totalUses": "Total Uses",
       "updatedAt": "Updated At",
+      "uses": "{{value}} use",
       "verification": {
         "description": "Verification Description",
         "descriptionHelp": "Explain why your tap should be verified. Mention any official affiliations or public use cases.",

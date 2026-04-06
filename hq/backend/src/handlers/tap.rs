@@ -45,8 +45,9 @@ pub async fn create_tap(
         .await
         .map_err(map_error)?;
 
+    let tap_id_str = tap.id.0.to_string();
     let tap_dto = TapDto {
-        id: tap.id.0.to_string(),
+        id: tap_id_str.clone(),
         name: tap.name.0,
         description: tap.description.unwrap_or_default(),
         owner_id: tap.owner_id.0.to_string(),
@@ -57,6 +58,16 @@ pub async fn create_tap(
         cache_hits: 0,
         created_at: tap.timestamp.created_at,
         updated_at: tap.timestamp.updated_at,
+        stats: TapStatsDto {
+            tap_id: tap_id_str,
+            currently_active: 0,
+            total_uses: 0,
+            cache_hits: 0,
+            unique_users: 0,
+            uptime_percent: 0.0,
+            use_rate_history: vec![],
+            cache_hit_rate_history: vec![],
+        },
     };
 
     Ok(Json(tap_dto))

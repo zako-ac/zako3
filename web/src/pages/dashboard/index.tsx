@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Compass, Plus, TrendingUp, Users, Activity, Box } from 'lucide-react'
+import { Box, Compass, Plus, TrendingUp, Users, Activity } from 'lucide-react'
 import { useMyTaps } from '@/features/taps'
 import { useNotifications } from '@/features/notifications'
 import { useAuthStore } from '@/features/auth'
@@ -13,11 +13,16 @@ import { ROUTES } from '@/lib/constants'
 export const DashboardPage = () => {
     const { t } = useTranslation()
     const { user } = useAuthStore()
-    const { data: myTapsData, isLoading: isTapsLoading } = useMyTaps({ perPage: 5 })
+    const { data: myTapsData, isLoading: isTapsLoading } = useMyTaps({ perPage: 100 })
     const { data: notificationsData, isLoading: isNotificationsLoading } = useNotifications({ perPage: 10 })
 
     const myTaps = myTapsData?.data ?? []
     const totalTapUses = myTaps.reduce((sum, tap) => sum + tap.totalUses, 0)
+    const activeUsers = myTaps.reduce((sum, tap) => sum + tap.stats.currentlyActive, 0)
+    const avgUptime = myTaps.length > 0
+        ? myTaps.reduce((sum, tap) => sum + tap.stats.uptimePercent, 0) / myTaps.length
+        : 0
+    const uptimeDisplay = isTapsLoading ? '--' : myTaps.length === 0 ? '--' : `${avgUptime.toFixed(1)}%`
 
     const activityItems: ActivityItem[] = (notificationsData?.data ?? []).map((n) => ({
         id: n.id,
@@ -51,16 +56,17 @@ export const DashboardPage = () => {
                 />
                 <StatsCard
                     title={t('dashboard.stats.activeUsers')}
-                    value="--"
+                    value={activeUsers}
                     icon={<Users className="h-4 w-4" />}
-                    description={t('dashboard.stats.last24h')}
+                    description={t('dashboard.stats.acrossTaps')}
+                    isLoading={isTapsLoading}
                 />
                 <StatsCard
                     title={t('dashboard.stats.uptime')}
-                    value="99.9%"
+                    value={uptimeDisplay}
                     icon={<Activity className="h-4 w-4" />}
-                    trend={{ value: 0.1, isPositive: true }}
-                    description={t('dashboard.stats.lastMonth')}
+                    description={t('dashboard.stats.acrossTaps')}
+                    isLoading={isTapsLoading}
                 />
             </div>
 

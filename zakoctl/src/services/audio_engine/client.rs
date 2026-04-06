@@ -12,23 +12,20 @@ use crate::services::audio_engine::formatter;
 pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result<()> {
     let config = Config::load().unwrap_or_default();
     
-    // ae_addr here represents the rabbitmq URL or we load from context if empty.
-    // For backwards compatibility, the CLI parameter ae_addr might be HTTP from old setup.
-    // Assuming the user updates config or passes amqp:// URL.
-    let endpoint = if ae_addr.starts_with("amqp") {
+    let endpoint = if ae_addr.starts_with("nats") {
         ae_addr
     } else if let Some(ctx) = config.get_active_context() {
-        if ctx.ae_addr.starts_with("amqp") {
+        if ctx.ae_addr.starts_with("nats") {
             ctx.ae_addr.clone()
         } else {
-            "amqp://127.0.0.1:5672/%2f".to_string()
+            "nats://127.0.0.1:4222".to_string()
         }
     } else {
-        "amqp://127.0.0.1:5672/%2f".to_string()
+        "nats://127.0.0.1:4222".to_string()
     };
 
     println!("Connecting to Audio Engine at {}...", endpoint);
-    let client = AudioEngineRpcClient::new(&endpoint).await.context("Failed to connect to RabbitMQ")?;
+    let client = AudioEngineRpcClient::new(&endpoint).await.context("Failed to connect to NATS")?;
 
     // Helper closure to resolve guild_id from option or context
     let resolve_guild_id = |gid: Option<String>| -> Result<GuildId> {

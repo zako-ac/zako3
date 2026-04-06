@@ -21,6 +21,7 @@ pub trait CacheRepository: Send + Sync {
     async fn del(&self, key: &str);
     async fn incr(&self, key: &str) -> Result<i64>;
     async fn decr(&self, key: &str) -> Result<i64>;
+    async fn incrby(&self, key: &str, amount: i64) -> Result<i64>;
     async fn pfadd(&self, key: &str, element: &str) -> Result<()>;
     async fn pfcount(&self, key: &str) -> Result<u64>;
     async fn sadd(&self, key: &str, member: &str) -> Result<()>;
@@ -109,6 +110,7 @@ pub enum TapMetricKey {
     ActiveNow,
     CacheHits,
     UniqueUsers,
+    UptimeSecs,
 }
 
 impl TapMetricKey {
@@ -118,6 +120,7 @@ impl TapMetricKey {
             Self::ActiveNow => "active_now",
             Self::CacheHits => "cache_hits",
             Self::UniqueUsers => "unique_users",
+            Self::UptimeSecs => "uptime_secs",
         }
     }
 }
@@ -185,6 +188,12 @@ impl TapMetricsStateService {
         self.cache_repository
             .sadd(key, &tap_id.0.to_string())
             .await?;
+        Ok(())
+    }
+
+    pub async fn acc_uptime(&self, tap_id: TapId, secs: i64) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::UptimeSecs);
+        self.cache_repository.incrby(&key, secs).await?;
         Ok(())
     }
 
@@ -274,6 +283,13 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let val: i64 = conn.decr(key, 1).await?;
+        Ok(val)
+    }
+
+    async fn incrby(&self, key: &str, amount: i64) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.incr(key, amount).await?;
         Ok(val)
     }
 

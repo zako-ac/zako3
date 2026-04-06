@@ -51,6 +51,7 @@ impl HubHandler for TapHubConnectionHandler {
                     connection_id,
                     friendly_name: hello.friendly_name,
                     selection_weight: hello.selection_weight,
+                    connected_at: chrono::Utc::now(),
                 };
 
                 let tap_id = tap.id.clone();
@@ -96,6 +97,20 @@ impl HubHandler for TapHubConnectionHandler {
 
         if let Err(e) = self.metrics_service.dec_active_now(tap_id.clone()).await {
             tracing::warn!(%e, "Failed to decrement active_now metric");
+        }
+
+        let states = self
+            .state_service
+            .get_tap_states(&tap_id)
+            .await
+            .unwrap_or_default();
+        if let Some(conn) = states.iter().find(|s| s.connection_id == connection_id) {
+            let secs = (chrono::Utc::now() - conn.connected_at)
+                .num_seconds()
+                .max(0);
+            if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), secs).await {
+                tracing::warn!(%e, "Failed to accumulate uptime metric");
+            }
         }
 
         if let Err(e) = self

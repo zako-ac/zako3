@@ -1,4 +1,5 @@
 export { TapCard } from './tap-card'
+export { OnlineIndicator } from './online-indicator'
 export { TapList } from './tap-list'
 export { TapFiltersComponent as TapFilters } from './tap-filters'
 export { ReportModal } from './report-modal'

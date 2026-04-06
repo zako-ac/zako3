@@ -19,7 +19,7 @@ use crate::{AppConfig, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use zako3_states::{TapMetricsStateService, UserSettingsStateService};
+use zako3_states::{TapHubStateService, TapMetricsStateService, UserSettingsStateService};
 
 #[derive(Clone)]
 pub struct Service {
@@ -49,13 +49,16 @@ impl Service {
         let redis_url = &config.redis_url;
         let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
         let tap_metrics_service = TapMetricsStateService::new(redis_repo.clone());
+        let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
+            pool.clone(),
             tap_repo.clone(),
             user_repo.clone(),
             audit_log_service.clone(),
             tap_metrics_service.clone(),
+            tap_hub_state_service,
         );
         let api_key_service = ApiKeyService::new(
             api_key_repo.clone(),

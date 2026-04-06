@@ -2,33 +2,41 @@ use crate::repo::{TapRepository, UserRepository};
 use crate::service::audit_log::AuditLogService;
 use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
+use chrono::{DateTime, Utc};
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapStatsDto,
     TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
+use sqlx::{PgPool, Row};
 use std::sync::Arc;
-use zako3_states::{TapMetricKey, TapMetricsStateService};
+use zako3_states::{TapHubStateService, TapMetricKey, TapMetricsStateService};
 
 #[derive(Clone)]
 pub struct TapService {
+    pool: PgPool,
     tap_repo: Arc<dyn TapRepository>,
     user_repo: Arc<dyn UserRepository>,
     audit_log: AuditLogService,
     tap_metrics_state: TapMetricsStateService,
+    tap_hub_state: TapHubStateService,
 }
 
 impl TapService {
     pub fn new(
+        pool: PgPool,
         tap_repo: Arc<dyn TapRepository>,
         user_repo: Arc<dyn UserRepository>,
         audit_log: AuditLogService,
         tap_metrics_state: TapMetricsStateService,
+        tap_hub_state: TapHubStateService,
     ) -> Self {
         Self {
+            pool,
             tap_repo,
             user_repo,
             audit_log,
             tap_metrics_state,
+            tap_hub_state,
         }
     }
 
@@ -214,22 +222,74 @@ impl TapService {
             .await
             .unwrap_or(0);
 
-        // Return mostly mock data for history since we only track basic metrics for MVP
-        let now = chrono::Utc::now();
-        let mut use_rate_history = Vec::new();
-        let mut cache_hit_rate_history = Vec::new();
+        let now = Utc::now();
+        let since = now - chrono::Duration::hours(24);
+        let rows = sqlx::query(
+            "SELECT time, total_uses, cache_hits \
+             FROM tap_metrics \
+             WHERE tap_id = $1 AND time >= $2 \
+             ORDER BY time ASC",
+        )
+        .bind(&tap_id.0)
+        .bind(since)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
 
-        for i in 0..12 {
-            let t = now - chrono::Duration::hours(11 - i);
-            use_rate_history.push(TimeSeriesPointDto {
-                timestamp: t.to_rfc3339(),
-                value: 42.0,
-            });
-            cache_hit_rate_history.push(TimeSeriesPointDto {
-                timestamp: t.to_rfc3339(),
-                value: 85.0,
-            });
-        }
+        let use_rate_history: Vec<TimeSeriesPointDto> = rows
+            .windows(2)
+            .map(|w| {
+                let prev: i64 = w[0].get("total_uses");
+                let curr: i64 = w[1].get("total_uses");
+                let ts: DateTime<Utc> = w[1].get("time");
+                TimeSeriesPointDto {
+                    timestamp: ts.to_rfc3339(),
+                    value: (curr - prev).max(0) as f64,
+                }
+            })
+            .collect();
+
+        let cache_hit_rate_history: Vec<TimeSeriesPointDto> = rows
+            .iter()
+            .map(|row| {
+                let total: i64 = row.get("total_uses");
+                let hits: i64 = row.get("cache_hits");
+                let ts: DateTime<Utc> = row.get("time");
+                TimeSeriesPointDto {
+                    timestamp: ts.to_rfc3339(),
+                    value: if total > 0 {
+                        hits as f64 / total as f64 * 100.0
+                    } else {
+                        0.0
+                    },
+                }
+            })
+            .collect();
+
+        let accumulated_uptime = self
+            .tap_metrics_state
+            .get_metric(tap_id.clone(), TapMetricKey::UptimeSecs)
+            .await
+            .unwrap_or(0);
+        let online_states = self
+            .tap_hub_state
+            .get_tap_states(&tap_id)
+            .await
+            .unwrap_or_default();
+        let current_session_secs: u64 = online_states
+            .iter()
+            .map(|s| {
+                (chrono::Utc::now() - s.connected_at)
+                    .num_seconds()
+                    .max(0) as u64
+            })
+            .sum();
+        let total_uptime_secs = accumulated_uptime + current_session_secs;
+        let tap_age_secs = (chrono::Utc::now() - tap.timestamp.created_at)
+            .num_seconds()
+            .max(1) as u64;
+        let uptime_percent =
+            (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
 
         Ok(TapStatsDto {
             tap_id: tap.id.0.clone(),
@@ -237,6 +297,7 @@ impl TapService {
             total_uses,
             cache_hits,
             unique_users,
+            uptime_percent,
             use_rate_history,
             cache_hit_rate_history,
         })
@@ -459,6 +520,40 @@ impl TapService {
             .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
             .await
             .unwrap_or(0);
+        let active_now = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::ActiveNow)
+            .await
+            .unwrap_or(0);
+        let unique_users = self
+            .tap_metrics_state
+            .get_unique_users_count(tap.id.clone())
+            .await
+            .unwrap_or(0);
+        let accumulated_uptime = self
+            .tap_metrics_state
+            .get_metric(tap.id.clone(), TapMetricKey::UptimeSecs)
+            .await
+            .unwrap_or(0);
+        let online_states = self
+            .tap_hub_state
+            .get_tap_states(&tap.id)
+            .await
+            .unwrap_or_default();
+        let current_session_secs: u64 = online_states
+            .iter()
+            .map(|s| {
+                (chrono::Utc::now() - s.connected_at)
+                    .num_seconds()
+                    .max(0) as u64
+            })
+            .sum();
+        let total_uptime_secs = accumulated_uptime + current_session_secs;
+        let tap_age_secs = (chrono::Utc::now() - tap.timestamp.created_at)
+            .num_seconds()
+            .max(1) as u64;
+        let uptime_percent =
+            (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
 
         TapDto {
             id: tap.id.0.clone(),
@@ -472,6 +567,16 @@ impl TapService {
             cache_hits,
             created_at: tap.timestamp.created_at,
             updated_at: tap.timestamp.updated_at,
+            stats: TapStatsDto {
+                tap_id: tap.id.0.clone(),
+                currently_active: active_now,
+                total_uses,
+                cache_hits,
+                unique_users,
+                uptime_percent,
+                use_rate_history: vec![],
+                cache_hit_rate_history: vec![],
+            },
         }
     }
 }

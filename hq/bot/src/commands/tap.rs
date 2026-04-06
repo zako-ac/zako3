@@ -1,38 +1,7 @@
 use crate::{Context, Error};
-use hq_types::hq::CreateTapDto;
 
-#[poise::command(slash_command, subcommands("create", "list"))]
+#[poise::command(slash_command, subcommands("list"))]
 pub async fn tap(_: Context<'_>) -> Result<(), Error> {
-    Ok(())
-}
-
-#[poise::command(slash_command)]
-pub async fn create(
-    ctx: Context<'_>,
-    #[description = "Name of the tap"] name: String,
-) -> Result<(), Error> {
-    let service = &ctx.data().service;
-    let discord_id = ctx.author().id.to_string();
-    let username = &ctx.author().name;
-
-    // Find or create user
-    // We need to expose a method for this on Service or AuthService
-    // For now assuming AuthService has get_or_create_user
-    let user = service
-        .auth
-        .get_or_create_user(&discord_id, username, None, None)
-        .await?;
-
-    let dto = CreateTapDto {
-        name,
-        description: None,
-        permission: None,
-        roles: None,
-    };
-    let tap = service.tap.create(user.id, dto).await?;
-
-    ctx.say(format!("Tap '{}' created! ID: {}", tap.name.0, tap.id.0))
-        .await?;
     Ok(())
 }
 

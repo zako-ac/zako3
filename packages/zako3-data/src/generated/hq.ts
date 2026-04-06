@@ -57,7 +57,8 @@ export const AuthResponseDtoSchema = z.object({
   username: z.string(),
   avatar: z.string(),
   email: z.string().nullable(),
-  isAdmin: z.boolean()
+  isAdmin: z.boolean(),
+  banned: z.boolean()
 }),
   redirectUrl: z.string().nullable()
 });
@@ -69,7 +70,8 @@ export const AuthUserDtoSchema = z.object({
   username: z.string(),
   avatar: z.string(),
   email: z.string().nullable(),
-  isAdmin: z.boolean()
+  isAdmin: z.boolean(),
+  banned: z.boolean()
 });
 export type AuthUserDto = z.infer<typeof AuthUserDtoSchema>;
 
@@ -150,7 +152,23 @@ export const TapDtoSchema = z.object({
   totalUses: z.number(),
   cacheHits: z.number(),
   createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime()
+  updatedAt: z.string().datetime(),
+  stats: z.object({
+  tapId: z.string(),
+  currentlyActive: z.number(),
+  totalUses: z.number(),
+  cacheHits: z.number(),
+  uniqueUsers: z.number(),
+  uptimePercent: z.number(),
+  useRateHistory: z.array(z.object({
+  timestamp: z.string(),
+  value: z.number()
+})),
+  cacheHitRateHistory: z.array(z.object({
+  timestamp: z.string(),
+  value: z.number()
+}))
+})
 });
 export type TapDto = z.infer<typeof TapDtoSchema>;
 
@@ -179,6 +197,7 @@ export const TapStatsDtoSchema = z.object({
   totalUses: z.number(),
   cacheHits: z.number(),
   uniqueUsers: z.number(),
+  uptimePercent: z.number(),
   useRateHistory: z.array(z.object({
   timestamp: z.string(),
   value: z.number()
@@ -212,7 +231,23 @@ export const TapWithAccessDtoSchema = z.object({
   totalUses: z.number(),
   cacheHits: z.number(),
   createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime()
+  updatedAt: z.string().datetime(),
+  stats: z.object({
+  tapId: z.string(),
+  currentlyActive: z.number(),
+  totalUses: z.number(),
+  cacheHits: z.number(),
+  uniqueUsers: z.number(),
+  uptimePercent: z.number(),
+  useRateHistory: z.array(z.object({
+  timestamp: z.string(),
+  value: z.number()
+})),
+  cacheHitRateHistory: z.array(z.object({
+  timestamp: z.string(),
+  value: z.number()
+}))
+})
 }),
   hasAccess: z.boolean(),
   owner: z.object({

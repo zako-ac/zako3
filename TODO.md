@@ -22,16 +22,21 @@ refer hq todo
 - [x] check admin verification api
 - [x] Make background metrics saver
 - [x] Make HQ RPC for zakoctl, and use it to make someone admin
+- [x] verify tap in web
+- [x] AE init rmq AFTER init discord
+
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
-- [x] verify tap in web
 - [ ] implement ban
+
 - [ ] AE Hang on no join
 - [ ] AE re-join on boot
 - [ ] Gauge metrics reset on TH boot
-- [x] AE init rmq AFTER init discord
-- [ ] Add timeout to AE client
+
 - [ ] Add track finish to AE queue
+
+- [ ] Add timeout to AE client
+- [ ] Add timeout to audio request
 
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
 
@@ -46,8 +51,11 @@ refer hq todo
 - [x] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
 - [ ] unread-count
 - [ ] Improve chart
-- [ ] Make all cards in settings as component
+- [x] Make all cards in settings as component
 - [ ] Add "load failed" 
 - [ ] Dashboard status (my taps, total uses, active users, uptime)
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
+
+## Discord
+- [ ] Tap list command: max 10 minutes live update

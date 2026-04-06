@@ -272,6 +272,7 @@
       "ttsVoiceNone": "없음 (기본값 사용)"
     },
     "taps": {
+      "activeCount": "{{value}} 온라인",
       "create": "탭 만들기",
       "createdAt": "생성일",
       "createFirst": "첫 번째 탭 만들기",
@@ -281,8 +282,6 @@
       "deleteConfirmTitle": "탭 삭제",
       "deleteSuccess": "탭이 성공적으로 삭제되었습니다.",
       "explore": "탭 탐색",
-      "setAsMyVoice": "내 TTS 음성으로 설정",
-      "setAsMyVoiceUnavailable": "TTS 액세스 없음",
       "exploreDescription": "커뮤니티에서 만든 탭을 찾아 사용하세요.",
       "filters": {
         "accessible": "접근 가능",
@@ -333,6 +332,8 @@
       "roles": {
         "label": "역할"
       },
+      "setAsMyVoice": "내 TTS 음성으로 설정",
+      "setAsMyVoiceUnavailable": "TTS 액세스 없음",
       "settings": {
         "apiAccess": "API 접근",
         "apiAccessDescription": "탭의 프로그래밍 방식 접근을 위한 API 토큰을 관리합니다.",
@@ -390,6 +391,8 @@
         "cacheHitRate": "캐시 적중률",
         "cacheHits": "캐시 적중",
         "noAuditLogs": "감사 로그를 찾을 수 없습니다.",
+        "noData": "데이터 없음",
+        "noDataSubtext": "탭을 위해 필요한 건 관심뿐입니다.",
         "title": "탭 통계",
         "uniqueUsers": "고유 사용자",
         "useRate": "사용률"
@@ -397,6 +400,7 @@
       "tapId": "탭 ID",
       "totalUses": "총 사용량",
       "updatedAt": "업데이트됨",
+      "uses": "{{uses}}번 사용됨",
       "verification": {
         "description": "",
         "descriptionHelp": "",

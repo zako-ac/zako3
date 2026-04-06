@@ -105,6 +105,17 @@ impl CacheRepository for StubCacheRepository {
         Ok(val)
     }
 
+    async fn incrby(&self, key: &str, amount: i64) -> Result<i64, zako3_states::StateServiceError> {
+        let mut val = self
+            .data
+            .get(key)
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+        val += amount;
+        self.data.insert(key.to_string(), val.to_string());
+        Ok(val)
+    }
+
     async fn pfadd(&self, key: &str, element: &str) -> Result<(), zako3_states::StateServiceError> {
         self.hll
             .entry(key.to_string())

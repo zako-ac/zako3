@@ -21,6 +21,7 @@ import { OccupationBadge } from './occupation-badge'
 import { CopyableId } from './copyable-id'
 import { TapRolesBadge } from './tap-roles-badge'
 import { SetAsMyVoice } from './set-as-my-voice'
+import { OnlineIndicator } from './online-indicator'
 
 interface TapCardProps {
     tap: TapWithAccess
@@ -61,7 +62,8 @@ export const TapCard = ({
                 onClick={() => onClick?.(tap.id)}
             >
                 <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <OnlineIndicator count={tap.stats.currentlyActive} className="mr-2" />
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                                 <h3 className="truncate font-semibold">{tap.name}</h3>
@@ -109,8 +111,11 @@ export const TapCard = ({
                 <CardFooter className="flex items-center justify-between border-t pt-2">
                     <UserBadge user={tap.owner} />
 
-                    <div className="text-muted-foreground flex items-center gap-3 text-xs">
-                        <span>{tap.totalUses.toLocaleString()} uses</span>
+                    <div className="text-muted-foreground flex items-center gap-4 text-xs">
+                        <div className="flex flex-col gap-1">
+                            <span>{t('taps.uses', { value: tap.totalUses })}</span>
+                            <span>{t('taps.activeCount', { value: tap.stats.currentlyActive })}</span>
+                        </div>
                         <span>{formatRelativeTime(tap.createdAt, i18n.language)}</span>
                         <Button
                             variant="ghost"
