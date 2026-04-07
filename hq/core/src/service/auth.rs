@@ -42,7 +42,11 @@ impl AuthService {
         url
     }
 
-    pub async fn authenticate(&self, code: &str, state: Option<&str>) -> CoreResult<AuthResponseDto> {
+    pub async fn authenticate(
+        &self,
+        code: &str,
+        state: Option<&str>,
+    ) -> CoreResult<AuthResponseDto> {
         // Exchange code for token
         let params = [
             ("client_id", &self.config.discord_client_id),

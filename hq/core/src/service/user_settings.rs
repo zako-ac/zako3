@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
-use hq_types::hq::settings::{PartialUserSettings, UserSettings};
 use hq_types::hq::UserId;
+use hq_types::hq::settings::{PartialUserSettings, UserSettings};
 use zako3_states::UserSettingsStateService;
 
-use crate::repo::{GlobalSettingsRepository, GuildSettingsRepository, UserGuildSettingsRepository, UserRepository};
 use crate::CoreResult;
+use crate::repo::{
+    GlobalSettingsRepository, GuildSettingsRepository, UserGuildSettingsRepository, UserRepository,
+};
 
 #[derive(Clone)]
 pub struct UserSettingsService {
@@ -74,10 +76,7 @@ impl UserSettingsService {
             return Ok(Some(cached));
         }
 
-        let settings = self
-            .user_guild_settings_repo
-            .get(user_id, guild_id)
-            .await?;
+        let settings = self.user_guild_settings_repo.get(user_id, guild_id).await?;
 
         if let Some(ref s) = settings {
             self.cache.set_guild_user_cached(user_id, guild_id, s).await;
@@ -105,7 +104,9 @@ impl UserSettingsService {
         user_id: &UserId,
         guild_id: &str,
     ) -> CoreResult<()> {
-        self.user_guild_settings_repo.delete(user_id, guild_id).await?;
+        self.user_guild_settings_repo
+            .delete(user_id, guild_id)
+            .await?;
         self.cache.invalidate_guild_user(user_id, guild_id).await;
         Ok(())
     }
@@ -200,10 +201,7 @@ impl UserSettingsService {
 
         let merged = PartialUserSettings::fold(
             &guild_user,
-            &PartialUserSettings::fold(
-                &user,
-                &PartialUserSettings::fold(&guild, &global),
-            ),
+            &PartialUserSettings::fold(&user, &PartialUserSettings::fold(&guild, &global)),
         );
 
         Ok(merged.resolve())

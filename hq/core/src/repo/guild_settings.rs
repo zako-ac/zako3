@@ -7,7 +7,11 @@ use crate::CoreResult;
 #[async_trait]
 pub trait GuildSettingsRepository: Send + Sync {
     async fn get(&self, guild_id: &str) -> CoreResult<Option<PartialUserSettings>>;
-    async fn upsert(&self, guild_id: &str, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings>;
+    async fn upsert(
+        &self,
+        guild_id: &str,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings>;
     async fn delete(&self, guild_id: &str) -> CoreResult<()>;
 }
 
@@ -39,7 +43,11 @@ impl GuildSettingsRepository for PgGuildSettingsRepository {
         }
     }
 
-    async fn upsert(&self, guild_id: &str, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {
+    async fn upsert(
+        &self,
+        guild_id: &str,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings> {
         let json = serde_json::to_value(settings)?;
 
         let row = sqlx::query(

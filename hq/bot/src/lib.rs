@@ -21,8 +21,8 @@ pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();
-    let intents = serenity::GatewayIntents::non_privileged()
-        | serenity::GatewayIntents::GUILD_VOICE_STATES;
+    let intents =
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::GUILD_VOICE_STATES;
 
     let voice_handler = events::VoiceStateHandler {
         voice_state_service: service.voice_state.clone(),
@@ -30,7 +30,12 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![commands::ping(), commands::tap::tap(), commands::settings::settings()],
+            commands: vec![
+                commands::ping(),
+                commands::tap::tap(),
+                commands::settings::settings(),
+                commands::channel::channel(),
+            ],
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
@@ -48,7 +53,9 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
         .framework(framework)
         .await?;
 
-    let cache_resolver = Arc::new(SerenityNameResolver { cache: client.cache.clone() });
+    let cache_resolver = Arc::new(SerenityNameResolver {
+        cache: client.cache.clone(),
+    });
     let _ = resolver_slot.set(cache_resolver as Arc<dyn DiscordNameResolver>);
 
     client.start().await?;

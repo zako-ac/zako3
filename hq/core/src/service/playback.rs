@@ -24,7 +24,10 @@ fn metadata_to_dto(m: &AudioMetadata) -> AudioMetadataDto {
         AudioMetadata::Album(v) => ("album", v.clone()),
         AudioMetadata::ImageUrl(v) => ("image_url", v.clone()),
     };
-    AudioMetadataDto { r#type: type_str.to_string(), value }
+    AudioMetadataDto {
+        r#type: type_str.to_string(),
+        value,
+    }
 }
 
 fn action_to_dto(a: &PlaybackAction) -> PlaybackActionDto {
@@ -55,7 +58,12 @@ impl PlaybackService {
         repo: Arc<dyn PlaybackActionRepo>,
         name_resolver_slot: DiscordNameResolverSlot,
     ) -> Self {
-        Self { audio_engine, voice_state, repo, name_resolver_slot }
+        Self {
+            audio_engine,
+            voice_state,
+            repo,
+            name_resolver_slot,
+        }
     }
 
     pub async fn get_state_for_user(
@@ -73,7 +81,11 @@ impl PlaybackService {
             let guild_id = GuildId::from(loc.guild_id);
             let channel_id = ChannelId::from(loc.channel_id);
 
-            let state = match self.audio_engine.get_session_state(guild_id, channel_id).await {
+            let state = match self
+                .audio_engine
+                .get_session_state(guild_id, channel_id)
+                .await
+            {
                 Ok(s) => s,
                 Err(e) => {
                     tracing::debug!(%e, guild_id = %loc.guild_id, channel_id = %loc.channel_id, "No audio session for channel, skipping");
@@ -252,9 +264,9 @@ impl PlaybackService {
                         .map_err(|e| CoreError::Internal(e.to_string()))?;
                 }
                 "set_volume" => {
-                    let vol = op
-                        .volume
-                        .ok_or_else(|| CoreError::InvalidInput("volume required for set_volume op".into()))?;
+                    let vol = op.volume.ok_or_else(|| {
+                        CoreError::InvalidInput("volume required for set_volume op".into())
+                    })?;
                     self.audio_engine
                         .set_volume(g, c, track_id, Volume::from(vol))
                         .await
@@ -266,7 +278,11 @@ impl PlaybackService {
             }
         }
 
-        let first_track_id = dto.operations.first().map(|op| op.track_id.as_str()).unwrap_or("");
+        let first_track_id = dto
+            .operations
+            .first()
+            .map(|op| op.track_id.as_str())
+            .unwrap_or("");
         let track_snapshot = serde_json::json!({ "first_track_id": first_track_id });
 
         let action = self
@@ -310,8 +326,7 @@ impl PlaybackService {
 
         match action.action_type.as_str() {
             "stop" | "skip" => {
-                let track: hq_types::Track =
-                    serde_json::from_value(action.track_snapshot.clone())?;
+                let track: hq_types::Track = serde_json::from_value(action.track_snapshot.clone())?;
 
                 self.audio_engine
                     .play(
@@ -358,8 +373,10 @@ impl PlaybackService {
             .await
             .map_err(CoreError::StateError)?;
 
-        let guild_ids: Vec<String> =
-            locations.iter().map(|loc| loc.guild_id.to_string()).collect();
+        let guild_ids: Vec<String> = locations
+            .iter()
+            .map(|loc| loc.guild_id.to_string())
+            .collect();
 
         let actions = self.repo.find_by_guild_ids(&guild_ids, limit).await?;
 
@@ -456,4 +473,3 @@ impl PlaybackService {
         Ok(action_to_dto(&action))
     }
 }
-

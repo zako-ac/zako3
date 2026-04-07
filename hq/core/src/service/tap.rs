@@ -286,18 +286,13 @@ impl TapService {
             .unwrap_or_default();
         let current_session_secs: u64 = online_states
             .iter()
-            .map(|s| {
-                (chrono::Utc::now() - s.connected_at)
-                    .num_seconds()
-                    .max(0) as u64
-            })
+            .map(|s| (chrono::Utc::now() - s.connected_at).num_seconds().max(0) as u64)
             .sum();
         let total_uptime_secs = accumulated_uptime + current_session_secs;
         let tap_age_secs = (chrono::Utc::now() - tap.timestamp.created_at)
             .num_seconds()
             .max(1) as u64;
-        let uptime_percent =
-            (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
+        let uptime_percent = (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
 
         Ok(TapStatsDto {
             tap_id: tap.id.0.clone(),
@@ -443,10 +438,7 @@ impl TapService {
                     "base_volume must be between 0.0 and 2.0".to_string(),
                 ));
             }
-            changes.insert(
-                "base_volume".to_string(),
-                serde_json::json!(base_volume),
-            );
+            changes.insert("base_volume".to_string(), serde_json::json!(base_volume));
             tap.base_volume = base_volume;
         }
         tap.timestamp.updated_at = chrono::Utc::now();
@@ -558,18 +550,13 @@ impl TapService {
         let active_now = online_states.len() as u64;
         let current_session_secs: u64 = online_states
             .iter()
-            .map(|s| {
-                (chrono::Utc::now() - s.connected_at)
-                    .num_seconds()
-                    .max(0) as u64
-            })
+            .map(|s| (chrono::Utc::now() - s.connected_at).num_seconds().max(0) as u64)
             .sum();
         let total_uptime_secs = accumulated_uptime + current_session_secs;
         let tap_age_secs = (chrono::Utc::now() - tap.timestamp.created_at)
             .num_seconds()
             .max(1) as u64;
-        let uptime_percent =
-            (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
+        let uptime_percent = (total_uptime_secs as f64 / tap_age_secs as f64 * 100.0).min(100.0);
 
         TapDto {
             id: tap.id.0.clone(),

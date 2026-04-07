@@ -1,11 +1,15 @@
 pub mod auth;
+pub mod discord_resolver;
 pub mod mapping;
 pub mod tap;
+pub mod tts_channel;
 pub mod validation;
-pub mod discord_resolver;
 
 pub use auth::AuthService;
-pub use discord_resolver::{DiscordNameResolver, DiscordNameResolverSlot, make_resolver_slot, GuildInfo};
+pub use discord_resolver::{
+    DiscordNameResolver, DiscordNameResolverSlot, GuildInfo, make_resolver_slot,
+};
+pub use tts_channel::TTSChannelService;
 pub mod api_key;
 pub use api_key::ApiKeyService;
 pub mod audit_log;
@@ -17,15 +21,21 @@ pub use verification::VerificationService;
 pub mod user_settings;
 pub use user_settings::UserSettingsService;
 pub mod playback;
-pub use playback::PlaybackService;
 pub use mapping::MappingService;
+pub use playback::PlaybackService;
 
-use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository, PgPlaybackActionRepo, PgTapRepository, PgUserGuildSettingsRepository, PgUserRepository};
+use crate::repo::{
+    PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
+    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo, PgUserGuildSettingsRepository,
+    PgUserRepository,
+};
 use crate::{AppConfig, CoreError, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
 use zako3_audio_engine_client::client::AudioEngineRpcClient;
-use zako3_states::{TapHubStateService, TapMetricsStateService, UserSettingsStateService, VoiceStateService};
+use zako3_states::{
+    TapHubStateService, TapMetricsStateService, UserSettingsStateService, VoiceStateService,
+};
 
 #[derive(Clone)]
 pub struct Service {
@@ -42,6 +52,7 @@ pub struct Service {
     pub playback: PlaybackService,
     pub mapping: MappingService,
     pub name_resolver_slot: DiscordNameResolverSlot,
+    pub tts_channel: TTSChannelService,
 }
 
 impl Service {
@@ -51,6 +62,7 @@ impl Service {
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
         let audit_log_repo = Arc::new(PgAuditLogRepo::new(pool.clone()));
         let verification_repo = Arc::new(crate::repo::PgVerificationRepository::new(pool.clone()));
+        let tts_channel_repo = Arc::new(PgTtsChannelRepo::new(pool.clone()));
 
         let audit_log_service = AuditLogService::new(audit_log_repo.clone());
         let notification_repo = Arc::new(crate::repo::PgNotificationRepository::new(pool.clone()));
@@ -130,6 +142,7 @@ impl Service {
             playback,
             mapping,
             name_resolver_slot,
+            tts_channel: TTSChannelService::new(tts_channel_repo),
         })
     }
 }

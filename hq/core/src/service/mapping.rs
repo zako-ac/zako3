@@ -3,17 +3,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use hex;
-use sha2::{Digest, Sha256};
-use zako3_tts_matching::{
-    ChannelInfo, MapperInputData as TtsMapperInputData, MapperStepResult, UserInfo, WasmMapper,
-    service::{DiscordInfoProvider, ProcessContext},
-    TtsMatchingService,
-};
 use hq_types::{
     ChannelId, GuildId,
-    hq::mapper::{EvaluateResultDto, MapperInputData, MapperStepResultDto, PipelineOrderDto, WasmMapperDto},
+    hq::mapper::{
+        EvaluateResultDto, MapperInputData, MapperStepResultDto, PipelineOrderDto, WasmMapperDto,
+    },
     hq::settings::{EmojiMappingRule, TextMappingRule},
     hq::user::DiscordUserId,
+};
+use sha2::{Digest, Sha256};
+use zako3_tts_matching::{
+    ChannelInfo, MapperInputData as TtsMapperInputData, MapperStepResult, TtsMatchingService,
+    UserInfo, WasmMapper,
+    service::{DiscordInfoProvider, ProcessContext},
 };
 
 use crate::{CoreError, CoreResult, service::DiscordNameResolverSlot};
@@ -166,7 +168,9 @@ impl MappingService {
             .map_err(tts_error)?;
 
         // Validate the WASM runs correctly with a dummy input
-        let validation = self.evaluate_mapper(id.clone(), "validation_test".to_string()).await;
+        let validation = self
+            .evaluate_mapper(id.clone(), "validation_test".to_string())
+            .await;
         match validation {
             Ok(result) if result.steps.first().map(|s| s.success).unwrap_or(false) => {
                 // Validation passed — return the DTO
@@ -249,11 +253,7 @@ impl MappingService {
             let _ = tokio::fs::remove_file(&path).await;
         }
 
-        self.inner
-            .mapper_repo()
-            .delete(id)
-            .await
-            .map_err(tts_error)
+        self.inner.mapper_repo().delete(id).await.map_err(tts_error)
     }
 
     pub async fn get_pipeline(&self) -> CoreResult<PipelineOrderDto> {

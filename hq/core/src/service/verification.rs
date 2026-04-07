@@ -238,9 +238,7 @@ impl VerificationService {
                     user_id: owner_id.0,
                     r#type: "tap_rejected".to_string(),
                     title: "Tap verification rejected".to_string(),
-                    message: format!(
-                        "Your tap \"{tap_name}\" was not verified. Reason: {reason}"
-                    ),
+                    message: format!("Your tap \"{tap_name}\" was not verified. Reason: {reason}"),
                 })
                 .await
             {

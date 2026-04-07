@@ -1,13 +1,22 @@
 use async_trait::async_trait;
-use hq_types::hq::{settings::PartialUserSettings, UserId};
+use hq_types::hq::{UserId, settings::PartialUserSettings};
 use sqlx::{PgPool, Row};
 
 use crate::CoreResult;
 
 #[async_trait]
 pub trait UserGuildSettingsRepository: Send + Sync {
-    async fn get(&self, user_id: &UserId, guild_id: &str) -> CoreResult<Option<PartialUserSettings>>;
-    async fn upsert(&self, user_id: &UserId, guild_id: &str, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings>;
+    async fn get(
+        &self,
+        user_id: &UserId,
+        guild_id: &str,
+    ) -> CoreResult<Option<PartialUserSettings>>;
+    async fn upsert(
+        &self,
+        user_id: &UserId,
+        guild_id: &str,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings>;
     async fn delete(&self, user_id: &UserId, guild_id: &str) -> CoreResult<()>;
 }
 
@@ -23,7 +32,11 @@ impl PgUserGuildSettingsRepository {
 
 #[async_trait]
 impl UserGuildSettingsRepository for PgUserGuildSettingsRepository {
-    async fn get(&self, user_id: &UserId, guild_id: &str) -> CoreResult<Option<PartialUserSettings>> {
+    async fn get(
+        &self,
+        user_id: &UserId,
+        guild_id: &str,
+    ) -> CoreResult<Option<PartialUserSettings>> {
         let row = sqlx::query(
             "SELECT settings FROM user_guild_settings WHERE user_id = $1 AND guild_id = $2",
         )
@@ -42,7 +55,12 @@ impl UserGuildSettingsRepository for PgUserGuildSettingsRepository {
         }
     }
 
-    async fn upsert(&self, user_id: &UserId, guild_id: &str, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {
+    async fn upsert(
+        &self,
+        user_id: &UserId,
+        guild_id: &str,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings> {
         let json = serde_json::to_value(settings)?;
 
         let row = sqlx::query(
@@ -65,13 +83,11 @@ impl UserGuildSettingsRepository for PgUserGuildSettingsRepository {
     }
 
     async fn delete(&self, user_id: &UserId, guild_id: &str) -> CoreResult<()> {
-        sqlx::query(
-            "DELETE FROM user_guild_settings WHERE user_id = $1 AND guild_id = $2",
-        )
-        .bind(&user_id.0)
-        .bind(guild_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("DELETE FROM user_guild_settings WHERE user_id = $1 AND guild_id = $2")
+            .bind(&user_id.0)
+            .bind(guild_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }

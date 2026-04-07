@@ -1,7 +1,7 @@
 use crate::CoreResult;
 use async_trait::async_trait;
-use hq_types::hq::{DiscordUserId, User, UserId, Username};
 use hq_types::hq::settings::PartialUserSettings;
+use hq_types::hq::{DiscordUserId, User, UserId, Username};
 use sqlx::{PgPool, Row};
 
 #[async_trait]
@@ -13,7 +13,11 @@ pub trait UserRepository: Send + Sync {
     async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User>;
     async fn set_banned_status(&self, id: UserId, banned: bool) -> CoreResult<User>;
     async fn get_settings(&self, id: UserId) -> CoreResult<Option<PartialUserSettings>>;
-    async fn save_settings(&self, id: UserId, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings>;
+    async fn save_settings(
+        &self,
+        id: UserId,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings>;
 }
 
 pub struct PgUserRepository {
@@ -260,7 +264,11 @@ impl UserRepository for PgUserRepository {
         }
     }
 
-    async fn save_settings(&self, id: UserId, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {
+    async fn save_settings(
+        &self,
+        id: UserId,
+        settings: &PartialUserSettings,
+    ) -> CoreResult<PartialUserSettings> {
         let json = serde_json::to_value(settings)?;
 
         let row = sqlx::query(
