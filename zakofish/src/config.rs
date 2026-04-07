@@ -48,7 +48,7 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
             CompressionType::Gzip,
             CompressionType::None,
         ],
-        keepalive_interval: Duration::from_secs(15),
+        keepalive_interval: Duration::from_secs(3),
         protofish_config: Default::default(),
     })
 }

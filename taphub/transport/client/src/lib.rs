@@ -36,7 +36,7 @@ impl TransportClient {
             bind_address: bind_addr,
             root_certificates,
             supported_compression_types: vec![CompressionType::None],
-            keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
+            keepalive_range: Duration::from_secs(1)..Duration::from_secs(30),
             protofish_config,
         };
         let client = ProtofishClient::bind(config)

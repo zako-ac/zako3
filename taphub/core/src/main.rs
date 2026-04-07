@@ -205,7 +205,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &config.key_file,
         config.cache_dir.clone(),
         config.request_timeout_ms,
-    )?;
+    )
+    .await?;
     let tap_hub = Arc::new(tap_hub);
 
     let tap_hub_clone = tap_hub.clone();
