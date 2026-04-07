@@ -77,6 +77,7 @@ impl Service {
             verification_repo,
             tap_repo.clone(),
             audit_log_service.clone(),
+            notification_service.clone(),
         );
 
         let audio_engine = Arc::new(

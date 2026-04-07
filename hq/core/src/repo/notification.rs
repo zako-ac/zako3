@@ -12,6 +12,7 @@ pub trait NotificationRepository: Send + Sync {
         id: NotificationId,
         user_id: UserId,
     ) -> CoreResult<Option<Notification>>;
+    async fn unread_count(&self, user_id: UserId) -> CoreResult<u64>;
 }
 
 pub struct PgNotificationRepository {
@@ -102,5 +103,16 @@ impl NotificationRepository for PgNotificationRepository {
         } else {
             Ok(None)
         }
+    }
+
+    async fn unread_count(&self, user_id: UserId) -> CoreResult<u64> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND read_at IS NULL",
+        )
+        .bind(user_id.0)
+        .fetch_one(&self.pool)
+        .await?;
+        let count: i64 = row.try_get("count")?;
+        Ok(count as u64)
     }
 }

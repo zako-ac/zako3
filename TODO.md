@@ -65,7 +65,7 @@ refer hq todo
 - [x] In audit log, event is not displayed and user is displayed as ID -> refactor user badge in tap info as a component then use it
 - [x] Increase border contrast
 - [x] My Taps card in Dashboard: change hover color from primary to something else, maybe a light gray? (or maybe just make it more subtle)
-- [ ] unread-count
+- [x] unread-count
 - [x] Improve chart
 - [x] Make all cards in settings as component
 - [ ] Add "load failed" 

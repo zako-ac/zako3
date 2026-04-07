@@ -1,10 +1,10 @@
 use crate::repo::{TapRepository, VerificationRepository};
 use crate::service::validation::validate_verification_request;
-use crate::service::AuditLogService;
+use crate::service::{AuditLogService, NotificationService};
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
-    CreateVerificationRequestDto, TapId, UserId, VerificationRequest, VerificationRequestId,
-    VerificationStatus,
+    CreateNotificationDto, CreateVerificationRequestDto, TapId, UserId, VerificationRequest,
+    VerificationRequestId, VerificationStatus,
 };
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ pub struct VerificationService {
     verification_repo: Arc<dyn VerificationRepository>,
     tap_repo: Arc<dyn TapRepository>,
     audit_log: AuditLogService,
+    notification: NotificationService,
 }
 
 impl VerificationService {
@@ -20,11 +21,13 @@ impl VerificationService {
         verification_repo: Arc<dyn VerificationRepository>,
         tap_repo: Arc<dyn TapRepository>,
         audit_log: AuditLogService,
+        notification: NotificationService,
     ) -> Self {
         Self {
             verification_repo,
             tap_repo,
             audit_log,
+            notification,
         }
     }
 
@@ -162,7 +165,23 @@ impl VerificationService {
         self.tap_repo.update(&tap).await?;
 
         // Attach tap to response
-        updated_request.tap = Some(tap);
+        updated_request.tap = Some(tap.clone());
+
+        // 2.5 Send notification to tap owner
+        let owner_id = tap.owner_id.clone();
+        let tap_name = tap.name.0.clone();
+        if let Err(e) = self
+            .notification
+            .create(CreateNotificationDto {
+                user_id: owner_id.0,
+                r#type: "tap_verified".to_string(),
+                title: "Tap verified".to_string(),
+                message: format!("Your tap \"{tap_name}\" has been verified."),
+            })
+            .await
+        {
+            tracing::error!("Failed to send verification approval notification: {e}");
+        }
 
         // 3. Log
         let _ = self
@@ -207,7 +226,27 @@ impl VerificationService {
 
         // Fetch and attach tap
         let tap = self.tap_repo.find_by_id(request.tap_id.clone()).await?;
-        updated_request.tap = tap;
+        updated_request.tap = tap.clone();
+
+        // Send notification to tap owner
+        if let Some(tap_ref) = tap {
+            let owner_id = tap_ref.owner_id.clone();
+            let tap_name = tap_ref.name.0.clone();
+            if let Err(e) = self
+                .notification
+                .create(CreateNotificationDto {
+                    user_id: owner_id.0,
+                    r#type: "tap_rejected".to_string(),
+                    title: "Tap verification rejected".to_string(),
+                    message: format!(
+                        "Your tap \"{tap_name}\" was not verified. Reason: {reason}"
+                    ),
+                })
+                .await
+            {
+                tracing::error!("Failed to send verification rejection notification: {e}");
+            }
+        }
 
         let _ = self
             .audit_log

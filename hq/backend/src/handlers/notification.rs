@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{NotificationDto, NotificationId, PaginatedResponseDto};
+use hq_types::hq::{NotificationDto, NotificationId, PaginatedResponseDto, UnreadCountDto};
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
@@ -64,4 +64,26 @@ pub async fn mark_notification_read(
         .await
         .map_err(map_error)?;
     Ok(Json(notification))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/notifications/unread-count",
+    responses(
+        (status = 200, description = "Unread notification count", body = UnreadCountDto)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_unread_count(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<UnreadCountDto>, (axum::http::StatusCode, String)> {
+    let result = service
+        .notification
+        .get_unread_count(user_id)
+        .await
+        .map_err(map_error)?;
+    Ok(Json(result))
 }

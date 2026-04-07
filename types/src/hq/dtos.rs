@@ -205,3 +205,9 @@ pub struct CreateNotificationDto {
     pub title: String,
     pub message: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadCountDto {
+    pub count: u64,
+}

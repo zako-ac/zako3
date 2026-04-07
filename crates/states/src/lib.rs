@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
-use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId, hq::settings::{PartialUserSettings, UserSettings}};
+use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId, hq::settings::PartialUserSettings};
 
 #[derive(Error, Debug)]
 pub enum StateServiceError {

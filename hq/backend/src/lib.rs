@@ -19,6 +19,7 @@ use handlers::audit_log;
 use handlers::auth;
 use handlers::notification;
 use handlers::playback;
+use handlers::settings;
 use handlers::tap;
 use handlers::users;
 
@@ -42,6 +43,14 @@ use handlers::users;
         handlers::users::get_my_taps,
         handlers::users::get_my_settings,
         handlers::users::update_my_settings,
+        handlers::users::get_my_guild_settings,
+        handlers::users::update_my_guild_settings,
+        handlers::users::delete_my_guild_settings,
+        handlers::users::get_effective_settings,
+        handlers::settings::get_guild_settings,
+        handlers::settings::update_guild_settings,
+        handlers::settings::get_global_settings,
+        handlers::settings::update_global_settings,
         handlers::admin::list_verification_requests,
         handlers::admin::approve_verification,
         handlers::admin::reject_verification,
@@ -53,6 +62,7 @@ use handlers::users;
         handlers::tap::request_verification,
         handlers::notification::list_notifications,
         handlers::notification::mark_notification_read,
+        handlers::notification::get_unread_count,
 
         handlers::playback::get_playback_state,
         handlers::playback::stop_track,
@@ -83,6 +93,7 @@ use handlers::users;
             hq_types::hq::audit_log::PaginatedAuditLogsDto,
             hq_types::hq::dtos::PaginationMetaDto,
             hq_types::hq::NotificationDto,
+            hq_types::hq::UnreadCountDto,
 
             hq_types::hq::CreateNotificationDto,
             handlers::admin::VerificationRequestsQuery,
@@ -95,6 +106,14 @@ use handlers::users;
             hq_types::hq::UpdateUserRoleDto,
             hq_types::hq::PaginatedResponseDto<hq_types::hq::AuthUserDto>,
             hq_types::hq::settings::UserSettings,
+            hq_types::hq::settings::PartialUserSettings,
+            hq_types::hq::settings::UserSettingsField<Vec<hq_types::hq::settings::TextMappingRule>>,
+            hq_types::hq::settings::UserSettingsField<Vec<hq_types::hq::settings::EmojiMappingRule>>,
+            hq_types::hq::settings::UserSettingsField<hq_types::hq::settings::TextReadingRule>,
+            hq_types::hq::settings::UserSettingsField<hq_types::hq::settings::UserJoinLeaveAlert>,
+            hq_types::hq::settings::UserSettingsField<u16>,
+            hq_types::hq::settings::UserSettingsField<bool>,
+            hq_types::hq::settings::UserSettingsField<Option<hq_types::hq::TapId>>,
             hq_types::hq::settings::TextMappingRule,
             hq_types::hq::settings::EmojiMappingRule,
             hq_types::hq::settings::TextReadingRule,
@@ -160,6 +179,24 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
             get(users::get_my_settings).put(users::update_my_settings),
         )
         .route(
+            "/api/v1/users/me/settings/guilds/:guild_id",
+            get(users::get_my_guild_settings)
+                .put(users::update_my_guild_settings)
+                .delete(users::delete_my_guild_settings),
+        )
+        .route(
+            "/api/v1/users/me/settings/effective",
+            get(users::get_effective_settings),
+        )
+        .route(
+            "/api/v1/guilds/:guild_id/settings",
+            get(settings::get_guild_settings).put(settings::update_guild_settings),
+        )
+        .route(
+            "/api/v1/settings/global",
+            get(settings::get_global_settings).put(settings::update_global_settings),
+        )
+        .route(
             "/api/v1/admin/verifications",
             get(admin::list_verification_requests),
         )
@@ -186,6 +223,10 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
         .route(
             "/api/v1/admin/taps/:id/occupation",
             axum::routing::patch(tap::admin_update_tap_occupation),
+        )
+        .route(
+            "/api/v1/notifications/unread-count",
+            get(notification::get_unread_count),
         )
         .route(
             "/api/v1/notifications",

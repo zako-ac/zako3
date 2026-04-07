@@ -2,7 +2,7 @@ use crate::repo::NotificationRepository;
 use crate::{CoreError, CoreResult};
 use hq_types::hq::{
     CreateNotificationDto, Notification, NotificationDto, NotificationId, PaginatedResponseDto,
-    PaginationMetaDto, UserId,
+    PaginationMetaDto, UnreadCountDto, UserId,
 };
 use std::sync::Arc;
 
@@ -77,5 +77,10 @@ impl NotificationService {
             read_at: n.read_at,
             created_at: n.created_at,
         })
+    }
+
+    pub async fn get_unread_count(&self, user_id: UserId) -> CoreResult<UnreadCountDto> {
+        let count = self.repo.unread_count(user_id).await?;
+        Ok(UnreadCountDto { count })
     }
 }
