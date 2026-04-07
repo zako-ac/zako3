@@ -14,6 +14,7 @@ pub trait StateService: Send + Sync + 'static {
     async fn get_session(&self, guild_id: GuildId) -> ZakoResult<Option<SessionState>>;
     async fn save_session(&self, session: &SessionState) -> ZakoResult<()>;
     async fn delete_session(&self, guild_id: GuildId) -> ZakoResult<()>;
+    async fn list_sessions(&self) -> ZakoResult<Vec<SessionState>>;
 }
 
 pub async fn modify_state_session<F>(

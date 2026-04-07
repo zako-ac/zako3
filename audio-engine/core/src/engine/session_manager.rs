@@ -82,6 +82,23 @@ impl SessionManager {
         Ok(())
     }
 
+    #[instrument(skip(self, session), fields(guild_id = %session.guild_id, channel_id = %session.channel_id))]
+    pub async fn rejoin(&self, session: &SessionState) -> ZakoResult<()> {
+        tracing::info!("Rejoining voice channel");
+
+        self.discord_service
+            .join_voice_channel(session.guild_id, session.channel_id)
+            .await?;
+
+        self.initiate_session(session.guild_id).await?;
+
+        Ok(())
+    }
+
+    pub async fn list_sessions(&self) -> ZakoResult<Vec<SessionState>> {
+        self.state_service.list_sessions().await
+    }
+
     #[instrument(skip(self), fields(guild_id = %guild_id))]
     pub async fn leave(&self, guild_id: GuildId) -> ZakoResult<()> {
         tracing::info!("Leaving voice channel");

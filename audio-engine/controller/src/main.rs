@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use sha2::{Sha256, Digest};
 use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
@@ -71,8 +72,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
 
+    let ae_id = {
+        let hash = Sha256::digest(config.discord_token.as_bytes());
+        format!("{:x}", hash)[..16].to_string()
+    };
+    tracing::info!(ae_id, "Audio Engine starting");
+
     let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager));
-    let state_service = Arc::new(RedisStateService::new(&config.redis_url).await?);
+    let state_service = Arc::new(RedisStateService::new(&config.redis_url, ae_id).await?);
 
     let session_manager = Arc::new(SessionManager::new(
         discord_service,

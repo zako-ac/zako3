@@ -28,6 +28,8 @@ impl AudioEngineServer {
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
         let client = async_nats::connect(&self.nats_url).await?;
 
+        (*self).reconnect_sessions(&client).await;
+
         let mut sub = client
             .queue_subscribe("audio_engine.control", "audio_engine_control".to_string())
             .await?;
@@ -106,6 +108,35 @@ impl AudioEngineServer {
         }
 
         Ok(())
+    }
+
+    async fn reconnect_sessions(&self, client: &Client) {
+        let sessions = match self.session_manager.list_sessions().await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to list sessions for reconnect: {:?}", e);
+                return;
+            }
+        };
+
+        if sessions.is_empty() {
+            return;
+        }
+
+        info!("Rejoining {} session(s) from previous run", sessions.len());
+        for session in sessions {
+            let guild_id = session.guild_id;
+            let channel_id = session.channel_id;
+
+            if let Err(e) = self.session_manager.rejoin(&session).await {
+                warn!(guild_id = ?guild_id, "Failed to rejoin session: {:?}", e);
+                continue;
+            }
+
+            self.spawn_session_consumer(client.clone(), guild_id, channel_id)
+                .await;
+            info!(guild_id = ?guild_id, "Rejoined session");
+        }
     }
 
     async fn spawn_session_consumer(

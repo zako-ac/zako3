@@ -9,9 +9,9 @@ refer hq todo
 - [x] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
 - [x] Add uptime and active users
 - [x] refactor TH
+- [x] implement cache: max cache size, score-based cache eviction worker
 
 - [ ] Implement text preprocessing
-- [ ] implement cache: max cache size, score-based cache eviction worker
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -29,25 +29,31 @@ refer hq todo
 - [x] Gauge metrics reset on TH boot
 - [x] Add track finish to AE queue
 - [x] Add timeout to AE client
+- [x] Add base volume for tap
+- [x] Make TH connection ID (online count) tracking better
+- [x] AE re-join on boot
 
 - [ ] otel and prometheus and logging(promtail)
 - [ ] Plan proper logging with context
+- [ ] Refine errors
 
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
-- [ ] implement ban
 
-- [ ] AE re-join on boot
-- [ ] Add search API for tap (like youtube search)
-- [ ] Make TH connection ID (online count) tracking better
 - [ ] Make cache removation command
-- [x] Add base volume for tap
 - [ ] AR PArameters
 - [ ] emoji matching service
 - [ ] Pause feature
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?
+
+## Do before production
+- [ ] Captcha
+- [ ] implement ban
+
+## Possible future features
+- [ ] search API in tap
 
 ## Text Preprocessing
 - [ ] ㅏ -> 아
