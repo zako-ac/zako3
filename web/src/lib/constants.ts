@@ -31,5 +31,9 @@ export const ROUTES = {
   ADMIN_TAP: (tapId: string) => `/admin/taps/${tapId}`,
   ADMIN_NOTIFICATIONS: '/admin/notifications',
   ADMIN_VERIFICATIONS: '/admin/verifications',
+  ADMIN_SETTINGS: '/admin/settings',
   VOICE_CHANNEL: (guildId: string, channelId: string) => `/voice/${guildId}/${channelId}`,
+  GUILD_SETTINGS: (guildId: string) => `/guilds/${guildId}/settings`,
+  GUILD_SETTINGS_ME: (guildId: string) => `/guilds/${guildId}/settings/me`,
+  GUILD_SETTINGS_GUILD: (guildId: string) => `/guilds/${guildId}/settings/guild`,
 } as const;

@@ -19,6 +19,7 @@ export const trackSchema = z.object({
 export const guildPlaybackStateSchema = z.object({
     guildId: z.string(),
     guildName: z.string().default(''),
+    guildIconUrl: z.string().optional(),
     channelId: z.string(),
     channelName: z.string().default(''),
     queues: z.record(z.string(), z.array(trackSchema)),

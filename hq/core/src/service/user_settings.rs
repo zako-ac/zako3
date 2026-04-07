@@ -168,15 +168,28 @@ impl UserSettingsService {
 
     /// Fetch all four scopes concurrently and fold them into a concrete `UserSettings`.
     /// Cascade: GuildUser > User > Guild > Global > hardcoded defaults.
+    /// If `guild_id` is `None`, only `User`, `Global`, and hardcoded defaults are used.
     pub async fn get_effective_settings(
         &self,
         user_id: &UserId,
-        guild_id: &str,
+        guild_id: Option<&str>,
     ) -> CoreResult<UserSettings> {
         let (guild_user, user, guild, global) = tokio::try_join!(
-            self.user_guild_settings_repo.get(user_id, guild_id),
+            async {
+                if let Some(gid) = guild_id {
+                    self.user_guild_settings_repo.get(user_id, gid).await
+                } else {
+                    Ok(None)
+                }
+            },
             self.user_repo.get_settings(user_id.clone()),
-            self.guild_settings_repo.get(guild_id),
+            async {
+                if let Some(gid) = guild_id {
+                    self.guild_settings_repo.get(gid).await
+                } else {
+                    Ok(None)
+                }
+            },
             self.global_settings_repo.get(),
         )?;
 

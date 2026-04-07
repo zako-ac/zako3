@@ -9,6 +9,10 @@
       },
       "dashboard": "Dashboard",
       "dashboardSubtitle": "Here's an overview of the system.",
+      "globalSettings": {
+        "description": "",
+        "title": ""
+      },
       "noRecentActivity": "No recent activity.",
       "notifications": {
         "subtitle": "Manage system notifications",
@@ -55,6 +59,7 @@
           "description": "Are you sure you want to ban user {{username}}? They will not be able to log in.",
           "title": "Confirm Ban"
         },
+        "banned": "Banned",
         "banSuccess": "User has been banned.",
         "createdAt": "Created At",
         "email": "Email",
@@ -170,6 +175,19 @@
       "updateFailed": "",
       "userNotFound": ""
     },
+    "guilds": {
+      "settings": {
+        "action": "Guild Settings",
+        "guildSettings": "Guild Settings",
+        "guildSettingsDescription": "Manage settings for this guild, including TTS preferences and permissions.",
+        "guildSettingsNoPermission": "You don't have permission to manage this guild's settings.",
+        "mySettings": "My Settings",
+        "mySettingsDescription": "Manage your personal settings for this guild, such as TTS preferences.",
+        "resetSuccess": "Settings reset to default successfully.",
+        "resetToDefault": "Reset to Default",
+        "title": "Guild Settings"
+      }
+    },
     "nav": {
       "admin": "Admin",
       "adminPanel": "Admin Panel",
@@ -249,6 +267,7 @@
       "notifications": "Notifications",
       "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
       "notificationsSubtitle": "Manage how you receive notifications",
+      "overriddenByUpstream": "",
       "pattern": "Pattern",
       "profile": "Profile",
       "profileSubtitle": "Your personal information",
@@ -257,6 +276,11 @@
       "saveError": "Failed to save settings. Please try again.",
       "saveSuccess": "Settings saved successfully!",
       "saving": "Saving...",
+      "scope": {
+        "important": "Important",
+        "none": "None",
+        "normal": "Normal"
+      },
       "subtitle": "Manage your account settings and preferences",
       "textMappings": "Text Replacements",
       "textMappingsDescription": "Replace words or phrases with custom text when reading messages aloud.",
@@ -266,9 +290,14 @@
       "textReadingRuleOnMicMute": "Only read messages aloud when my mic is muted",
       "title": "Settings",
       "tts": "TTS Settings",
+      "ttsQueue": "",
       "ttsSubtitle": "Configure how your messages are read aloud.",
       "ttsVoice": "TTS Voice",
-      "ttsVoiceNone": "None (use default)"
+      "ttsVoiceNone": "None (use default)",
+      "selectTap": "Select a Voice Tap",
+      "selectTapDescription": "Choose a TTS tap to use as your voice.",
+      "searchTaps": "Search taps...",
+      "noTapsDescription": "No TTS taps found. Try adjusting your search."
     },
     "taps": {
       "activeCount": "{{value}} online",

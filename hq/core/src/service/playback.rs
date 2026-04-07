@@ -88,6 +88,7 @@ impl PlaybackService {
             let channel_name = resolver
                 .and_then(|r| r.channel_name(loc.guild_id, loc.channel_id))
                 .unwrap_or_else(|| loc.channel_name.clone());
+            let guild_icon_url = resolver.and_then(|r| r.guild_icon_url(loc.guild_id));
 
             let queues = state
                 .queues
@@ -113,6 +114,7 @@ impl PlaybackService {
             results.push(GuildPlaybackStateDto {
                 guild_id: loc.guild_id.to_string(),
                 guild_name,
+                guild_icon_url,
                 channel_id: loc.channel_id.to_string(),
                 channel_name,
                 queues,

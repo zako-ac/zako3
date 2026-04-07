@@ -51,6 +51,7 @@ refer hq todo
 ## Do before production
 - [ ] Captcha
 - [ ] implement ban
+- [ ] Update Zako web
 
 ## Possible future features
 - [ ] AR PArameters
@@ -68,10 +69,12 @@ refer hq todo
 - [x] unread-count
 - [x] Improve chart
 - [x] Make all cards in settings as component
-- [ ] Add "load failed" 
 - [x] Dashboard status (my taps, total uses, active users, uptime)
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
+
+- [ ] Test Korean and refine i18n
+- [ ] Add "load failed" 
 
 ## Mobile
 - [x] Tap card overflow

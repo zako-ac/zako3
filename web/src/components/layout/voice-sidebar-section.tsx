@@ -1,13 +1,16 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Volume2 } from 'lucide-react'
-import { usePlaybackState } from '@/features/playback'
+import { useTranslation } from 'react-i18next'
+import { Server, Settings, Volume2 } from 'lucide-react'
+import { useMyGuilds } from '@/features/guild'
 import { ROUTES } from '@/lib/constants'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
     SidebarGroup,
     SidebarGroupContent,
     SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
+    SidebarMenuAction,
     SidebarMenuItem,
     SidebarMenuSub,
     SidebarMenuSubButton,
@@ -15,73 +18,65 @@ import {
 } from '@/components/ui/sidebar'
 
 export const VoiceSidebarSection = () => {
+    const { t } = useTranslation()
     const location = useLocation()
-    const { data: states } = usePlaybackState()
+    const { data: guilds } = useMyGuilds()
 
-    if (!states || states.length === 0) {
+    if (!guilds || guilds.length === 0) {
         return null
     }
 
-    // Group channels by guildId
-    const byGuild = states.reduce<Record<string, typeof states>>(
-        (acc, state) => {
-            if (!acc[state.guildId]) acc[state.guildId] = []
-            acc[state.guildId].push(state)
-            return acc
-        },
-        {}
-    )
-
     return (
         <SidebarGroup>
-            <SidebarGroupLabel>
-                <Volume2 className="mr-1.5 h-3.5 w-3.5" />
-                Voice
-            </SidebarGroupLabel>
+            <SidebarGroupLabel>Guilds</SidebarGroupLabel>
             <SidebarGroupContent>
                 <SidebarMenu>
-                    {Object.entries(byGuild).map(([guildId, channels]) => (
-                        <SidebarMenuItem key={guildId}>
-                            <SidebarMenuButton tooltip={channels[0].guildName || guildId}>
-                                <Volume2 className="h-4 w-4" />
-                                <span>{channels[0].guildName || `Server ...${guildId.slice(-6)}`}</span>
-                            </SidebarMenuButton>
-                            <SidebarMenuSub>
-                                {channels.map((state) => {
-                                    const url = ROUTES.VOICE_CHANNEL(
-                                        state.guildId,
-                                        state.channelId
-                                    )
-                                    const trackCount = Object.values(
-                                        state.queues as Record<string, unknown[]>
-                                    ).reduce((n, q) => n + q.length, 0)
-                                    const isActive =
-                                        location.pathname === url
-                                    return (
-                                        <SidebarMenuSubItem
-                                            key={state.channelId}
+                    {guilds.map((guild) => {
+                        const voiceUrl = guild.activeChannelId
+                            ? ROUTES.VOICE_CHANNEL(guild.guildId, guild.activeChannelId)
+                            : null
+                        const isVoiceActive =
+                            voiceUrl && location.pathname === voiceUrl
+
+                        return (
+                            <SidebarMenuItem key={guild.guildId}>
+                                <SidebarMenuButton tooltip={guild.guildName || guild.guildId}>
+                                    <Avatar className="h-5 w-5 rounded-sm">
+                                        <AvatarImage src={guild.guildIconUrl ?? undefined} />
+                                        <AvatarFallback className="rounded-sm">
+                                            <Server className="h-3 w-3" />
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <span>{guild.guildName || `Server ...${guild.guildId.slice(-6)}`}</span>
+                                </SidebarMenuButton>
+                                {guild.canManage && (
+                                    <SidebarMenuAction asChild>
+                                        <Link
+                                            to={ROUTES.GUILD_SETTINGS(guild.guildId)}
+                                            title={t('guilds.settings.action')}
                                         >
+                                            <Settings className="h-3.5 w-3.5" />
+                                        </Link>
+                                    </SidebarMenuAction>
+                                )}
+                                {guild.activeChannelId && guild.activeChannelName && (
+                                    <SidebarMenuSub>
+                                        <SidebarMenuSubItem>
                                             <SidebarMenuSubButton
                                                 asChild
-                                                isActive={isActive}
+                                                isActive={isVoiceActive || false}
                                             >
-                                                <Link to={url}>
-                                                    <span>
-                                                        #{state.channelName || `...${state.channelId.slice(-6)}`}
-                                                    </span>
-                                                    {trackCount > 0 && (
-                                                        <span className="ml-auto text-xs text-muted-foreground">
-                                                            {trackCount}
-                                                        </span>
-                                                    )}
+                                                <Link to={voiceUrl || '#'} className="flex items-center gap-2">
+                                                    <Volume2 className="h-3.5 w-3.5" />
+                                                    <span>{guild.activeChannelName}</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
-                                    )
-                                })}
-                            </SidebarMenuSub>
-                        </SidebarMenuItem>
-                    ))}
+                                    </SidebarMenuSub>
+                                )}
+                            </SidebarMenuItem>
+                        )
+                    })}
                 </SidebarMenu>
             </SidebarGroupContent>
         </SidebarGroup>

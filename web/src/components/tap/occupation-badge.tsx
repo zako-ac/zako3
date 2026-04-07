@@ -35,14 +35,14 @@ export const OccupationBadge = ({ occupation, className }: OccupationBadgeProps)
 
     return (
         <Badge
-            className={cn('shrink-0 gap-1', variant.className, className)}
+            className={cn('shrink-0 gap-1 truncate', variant.className, className)}
         >
             {occupation === 'official' ? (
-                <Crown className="h-3 w-3" />
+                <Crown className="h-3 w-3 flex-shrink-0" />
             ) : occupation === 'verified' ? (
-                <CheckCircle className="h-3 w-3" />
+                <CheckCircle className="h-3 w-3 flex-shrink-0" />
             ) : null}
-            {occupationTranslations[occupation]}
+            <span className="truncate">{occupationTranslations[occupation]}</span>
         </Badge>
     )
 }

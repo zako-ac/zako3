@@ -1,7 +1,7 @@
 use crate::middleware::auth::{AdminUser, AuthUser, OptionalAuthUser};
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, State, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -10,6 +10,7 @@ use hq_types::hq::{
     CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, TapDto, TapId, TapStatsDto,
     TapWithAccessDto, VerificationRequest,
 };
+use serde::Deserialize;
 use std::sync::Arc;
 
 fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
@@ -21,6 +22,15 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
         CoreError::Conflict(_) => (axum::http::StatusCode::CONFLICT, e.to_string()),
         _ => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
+}
+
+#[derive(Deserialize)]
+pub struct ListTapsQuery {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+    pub search: Option<String>,
+    pub roles: Option<String>,
+    pub accessible: Option<bool>,
 }
 
 #[utoipa::path(
@@ -77,6 +87,13 @@ pub async fn create_tap(
 #[utoipa::path(
     get,
     path = "/api/v1/taps",
+    params(
+        ("page" = Option<i64>, Query, description = "Page number"),
+        ("per_page" = Option<i64>, Query, description = "Items per page"),
+        ("search" = Option<String>, Query, description = "Search query"),
+        ("roles" = Option<String>, Query, description = "Comma-separated roles to filter by (e.g., 'tts' or 'music')"),
+        ("accessible" = Option<bool>, Query, description = "Filter only accessible taps")
+    ),
     responses(
         (status = 200, description = "List of taps", body = PaginatedResponseDto<TapWithAccessDto>)
     )
@@ -84,7 +101,10 @@ pub async fn create_tap(
 pub async fn list_taps(
     State(service): State<Arc<Service>>,
     OptionalAuthUser(user_id): OptionalAuthUser,
+    Query(_query): Query<ListTapsQuery>,
 ) -> Result<Json<PaginatedResponseDto<TapWithAccessDto>>, (axum::http::StatusCode, String)> {
+    // TODO: Implement filtering by roles, search, accessible in the tap service
+    // For now, just use list_all_paginated and client-side filtering
     let taps = service
         .tap
         .list_all_paginated(user_id)

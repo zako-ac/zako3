@@ -24,5 +24,7 @@ pub mod verification;
 pub use verification::*;
 pub mod playback;
 pub use playback::*;
+pub mod guild;
+pub use guild::*;
 pub mod rpc;
 pub mod zod_impls;

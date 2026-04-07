@@ -1,0 +1,23 @@
+[package]
+name = "zako3-tts-matching"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zako3-types   = { workspace = true }
+tokio         = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+thiserror     = { workspace = true }
+async-trait   = { workspace = true }
+tracing       = { workspace = true }
+chrono        = { workspace = true }
+rusqlite      = { version = "0.32", features = ["bundled"] }
+sha2          = "0.10"
+hex           = "0.4"
+wasmtime      = "30"
+
+[dev-dependencies]
+tokio      = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile   = "3"
+async-trait = { workspace = true }

@@ -30,7 +30,11 @@ impl GlobalSettingsRepository for PgGlobalSettingsRepository {
         let Some(row) = row else { return Ok(None) };
         let value: Option<serde_json::Value> = row.try_get("settings")?;
         let Some(value) = value else { return Ok(None) };
-        Ok(Some(serde_json::from_value(value)?))
+        // Treat deserialization errors as "no settings" (empty object in DB, malformed data, etc.)
+        match serde_json::from_value(value) {
+            Ok(settings) => Ok(Some(settings)),
+            Err(_) => Ok(None),
+        }
     }
 
     async fn upsert(&self, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {

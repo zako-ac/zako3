@@ -17,6 +17,7 @@ use handlers::admin;
 use handlers::api_key;
 use handlers::audit_log;
 use handlers::auth;
+use handlers::guild;
 use handlers::notification;
 use handlers::playback;
 use handlers::settings;
@@ -72,6 +73,8 @@ use handlers::users;
         handlers::playback::edit_queue,
         handlers::playback::undo_action,
         handlers::playback::get_history,
+
+        handlers::guild::get_my_guilds,
     ),
     components(
         schemas(
@@ -129,6 +132,8 @@ use handlers::users;
             hq_types::hq::playback::ResumeTrackDto,
             hq_types::hq::playback::QueueOperation,
             hq_types::hq::playback::EditQueueDto,
+
+            hq_types::hq::guild::GuildSummaryDto,
         )
     ),
     tags(
@@ -261,6 +266,7 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
             "/api/v1/taps/:id/api-tokens/:key_id/regenerate",
             post(api_key::regenerate_key),
         )
+        .route("/api/v1/guilds/me", get(guild::get_my_guilds))
         .route("/api/v1/playback/state", get(playback::get_playback_state))
         .route("/api/v1/playback/stop", post(playback::stop_track))
         .route("/api/v1/playback/skip", post(playback::skip_music))

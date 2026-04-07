@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "lowercase"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+zako3-tts-matching-sdk = { path = "../.." }

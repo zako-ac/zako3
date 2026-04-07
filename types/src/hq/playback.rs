@@ -28,6 +28,7 @@ pub struct TrackDto {
 pub struct GuildPlaybackStateDto {
     pub guild_id: String,
     pub guild_name: String,
+    pub guild_icon_url: Option<String>,
     pub channel_id: String,
     pub channel_name: String,
     pub queues: HashMap<String, Vec<TrackDto>>,

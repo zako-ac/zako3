@@ -189,15 +189,15 @@ pub async fn delete_my_guild_settings(
 
 #[derive(Deserialize)]
 pub struct EffectiveSettingsQuery {
-    pub guild_id: String,
+    pub guild_id: Option<String>,
 }
 
 #[utoipa::path(
     get,
     path = "/api/v1/users/me/settings/effective",
-    params(("guild_id" = String, Query, description = "Discord guild ID to resolve settings for")),
+    params(("guild_id" = Option<String>, Query, description = "Discord guild ID to resolve settings for (optional)")),
     responses(
-        (status = 200, description = "Fully resolved settings for the given guild context", body = UserSettings)
+        (status = 200, description = "Fully resolved settings (user + global + defaults if no guild, or full 4-layer cascade if guild provided)", body = UserSettings)
     ),
     security(
         ("bearer_auth" = [])
@@ -210,7 +210,7 @@ pub async fn get_effective_settings(
 ) -> Result<Json<UserSettings>, (axum::http::StatusCode, String)> {
     let settings = service
         .user_settings
-        .get_effective_settings(&user_id, &query.guild_id)
+        .get_effective_settings(&user_id, query.guild_id.as_deref())
         .await
         .map_err(map_error)?;
     Ok(Json(settings))

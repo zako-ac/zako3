@@ -68,6 +68,7 @@ export const createTap = (overrides?: Partial<Tap>): Tap => {
         ownerId: faker.string.numeric(18),
         occupation: faker.helpers.arrayElement(TAP_OCCUPATIONS),
         roles: faker.helpers.arrayElements(TAP_ROLES, { min: 1, max: 2 }),
+        baseVolume: faker.number.int({ min: 0, max: 100 }),
         permission,
         stats: createTapStats(faker.string.numeric(18)),
         totalUses: faker.number.int({ min: 0, max: 10000 }),
@@ -114,16 +115,23 @@ export const createTimeSeriesData = (
 export const createTapStats = (
     tapId: string,
     overrides?: Partial<TapStats>
-): TapStats => ({
-    tapId,
-    currentlyActive: faker.number.int({ min: 0, max: 50 }),
-    totalUses: faker.number.int({ min: 100, max: 50000 }),
-    cacheHits: faker.number.int({ min: 50, max: 40000 }),
-    uniqueUsers: faker.number.int({ min: 10, max: 5000 }),
-    useRateHistory: createTimeSeriesData(30, 0, 500),
-    cacheHitRateHistory: createTimeSeriesData(30, 0, 100),
-    ...overrides,
-})
+): TapStats => {
+    const defaults = {
+        tapId,
+        currentlyActive: faker.number.int({ min: 0, max: 50 }),
+        totalUses: faker.number.int({ min: 100, max: 50000 }),
+        cacheHits: faker.number.int({ min: 50, max: 40000 }),
+        uniqueUsers: faker.number.int({ min: 10, max: 5000 }),
+        uptimePercent: faker.number.float({ min: 90, max: 100, fractionDigits: 2 }),
+        useRateHistory: createTimeSeriesData(30, 0, 500),
+        cacheHitRateHistory: createTimeSeriesData(30, 0, 100),
+    }
+
+    return {
+        ...defaults,
+        ...overrides,
+    }
+}
 
 export const mockTaps: TapWithAccess[] = Array.from({ length: 50 }, () =>
     createTapWithAccess()

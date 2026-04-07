@@ -62,36 +62,38 @@ export const TapCard = ({
                 onClick={() => onClick?.(tap.id)}
             >
                 <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                        <OnlineIndicator count={tap.stats.currentlyActive} className="mr-2" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <OnlineIndicator count={tap.stats.currentlyActive} className="mr-1" />
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                <h3 className="truncate font-semibold">{tap.name}</h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-semibold">{tap.name}</h3>
                                 <OccupationBadge occupation={tap.occupation} />
                             </div>
                         </div>
-                        <SetAsMyVoice
-                            tapId={tap.id}
-                            hasTtsRole={tap.roles.includes('tts')}
-                            hasAccess={tap.hasAccess}
-                        />
-                        {onSettingsClick && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="shrink-0"
-                                            onClick={handleSettingsClick}
-                                        >
-                                            <Settings className="h-4 w-4" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{t('taps.settings.title')}</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                            <SetAsMyVoice
+                                tapId={tap.id}
+                                hasTtsRole={tap.roles.includes('tts')}
+                                hasAccess={tap.hasAccess}
+                            />
+                            {onSettingsClick && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                className="shrink-0"
+                                                onClick={handleSettingsClick}
+                                            >
+                                                <Settings className="h-4 w-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{t('taps.settings.title')}</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                        </div>
                     </div>
                     <CopyableId id={tap.id} />
                 </CardHeader>
@@ -108,19 +110,17 @@ export const TapCard = ({
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex items-center justify-between border-t pt-2">
+                <CardFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
                     <UserBadge user={tap.owner} />
 
-                    <div className="text-muted-foreground flex items-center gap-4 text-xs">
-                        <div className="flex flex-col gap-1">
-                            <span>{t('taps.uses', { value: tap.totalUses })}</span>
-                            <span>{t('taps.activeCount', { value: tap.stats.currentlyActive })}</span>
-                        </div>
-                        <span>{formatRelativeTime(tap.createdAt, i18n.language)}</span>
+                    <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+                        <span className="whitespace-nowrap">{t('taps.uses', { value: tap.totalUses })}</span>
+                        <span className="whitespace-nowrap">{t('taps.activeCount', { value: tap.stats.currentlyActive })}</span>
+                        <span className="whitespace-nowrap">{formatRelativeTime(tap.createdAt, i18n.language)}</span>
                         <Button
                             variant="ghost"
                             size="icon-sm"
-                            className="opacity-0 transition-opacity group-hover:opacity-100"
+                            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                             onClick={handleReport}
                         >
                             <Flag className="h-4 w-4" />

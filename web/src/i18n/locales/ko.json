@@ -9,6 +9,10 @@
       },
       "dashboard": "대시보드",
       "dashboardSubtitle": "시스템 개요입니다.",
+      "globalSettings": {
+        "description": "",
+        "title": ""
+      },
       "noRecentActivity": "최근 활동이 없습니다.",
       "notifications": {
         "subtitle": "시스템 알림 관리",
@@ -55,6 +59,7 @@
           "description": "이 사용자를 차단하시겠습니까? 로그인할 수 없게 됩니다.",
           "title": "사용자 차단 확인"
         },
+        "banned": "차단됨",
         "banSuccess": "사용자가 차단되었습니다.",
         "createdAt": "생성일",
         "email": "이메일",
@@ -169,6 +174,19 @@
       "updateFailed": "",
       "userNotFound": "사용자를 찾을 수 없습니다."
     },
+    "guilds": {
+      "settings": {
+        "action": "서버 설정",
+        "guildSettings": "",
+        "guildSettingsDescription": "",
+        "guildSettingsNoPermission": "",
+        "mySettings": "",
+        "mySettingsDescription": "",
+        "resetSuccess": "",
+        "resetToDefault": "",
+        "title": "서버 설정"
+      }
+    },
     "nav": {
       "admin": "관리자",
       "adminPanel": "관리자 패널",
@@ -248,6 +266,7 @@
       "notifications": "알림",
       "notificationsCheckBackLater": "알림 설정은 곧 제공됩니다. 나중에 다시 확인하세요!",
       "notificationsSubtitle": "알림 수신 방법 관리",
+      "overriddenByUpstream": "",
       "pattern": "패턴",
       "profile": "프로필",
       "profileSubtitle": "개인 정보",
@@ -256,6 +275,11 @@
       "saveError": "설정 저장 중 오류가 발생했습니다. 나중에 다시 시도하세요.",
       "saveSuccess": "설정이 성공적으로 저장되었습니다.",
       "saving": "저장 중...",
+      "scope": {
+        "important": "중요",
+        "none": "없음",
+        "normal": "기본"
+      },
       "subtitle": "계정 설정 및 환경설정 관리",
       "textMappings": "텍스트 대체",
       "textMappingsDescription": "메시지를 소리 내어 읽을 때 단어나 구문을 사용자 정의 텍스트로 교체합니다.",
@@ -265,6 +289,7 @@
       "textReadingRuleOnMicMute": "마이크 음소거 시 읽기",
       "title": "설정",
       "tts": "TTS 설정",
+      "ttsQueue": "",
       "ttsSubtitle": "메시지를 소리 내어 읽는 방법을 설정합니다.",
       "ttsVoice": "TTS 음성",
       "ttsVoiceNone": "없음 (기본값 사용)"

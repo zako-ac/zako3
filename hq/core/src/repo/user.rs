@@ -253,8 +253,11 @@ impl UserRepository for PgUserRepository {
         let Some(row) = row else { return Ok(None) };
         let value: Option<serde_json::Value> = row.try_get("settings")?;
         let Some(value) = value else { return Ok(None) };
-        let settings = serde_json::from_value(value)?;
-        Ok(Some(settings))
+        // Treat deserialization errors as "no settings" (empty object in DB, malformed data, etc.)
+        match serde_json::from_value(value) {
+            Ok(settings) => Ok(Some(settings)),
+            Err(_) => Ok(None),
+        }
     }
 
     async fn save_settings(&self, id: UserId, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {

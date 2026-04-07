@@ -11,6 +11,7 @@ export {
 } from './taps'
 export { SettingsPage } from './settings'
 export { VoiceChannelPage } from './voice'
+export { GuildSettingsPage, GuildMySettingsPage, GuildGuildSettingsPage } from './guild'
 export {
   AdminDashboardPage,
   AdminUsersPage,
@@ -19,4 +20,5 @@ export {
   AdminTapDetailPage,
   AdminNotificationsPage,
   AdminVerificationsPage,
+  AdminGlobalSettingsPage,
 } from './admin'

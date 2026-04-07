@@ -4,7 +4,7 @@ pub mod validation;
 pub mod discord_resolver;
 
 pub use auth::AuthService;
-pub use discord_resolver::{DiscordNameResolver, DiscordNameResolverSlot, make_resolver_slot};
+pub use discord_resolver::{DiscordNameResolver, DiscordNameResolverSlot, make_resolver_slot, GuildInfo};
 pub mod api_key;
 pub use api_key::ApiKeyService;
 pub mod audit_log;

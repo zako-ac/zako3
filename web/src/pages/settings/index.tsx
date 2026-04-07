@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
 import { useTaps } from '@/features/taps'
-import { UserSettingsCard, defaultUserSettings, useUserSettings, useSaveUserSettings } from '@/features/settings'
-import type { UserSettings } from '@/features/settings'
+import { UserSettingsCard, usePartialUserSettings, useSavePartialUserSettings, emptyPartial } from '@/features/settings'
+import type { PartialUserSettings } from '@/features/settings'
+import { LoadingSkeleton } from '@/components/common'
 import { toast } from 'sonner'
 
 export const SettingsPage = () => {
@@ -24,17 +25,16 @@ export const SettingsPage = () => {
     const { user } = useAuthStore()
 
     const { data: tapsData } = useTaps()
-    const { data: settingsData, isLoading: settingsLoading } = useUserSettings()
-    const { mutateAsync: saveSettings } = useSaveUserSettings()
+    const { data: settingsData, isLoading: isLoadingSettings } = usePartialUserSettings()
+    const { mutateAsync: saveSettings } = useSavePartialUserSettings()
 
     if (!user) return null
 
-    const handleSaveSettings = async (settings: UserSettings) => {
+    const handleSaveSettings = async (settings: PartialUserSettings) => {
         try {
             await saveSettings(settings)
             toast.success(t('settings.saveSuccess'))
-        } catch (error) {
-            console.error('Failed to save settings:', error)
+        } catch {
             toast.error(t('settings.saveError'))
         }
     }
@@ -103,11 +103,15 @@ export const SettingsPage = () => {
                 </CardContent>
             </Card>
 
-            <UserSettingsCard
-                initialValue={settingsLoading ? defaultUserSettings : (settingsData ?? defaultUserSettings)}
-                taps={tapsData?.data ?? []}
-                onSave={handleSaveSettings}
-            />
+            {isLoadingSettings ? (
+                <LoadingSkeleton count={1} variant="card" />
+            ) : (
+                <UserSettingsCard
+                    initialValue={settingsData ?? emptyPartial}
+                    taps={tapsData?.data ?? []}
+                    onSave={handleSaveSettings}
+                />
+            )}
 
             <Card>
                 <CardHeader>
