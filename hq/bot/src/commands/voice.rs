@@ -1,5 +1,5 @@
 use crate::{ui, util, Context, Error};
-use hq_types::{ChannelId, GuildId};
+use hq_types::{AudioRequestString, ChannelId, GuildId, QueueName, hq::{DiscordUserId, TapName}};
 use poise::serenity_prelude as serenity;
 
 /// Join a voice channel.
@@ -16,13 +16,24 @@ pub async fn join(
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     // Extract all guild data before the first await.
-    let (guild_id, channel_id, channel_name) = {
+    let (guild_id, channel_id, channel_name, bot_name, bot_discord_id) = {
+        let bot_user_id = ctx.cache().current_user().id;
         match channel {
-            Some(c) => (
-                GuildId::from(c.guild_id.get()),
-                ChannelId::from(c.id.get()),
-                c.name.clone(),
-            ),
+            Some(c) => {
+                let guild = ctx.guild();
+                let bot_name = guild
+                    .as_ref()
+                    .and_then(|g| g.members.get(&bot_user_id))
+                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+                    .unwrap_or_else(|| ctx.cache().current_user().name.clone());
+                (
+                    GuildId::from(c.guild_id.get()),
+                    ChannelId::from(c.id.get()),
+                    c.name.clone(),
+                    bot_name,
+                    DiscordUserId::from(bot_user_id.get().to_string()),
+                )
+            }
             None => {
                 let guild = ctx.guild().ok_or_else(|| {
                     Error::Other("This command must be used in a server.".to_string())
@@ -37,10 +48,17 @@ pub async fn join(
                     .get(&serenity_cid)
                     .map(|c| c.name.clone())
                     .unwrap_or_else(|| serenity_cid.to_string());
+                let bot_name = guild
+                    .members
+                    .get(&bot_user_id)
+                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+                    .unwrap_or_else(|| ctx.cache().current_user().name.clone());
                 (
                     GuildId::from(guild.id.get()),
                     ChannelId::from(serenity_cid.get()),
                     name,
+                    bot_name,
+                    DiscordUserId::from(bot_user_id.get().to_string()),
                 )
             }
         }
@@ -51,6 +69,22 @@ pub async fn join(
         .audio_engine
         .join(guild_id, channel_id)
         .await?;
+
+    let queue_name: QueueName = format!("temp-alert-{}", uuid::Uuid::new_v4()).into();
+    let _ = ctx
+        .data()
+        .service
+        .audio_engine
+        .play(
+            guild_id,
+            channel_id,
+            queue_name,
+            TapName::from("google".to_string()),
+            AudioRequestString::from(format!("{bot_name} 등장")),
+            1.0.into(),
+            bot_discord_id,
+        )
+        .await;
 
     ctx.say(ui::messages::bot_joined(&channel_name)).await?;
     Ok(())

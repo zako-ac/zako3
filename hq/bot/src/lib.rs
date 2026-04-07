@@ -54,6 +54,7 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
 
     let voice_handler = events::VoiceStateHandler {
         voice_state_service: service.voice_state.clone(),
+        service: Arc::new(service.clone()),
     };
 
     let message_handler = events::MessageCreateHandler {
