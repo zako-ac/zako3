@@ -4,14 +4,13 @@ refer hq todo
 
 # Do Now
 - [x] Implement multiple AE
-
-- [ ] Implement text preprocessing
-- [ ] implement cache: max cache size, score-based cache eviction worker
 - [x] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [x] add reconnection logic
 - [x] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
 - [x] Add uptime and active users
 
+- [ ] Implement text preprocessing
+- [ ] implement cache: max cache size, score-based cache eviction worker
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -26,6 +25,9 @@ refer hq todo
 - [x] AE Hang on no join
 - [x] Add timeout to audio request
 - [x] verify_permission in TH handler.rs -> Add method in HQ RPC and use it to get user info.
+- [x] Gauge metrics reset on TH boot
+- [x] Add track finish to AE queue
+- [x] Add timeout to AE client
 
 - [ ] otel and prometheus and logging(promtail)
 - [ ] merge migrations
@@ -33,9 +35,6 @@ refer hq todo
 - [ ] implement ban
 
 - [ ] AE re-join on boot
-- [x] Gauge metrics reset on TH boot
-- [x] Add track finish to AE queue
-- [x] Add timeout to AE client
 - [ ] Add search API for tap (like youtube search)
 - [ ] Make TH connection ID (online count) tracking better
 - [ ] Make cache removation command

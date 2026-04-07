@@ -180,8 +180,8 @@ impl TapHub {
             state_service: app.tap_state_service.clone(),
             metrics_service: app.tap_metrics_service.clone(),
             app,
-            audio_preload: Arc::new(AudioPreload::new(cache_dir.clone())),
-            audio_cache: Arc::new(FileAudioCache::new(cache_dir)),
+            audio_preload: Arc::new(AudioPreload::new(cache_dir.clone(), None)),
+            audio_cache: Arc::new(FileAudioCache::new(cache_dir, None)),
             request_timeout: Duration::from_millis(request_timeout_ms),
             connection_signals,
         })

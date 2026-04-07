@@ -40,11 +40,12 @@ pub struct CacheEntry {
 
 pub struct AudioPreload {
     dir: PathBuf,
+    max_file_bytes: Option<u64>,
 }
 
 impl AudioPreload {
-    pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    pub fn new(dir: PathBuf, max_file_bytes: Option<u64>) -> Self {
+        Self { dir, max_file_bytes }
     }
 
     pub(crate) fn frame_path(&self, id: PreloadId) -> PathBuf {
@@ -60,7 +61,7 @@ impl AudioPreload {
     pub fn preload(&self, id: PreloadId, stream: mpsc::Receiver<Bytes>) {
         let frame_path = self.frame_path(id);
         let lock_path = self.lock_path(id);
-        tokio::spawn(write_task(frame_path, lock_path, stream));
+        tokio::spawn(write_task(frame_path, lock_path, stream, self.max_file_bytes));
     }
 
     /// Deletes the frame file and lock file for `id` if they exist.
@@ -90,12 +91,25 @@ async fn write_task(
     frame_path: PathBuf,
     lock_path: PathBuf,
     mut stream: mpsc::Receiver<Bytes>,
+    max_file_bytes: Option<u64>,
 ) {
     let result = async {
         let mut file = fs::File::create(&frame_path).await?;
         fs::File::create(&lock_path).await?;
 
+        let mut total_bytes: u64 = 0;
         while let Some(frame) = stream.recv().await {
+            total_bytes += 4 + frame.len() as u64;
+            if let Some(max) = max_file_bytes {
+                if total_bytes > max {
+                    warn!("preload exceeded max_file_bytes ({max}), dropping");
+                    drop(stream);
+                    return Err(io::Error::new(
+                        io::ErrorKind::FileTooLarge,
+                        "preload exceeded max_file_bytes",
+                    ));
+                }
+            }
             let len = frame.len() as u32;
             file.write_all(&len.to_le_bytes()).await?;
             file.write_all(&frame).await?;
@@ -252,11 +266,12 @@ pub trait AudioCache: Send + Sync {
 
 pub struct FileAudioCache {
     dir: PathBuf,
+    max_file_bytes: Option<u64>,
 }
 
 impl FileAudioCache {
-    pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    pub fn new(dir: PathBuf, max_file_bytes: Option<u64>) -> Self {
+        Self { dir, max_file_bytes }
     }
 
     /// Filename stem: `{tap_id}-{SHA-256(serde_json(key)) as hex}`
@@ -300,7 +315,18 @@ impl AudioCache for FileAudioCache {
 
         let result = async {
             let mut file = fs::File::create(&opus_path).await?;
+            let mut total_bytes: u64 = 0;
             while let Some(frame) = stream.recv().await {
+                total_bytes += 4 + frame.len() as u64;
+                if let Some(max) = self.max_file_bytes {
+                    if total_bytes > max {
+                        warn!(tap_id = %item.tap_id, "cache store exceeded max_file_bytes ({max}), dropping");
+                        return Err(io::Error::new(
+                            io::ErrorKind::FileTooLarge,
+                            "cache store exceeded max_file_bytes",
+                        ));
+                    }
+                }
                 let len = frame.len() as u32;
                 file.write_all(&len.to_le_bytes()).await?;
                 file.write_all(&frame).await?;
@@ -344,6 +370,18 @@ impl AudioCache for FileAudioCache {
         let stem = Self::cache_stem(&item.tap_id, &item.key);
         let dest_opus = self.opus_path(&stem);
         let dest_json = self.json_path(&stem);
+
+        if let Some(max) = self.max_file_bytes {
+            let size = fs::metadata(opus_path).await?.len();
+            if size > max {
+                warn!("store_from_path: file size {size} exceeds max_file_bytes {max}, dropping");
+                let _ = fs::remove_file(opus_path).await;
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    "audio file exceeds max_file_bytes",
+                ));
+            }
+        }
 
         // Try atomic rename first; fall back to copy+delete on cross-device error.
         if let Err(e) = fs::rename(opus_path, &dest_opus).await {
