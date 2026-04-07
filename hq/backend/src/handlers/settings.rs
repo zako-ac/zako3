@@ -1,5 +1,8 @@
 use crate::middleware::auth::AuthUser;
-use axum::{Json, extract::{Path, State}};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use hq_core::{CoreError, Service};
 use hq_types::hq::settings::PartialUserSettings;
 use std::sync::Arc;
@@ -23,7 +26,6 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     params(("guild_id" = String, Path, description = "Discord guild ID")),
     responses(
         (status = 200, description = "Guild-wide settings", body = PartialUserSettings),
-        (status = 404, description = "No guild settings configured")
     ),
     security(
         ("bearer_auth" = [])
@@ -39,7 +41,8 @@ pub async fn get_guild_settings(
         .get_guild_settings(&guild_id)
         .await
         .map_err(map_error)?
-        .ok_or_else(|| (axum::http::StatusCode::NOT_FOUND, "No settings configured for this guild".into()))?;
+        .unwrap_or_default();
+
     Ok(Json(settings))
 }
 
@@ -76,7 +79,6 @@ pub async fn update_guild_settings(
     path = "/api/v1/settings/global",
     responses(
         (status = 200, description = "Global settings baseline", body = PartialUserSettings),
-        (status = 404, description = "No global settings configured")
     ),
     security(
         ("bearer_auth" = [])
@@ -91,7 +93,8 @@ pub async fn get_global_settings(
         .get_global_settings()
         .await
         .map_err(map_error)?
-        .ok_or_else(|| (axum::http::StatusCode::NOT_FOUND, "No global settings configured".into()))?;
+        .unwrap_or_default();
+
     Ok(Json(settings))
 }
 

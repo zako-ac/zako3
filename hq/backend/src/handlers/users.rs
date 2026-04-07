@@ -1,8 +1,11 @@
 use crate::middleware::auth::AuthUser;
-use axum::{Json, extract::{Path, Query, State}};
+use axum::{
+    extract::{Path, Query, State},
+    Json,
+};
 use hq_core::{CoreError, Service};
-use hq_types::hq::{AuthUserDto, PaginatedResponseDto, TapWithAccessDto};
 use hq_types::hq::settings::{PartialUserSettings, UserSettings};
+use hq_types::hq::{AuthUserDto, PaginatedResponseDto, TapWithAccessDto};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -115,7 +118,6 @@ pub async fn update_my_settings(
     params(("guild_id" = String, Path, description = "Discord guild ID")),
     responses(
         (status = 200, description = "Guild-user settings override", body = PartialUserSettings),
-        (status = 404, description = "No override set for this guild")
     ),
     security(
         ("bearer_auth" = [])
@@ -131,7 +133,8 @@ pub async fn get_my_guild_settings(
         .get_guild_user_settings(&user_id, &guild_id)
         .await
         .map_err(map_error)?
-        .ok_or_else(|| (axum::http::StatusCode::NOT_FOUND, "No settings override for this guild".into()))?;
+        .unwrap_or_default();
+
     Ok(Json(settings))
 }
 

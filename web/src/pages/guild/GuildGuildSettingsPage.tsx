@@ -26,7 +26,7 @@ export const GuildGuildSettingsPage = () => {
 
     return (
         <>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm mb-4">
                 {canManage
                     ? t('guilds.settings.guildSettingsDescription')
                     : t('guilds.settings.guildSettingsNoPermission')}

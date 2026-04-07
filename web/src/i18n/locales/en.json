@@ -345,7 +345,7 @@
       "emojiMappingsDescription": "Replace Discord emoji with custom text when reading messages aloud.",
       "emojiName": "Emoji Name",
       "enableTtsQueue": "TTS Queue",
-      "enableTtsQueueDescription": "Queue TTS messages instead of interrupting the current one.",
+      "enableTtsQueueDescription": "Queue TTS messages instead of simultaneously playing with the current one.",
       "joinLeaveAlert": "Join/Leave Alert",
       "joinLeaveAlertAuto": "Auto",
       "joinLeaveAlertCustom": "Custom messages",

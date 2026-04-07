@@ -273,13 +273,13 @@
     "guilds": {
       "settings": {
         "action": "서버 설정",
-        "guildSettings": "",
-        "guildSettingsDescription": "",
-        "guildSettingsNoPermission": "",
-        "mySettings": "",
-        "mySettingsDescription": "",
-        "resetSuccess": "",
-        "resetToDefault": "",
+        "guildSettings": "서버 설정",
+        "guildSettingsDescription": "서버 설정을 관리합니다. 여기에는 입장/퇴장 알림, TTS 음성, 언어 등이 포함됩니다.",
+        "guildSettingsNoPermission": "이 서버의 설정을 관리할 권한이 없습니다.",
+        "mySettings": "내 설정",
+        "mySettingsDescription": "이 서버에서 내 개인 설정을 관리합니다. 여기에는 입장/퇴장 알림, TTS 음성, 언어 등이 포함됩니다.",
+        "resetSuccess": "설정이 기본값으로 재설정되었습니다.",
+        "resetToDefault": "기본값으로 재설정",
         "title": "서버 설정"
       }
     },
@@ -344,7 +344,7 @@
       "emojiMappingsDescription": "Discord 이모지를 어떻게 읽는지 정합니다.",
       "emojiName": "이모지 이름",
       "enableTtsQueue": "TTS 대기열",
-      "enableTtsQueueDescription": "현재 TTS를 중단하는 대신 메시지를 대기열에 추가합니다.",
+      "enableTtsQueueDescription": "현재 TTS와 동시에 재생하는 대신 메시지를 대기열에 추가합니다.",
       "joinLeaveAlert": "입장/퇴장 알림",
       "joinLeaveAlertAuto": "자동",
       "joinLeaveAlertCustom": "사용자 정의 메시지",

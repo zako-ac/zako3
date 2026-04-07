@@ -29,7 +29,7 @@ export const GuildMySettingsPage = () => {
 
     return (
         <>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm mb-4">
                 {t('guilds.settings.mySettingsDescription')}
             </p>
             {isLoading ? (

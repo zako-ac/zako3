@@ -12,9 +12,9 @@
 - `/stop [queue]` - Stop (default: music)
 - `/skip [queue]` - Skip current track (default: music)
 
-- `/queue music` - Show music queue
-- `/queue web` - Show queue on web interface
-- `/clear [queue]` - Clear queue (default: music)
+- `/queue music` `/대기열 음악` - Show music queue
+- `/queue web` `/대기열 열기` - Show queue on web interface
+- `/clear [queue]` `/클리어` - Clear queue (default: music)
 
 - `/volume [queue]` - Set volume of current track in queue (default: music)
 

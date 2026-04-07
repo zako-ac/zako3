@@ -135,9 +135,7 @@ export const GuildSettingsPage = () => {
                     <TabsTrigger value="guild-settings">{t('guilds.settings.guildSettings')}</TabsTrigger>
                 </TabsList>
 
-                <div className="mt-6">
-                    <Outlet context={outletContext} />
-                </div>
+                <Outlet context={outletContext} />
             </Tabs>
         </div>
     )

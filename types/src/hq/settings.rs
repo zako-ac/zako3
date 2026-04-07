@@ -47,9 +47,10 @@ pub enum UserJoinLeaveAlert {
 /// A settings field at a specific scope. `None` means "not configured at this scope".
 /// `Important` reverses cascade priority — less-specific scopes with `Important` beat
 /// more-specific scopes with `Normal`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum UserSettingsField<T> {
+    #[default]
     None,
     Normal(T),
     Important(T),
@@ -58,7 +59,7 @@ pub enum UserSettingsField<T> {
 /// Partial (per-scope) settings. Each field is `None` if not configured at this scope.
 /// Use `PartialUserSettings::fold` to merge two scopes, and `resolve` to get the
 /// final concrete `UserSettings`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 pub struct PartialUserSettings {
     pub text_mappings: UserSettingsField<Vec<TextMappingRule>>,
     pub emoji_mappings: UserSettingsField<Vec<EmojiMappingRule>>,
@@ -75,7 +76,10 @@ pub struct PartialUserSettings {
 /// - `less` is `Important(y)` → `Important(y)` (admin override wins regardless)
 /// - `more` is `None`         → take `less` as-is
 /// - otherwise                → take `more` as-is
-fn fold_field<T: Clone>(more: &UserSettingsField<T>, less: &UserSettingsField<T>) -> UserSettingsField<T> {
+fn fold_field<T: Clone>(
+    more: &UserSettingsField<T>,
+    less: &UserSettingsField<T>,
+) -> UserSettingsField<T> {
     match (more, less) {
         (_, UserSettingsField::Important(y)) => UserSettingsField::Important(y.clone()),
         (UserSettingsField::None, less) => less.clone(),
@@ -121,7 +125,10 @@ where
         (UserSettingsField::Normal(_), _) => (entries(more), entries(less), false),
     };
 
-    if matches!((more, less), (UserSettingsField::None, UserSettingsField::None)) {
+    if matches!(
+        (more, less),
+        (UserSettingsField::None, UserSettingsField::None)
+    ) {
         return UserSettingsField::None;
     }
 

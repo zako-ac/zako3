@@ -111,6 +111,11 @@ export const AdminSidebar = () => {
             ],
         },
         {
+            title: t('nav.settings'),
+            url: ROUTES.ADMIN_SETTINGS,
+            icon: Settings,
+        },
+        {
             title: 'Grafana',
             url: 'https://grafana.zako.ac',
             icon: ExternalLink,
