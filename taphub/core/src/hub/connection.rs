@@ -1,32 +1,21 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
-
 use async_trait::async_trait;
-use parking_lot::Mutex;
 use tokio::sync::watch;
-use zako3_types::{OnlineTapState, hq::TapId};
 use zakofish::{
-    ZakofishError, create_server_config,
-    hub::{HubHandler, ZakofishHub},
+    hub::HubHandler,
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
+use zako3_types::{OnlineTapState, hq::TapId};
 
-use zako3_preload_cache::{AudioPreload, FileAudioCache};
-
-use crate::{app::App, routing::DynamicSampler};
+use crate::app::App;
 use zako3_states::{TapHubStateService, TapMetricsStateService};
 
-pub(crate) type ConnectionSignals = Arc<Mutex<HashMap<u64, watch::Sender<bool>>>>;
+use super::ConnectionSignals;
 
 pub struct TapHubConnectionHandler {
-    app: App,
-    state_service: TapHubStateService,
-    metrics_service: TapMetricsStateService,
-    connection_signals: ConnectionSignals,
+    pub(super) app: App,
+    pub(super) state_service: TapHubStateService,
+    pub(super) metrics_service: TapMetricsStateService,
+    pub(super) connection_signals: ConnectionSignals,
 }
 
 #[async_trait]
@@ -131,67 +120,5 @@ impl HubHandler for TapHubConnectionHandler {
         {
             tracing::warn!(%e, "error while setting tap connection state");
         }
-    }
-}
-
-pub struct TapHub {
-    pub zf_hub: ZakofishHub,
-    pub sampler: Arc<Mutex<DynamicSampler>>,
-    pub state_service: TapHubStateService,
-    pub metrics_service: TapMetricsStateService,
-    pub app: App,
-    pub audio_preload: Arc<AudioPreload>,
-    pub audio_cache: Arc<FileAudioCache>,
-    pub request_timeout: Duration,
-    pub(crate) connection_signals: ConnectionSignals,
-}
-
-impl TapHub {
-    pub async fn new(
-        app: App,
-        bind_address: &str,
-        cert_file: impl AsRef<Path>,
-        key_file: impl AsRef<Path>,
-        cache_dir: PathBuf,
-        request_timeout_ms: u64,
-    ) -> Result<Self, ZakofishError> {
-        let server_config = create_server_config(
-            bind_address.parse().map_err(|_| {
-                ZakofishError::ProtocolError("Invalid bind address is provided".to_string())
-            })?,
-            cert_file,
-            key_file,
-        )?;
-
-        let connection_signals: ConnectionSignals = Arc::new(Mutex::new(HashMap::new()));
-
-        let handler = TapHubConnectionHandler {
-            app: app.clone(),
-            state_service: app.tap_state_service.clone(),
-            metrics_service: app.tap_metrics_service.clone(),
-            connection_signals: Arc::clone(&connection_signals),
-        };
-
-        let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
-
-        let audio_cache = FileAudioCache::open(cache_dir.clone(), None)
-            .await
-            .map_err(|e| ZakofishError::ProtocolError(e.to_string()))?;
-
-        Ok(Self {
-            zf_hub,
-            sampler: Arc::new(Mutex::new(DynamicSampler::new())),
-            state_service: app.tap_state_service.clone(),
-            metrics_service: app.tap_metrics_service.clone(),
-            app,
-            audio_preload: Arc::new(AudioPreload::new(cache_dir, None)),
-            audio_cache: Arc::new(audio_cache),
-            request_timeout: Duration::from_millis(request_timeout_ms),
-            connection_signals,
-        })
-    }
-
-    pub async fn run(&self) -> Result<(), ZakofishError> {
-        self.zf_hub.run().await
     }
 }

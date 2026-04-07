@@ -8,10 +8,10 @@ refer hq todo
 - [x] add reconnection logic
 - [x] Add redirect in OAuth2 URL, so user can login and then be redirected to the page they were trying to access before login instead of always being redirected to dashboard.
 - [x] Add uptime and active users
+- [x] refactor TH
 
 - [ ] Implement text preprocessing
 - [ ] implement cache: max cache size, score-based cache eviction worker
-- [ ] refactor TH
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -43,6 +43,7 @@ refer hq todo
 - [ ] Make cache removation command
 - [x] Add base volume for tap
 - [ ] AR PArameters
+- [ ] emoji matching service
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

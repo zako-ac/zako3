@@ -3,7 +3,7 @@ pub mod config;
 mod handler;
 pub mod hub;
 pub mod repository;
-pub mod transport;
+pub mod stub;
 
 pub mod infra;
 
