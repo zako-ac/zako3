@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
 
     let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager));
-    let state_service = Arc::new(RedisStateService::new(&config.redis_url)?);
+    let state_service = Arc::new(RedisStateService::new(&config.redis_url).await?);
 
     let session_manager = Arc::new(SessionManager::new(
         discord_service,

@@ -7,13 +7,14 @@ use zako3_audio_engine_core::{
 };
 
 pub struct RedisStateService {
-    client: redis::Client,
+    conn: redis::aio::MultiplexedConnection,
 }
 
 impl RedisStateService {
-    pub fn new(redis_url: &str) -> ZakoResult<Self> {
+    pub async fn new(redis_url: &str) -> ZakoResult<Self> {
         let client = redis::Client::open(redis_url)?;
-        Ok(Self { client })
+        let conn = client.get_multiplexed_async_connection().await?;
+        Ok(Self { conn })
     }
 
     fn get_key(guild_id: GuildId) -> String {
@@ -25,7 +26,7 @@ impl RedisStateService {
 #[async_trait]
 impl StateService for RedisStateService {
     async fn get_session(&self, guild_id: GuildId) -> ZakoResult<Option<SessionState>> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.clone();
         let key = Self::get_key(guild_id);
         let data: Option<String> = conn.get(key).await?;
 
@@ -39,7 +40,7 @@ impl StateService for RedisStateService {
     }
 
     async fn save_session(&self, session: &SessionState) -> ZakoResult<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.clone();
         let key = Self::get_key(session.guild_id);
         let json = serde_json::to_string(session)?;
         let _: () = conn.set(key, json).await?;
@@ -47,7 +48,7 @@ impl StateService for RedisStateService {
     }
 
     async fn delete_session(&self, guild_id: GuildId) -> ZakoResult<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.clone();
         let key = Self::get_key(guild_id);
         let _: () = conn.del(key).await?;
         Ok(())

@@ -41,7 +41,8 @@ refer hq todo
 - [ ] Add search API for tap (like youtube search)
 - [ ] Make TH connection ID (online count) tracking better
 - [ ] Make cache removation command
-- [ ] Add base volume for tap
+- [x] Add base volume for tap
+- [ ] AR PArameters
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

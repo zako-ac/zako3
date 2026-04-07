@@ -4,6 +4,15 @@ use zako3_types::{AudioCachePolicy, AudioMetadata, AudioRequestString, hq::TapId
 use crate::types::HubRejectReasonType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum AttachedMetadata {
+    #[serde(rename = "use_cached")]
+    UseCached,
+    #[serde(rename = "metadatas")]
+    Metadatas(Vec<AudioMetadata>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioRequestMessage {
     pub ars: AudioRequestString,
     #[serde(default)]
@@ -21,7 +30,7 @@ pub struct AudioMetadataRequestMessage {
 pub struct AudioRequestSuccessMessage {
     pub cache: AudioCachePolicy,
     pub duration_secs: Option<f32>,
-    pub metadatas: Vec<AudioMetadata>,
+    pub metadatas: AttachedMetadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

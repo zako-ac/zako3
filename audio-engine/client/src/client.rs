@@ -1,4 +1,5 @@
 use async_nats::Client;
+use std::time::Duration;
 
 use zako3_audio_engine_core::types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
@@ -23,7 +24,12 @@ impl AudioEngineRpcClient {
         request: AudioEngineRequest,
     ) -> anyhow::Result<AudioEngineResponse> {
         let payload = serde_json::to_vec(&request)?;
-        let msg = self.client.request(subject.to_string(), payload.into()).await?;
+        let msg = tokio::time::timeout(
+            Duration::from_secs(10),
+            self.client.request(subject.to_string(), payload.into()),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("audio engine request timed out"))??;
         Ok(serde_json::from_slice(&msg.payload)?)
     }
 
