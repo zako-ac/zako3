@@ -11,19 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
 import { ROUTES } from '@/lib/constants'
 
 export const LoginPage = () => {
   const { t } = useTranslation()
   const location = useLocation()
-  const { mutate: login, isPending } = useLogin()
+  const login = useLogin()
 
   const from = (location.state as { from?: Location })?.from?.pathname
-
-  const handleLogin = () => {
-    login()
-  }
 
   return (
     <Card className="w-full max-w-md">
@@ -40,14 +35,9 @@ export const LoginPage = () => {
         <Button
           className="w-full gap-2"
           size="lg"
-          onClick={handleLogin}
-          disabled={isPending}
+          onClick={() => login(from)}
         >
-          {isPending ? (
-            <Spinner className="h-4 w-4" />
-          ) : (
-            <DiscordIcon className="h-5 w-5" />
-          )}
+          <DiscordIcon className="h-5 w-5" />
           {t('auth.continueWithDiscord')}
         </Button>
 

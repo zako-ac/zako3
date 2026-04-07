@@ -6,7 +6,7 @@ export const createUser = (overrides?: Partial<User>): User => {
     const updatedAt = faker.date.between({ from: createdAt, to: new Date() })
 
     return {
-        id: faker.string.uuid(),
+        id: faker.string.numeric(18),
         discordId: faker.string.numeric(18),
         username: "mincomk",
         avatar: "https://cdn.discordapp.com/avatars/700624937236561950/582e291f8269919dd710f41effe0020a.png?size=1024",

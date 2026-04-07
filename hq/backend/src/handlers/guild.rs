@@ -1,0 +1,78 @@
+use axum::{
+    extract::State,
+    http::StatusCode,
+    Json,
+};
+use hq_core::Service;
+use hq_types::hq::guild::GuildSummaryDto;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use crate::middleware::auth::AuthUser;
+
+fn map_error(e: hq_core::CoreError) -> (StatusCode, String) {
+    match e {
+        hq_core::CoreError::NotFound(_) => (StatusCode::NOT_FOUND, e.to_string()),
+        hq_core::CoreError::InvalidInput(_) => (StatusCode::BAD_REQUEST, e.to_string()),
+        hq_core::CoreError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, e.to_string()),
+        hq_core::CoreError::Forbidden(_) => (StatusCode::FORBIDDEN, e.to_string()),
+        hq_core::CoreError::Conflict(_) => (StatusCode::CONFLICT, e.to_string()),
+        _ => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/guilds/me",
+    responses(
+        (status = 200, description = "Guilds where user is a member and bot is present", body = Vec<GuildSummaryDto>)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn get_my_guilds(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<Vec<GuildSummaryDto>>, (StatusCode, String)> {
+    let user = service
+        .auth
+        .get_user(&user_id.to_string())
+        .await
+        .map_err(map_error)?;
+
+    let discord_id_str = user.discord_id;
+    let discord_id: u64 = discord_id_str.parse()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "invalid discord id".into()))?;
+
+    let resolver = service.name_resolver_slot.get();
+    let guild_infos = resolver
+        .map(|r| r.guilds_for_user(discord_id))
+        .unwrap_or_default();
+
+    let voice_channels = service
+        .voice_state
+        .get_user_channels(&discord_id_str)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let voice_map: HashMap<u64, _> = voice_channels
+        .into_iter()
+        .map(|loc| (loc.guild_id, loc))
+        .collect();
+
+    let dtos = guild_infos
+        .into_iter()
+        .map(|g| {
+            let vc = voice_map.get(&g.id);
+            GuildSummaryDto {
+                guild_id: g.id.to_string(),
+                guild_name: g.name,
+                guild_icon_url: g.icon_url,
+                active_channel_id: vc.map(|v| v.channel_id.to_string()),
+                active_channel_name: vc.map(|v| v.channel_name.clone()),
+                can_manage: g.can_manage,
+            }
+        })
+        .collect();
+
+    Ok(Json(dtos))
+}

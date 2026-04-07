@@ -41,7 +41,6 @@ const preview: Preview = {
             toolbar: {
                 icon: 'circlehollow',
                 items: ['light', 'dark'],
-                showName: true,
             },
         },
     },

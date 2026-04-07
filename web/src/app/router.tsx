@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { RootLayout, AppLayout, AdminLayout, AuthLayout } from '@/layouts'
+import { RootLayout, AppLayout, AdminLayout, AuthLayout, TapLayout } from '@/layouts'
 import { AuthGuard, AdminGuard, GuestGuard } from '@/features/auth'
 import {
   LoginPage,
@@ -10,6 +10,8 @@ import {
   CreateTapPage,
   TapSettingsPage,
   TapStatsPage,
+  TapApiKeysPage,
+  TapVerificationPage,
   SettingsPage,
   AdminDashboardPage,
   AdminUsersPage,
@@ -18,6 +20,13 @@ import {
   AdminTapDetailPage,
   AdminNotificationsPage,
   AdminVerificationsPage,
+  AdminGlobalSettingsPage,
+  AdminMappersPage,
+  AdminMappersPipelinePage,
+  VoiceChannelPage,
+  GuildSettingsPage,
+  GuildMySettingsPage,
+  GuildGuildSettingsPage,
 } from '@/pages'
 import { HotkeyTest } from '@/pages/hotkey-test'
 import { ROUTES } from '@/lib/constants'
@@ -42,7 +51,9 @@ export const AppRouter = () => {
         {/* Public app routes */}
         <Route element={<AppLayout />}>
           <Route path={ROUTES.TAPS} element={<TapExplorePage />} />
-          <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
+          <Route element={<TapLayout />}>
+            <Route path="/taps/:tapId/stats" element={<TapStatsPage />} />
+          </Route>
         </Route>
 
         {/* App routes (authenticated) */}
@@ -57,7 +68,17 @@ export const AppRouter = () => {
           <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
           <Route path={ROUTES.TAPS_MINE} element={<MyTapsPage />} />
           <Route path={ROUTES.TAPS_CREATE} element={<CreateTapPage />} />
-          <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
+          <Route path="/voice/:guildId/:channelId" element={<VoiceChannelPage />} />
+          <Route path="/guilds/:guildId/settings" element={<GuildSettingsPage />}>
+            <Route index element={<Navigate to="me" replace />} />
+            <Route path="me" element={<GuildMySettingsPage />} />
+            <Route path="guild" element={<GuildGuildSettingsPage />} />
+          </Route>
+          <Route element={<TapLayout />}>
+            <Route path="/taps/:tapId/settings" element={<TapSettingsPage />} />
+            <Route path="/taps/:tapId/api-keys" element={<TapApiKeysPage />} />
+            <Route path="/taps/:tapId/verification" element={<TapVerificationPage />} />
+          </Route>
         </Route>
 
         {/* Admin routes */}
@@ -83,6 +104,15 @@ export const AppRouter = () => {
           <Route
             path={ROUTES.ADMIN_VERIFICATIONS}
             element={<AdminVerificationsPage />}
+          />
+          <Route
+            path={ROUTES.ADMIN_SETTINGS}
+            element={<AdminGlobalSettingsPage />}
+          />
+          <Route path={ROUTES.ADMIN_MAPPERS} element={<AdminMappersPage />} />
+          <Route
+            path={ROUTES.ADMIN_MAPPERS_PIPELINE}
+            element={<AdminMappersPipelinePage />}
           />
         </Route>
 

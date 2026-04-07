@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     engine::session_manager::SessionManager,
     service::{discord::MockDiscordService, state::MockStateService, taphub::MockTapHubService},
-    types::{ChannelId, GuildId},
+    types::{ChannelId, GuildId, SessionState},
 };
 use mockall::predicate::*;
 
@@ -77,4 +77,34 @@ async fn test_session_manager_leave() {
 
     let res = manager.leave(guild_id).await;
     assert!(res.is_ok());
+}
+
+#[tokio::test]
+async fn test_session_manager_get_sessions_in_guild() {
+    let guild_id = GuildId::from(3);
+    let session = SessionState {
+        guild_id,
+        channel_id: ChannelId::from(300),
+        queues: Default::default(),
+    };
+
+    let mock_discord = MockDiscordService::new();
+    let mut mock_state = MockStateService::new();
+    let mock_taphub = MockTapHubService::new();
+
+    mock_state
+        .expect_list_sessions_in_guild()
+        .with(eq(guild_id))
+        .times(1)
+        .returning(move |_| Ok(vec![session.clone()]));
+
+    let manager = SessionManager::new(
+        Arc::new(mock_discord),
+        Arc::new(mock_state),
+        Arc::new(mock_taphub),
+    );
+
+    let res = manager.get_sessions_in_guild(guild_id).await;
+    assert!(res.is_ok());
+    assert_eq!(res.unwrap().len(), 1);
 }

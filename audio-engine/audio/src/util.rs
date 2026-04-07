@@ -1,9 +1,13 @@
 use ringbuf::{HeapRb, traits::Split};
 
-use crate::{RINGBUFFER_SIZE, RingCons, RingProd};
+use crate::{OpusCons, OpusProd, RINGBUFFER_SIZE, RingCons, RingProd};
 
 pub fn create_ringbuf_pair() -> (RingProd, RingCons) {
     HeapRb::new(RINGBUFFER_SIZE).split()
+}
+
+pub fn create_opus_ringbuf_pair() -> (OpusProd, OpusCons) {
+    HeapRb::new(400).split()
 }
 
 pub fn async_to_sync_read<T>(async_read: T) -> std::io::Result<impl std::io::Read>
@@ -20,11 +24,8 @@ where
             match tokio::io::AsyncReadExt::read(&mut async_read, &mut buffer).await {
                 Ok(0) => break, // EOF
                 Ok(n) => {
-                    match std::io::Write::write_all(&mut writer, &buffer[..n]).is_err() {
-                        true => {
-                            break; // Pipe closed
-                        }
-                        false => (),
+                    if std::io::Write::write_all(&mut writer, &buffer[..n]).is_err() {
+                        break; // pipe closed
                     }
                 }
                 Err(_) => break, // Read error

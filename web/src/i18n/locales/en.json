@@ -9,6 +9,106 @@
       },
       "dashboard": "Dashboard",
       "dashboardSubtitle": "Here's an overview of the system.",
+      "globalSettings": {
+        "description": "",
+        "title": ""
+      },
+      "mappers": {
+        "cancel": "Cancel",
+        "createError": "Failed to create mapper",
+        "createSuccess": "Mapper created",
+        "deleteConfirm": "Delete mapper \"{{id}}\"? This cannot be undone.",
+        "deleteError": "Failed to delete mapper",
+        "deleteSuccess": "Mapper deleted",
+        "dropzone": {
+          "hint": ".wasm files only",
+          "label": "Drag to upload",
+          "selected": "Selected: {{name}} ({{size}} KB)",
+          "sublabel": "or click to select"
+        },
+        "editFormTitle": "Edit Mapper: {{id}}",
+        "fileLabel": "File",
+        "id": "ID",
+        "idDescription": "Unique identifier — used as the WASM filename ({{id}}.wasm)",
+        "idPlaceholder": "e.g. lowercase",
+        "inputData": "Input Data",
+        "inputDataBadges": {
+          "callerInfo": "Caller Info",
+          "discordInfo": "Discord Info",
+          "mapperList": "Mapper List",
+          "mappingList": "Mappings"
+        },
+        "inputDataOptions": {
+          "callerInfo": "Caller Info",
+          "callerInfoDescription": "Discord user ID of TTS requester",
+          "discordInfo": "Discord Info",
+          "discordInfoDescription": "Guild/channel data from Discord",
+          "mapperList": "Mapper List",
+          "mapperListDescription": "Pipeline history and upcoming mappers",
+          "mappingList": "Mapping List",
+          "mappingListDescription": "Text and emoji replacement rules"
+        },
+        "loading": "Loading mappers…",
+        "name": "Name",
+        "namePlaceholder": "e.g. Lowercase Converter",
+        "noInputData": "No input data",
+        "noMappers": "No mappers registered. Upload a WASM mapper to get started.",
+        "pipeline": {
+          "active": "Active",
+          "addToPipeline": "Add to pipeline",
+          "allActive": "All mappers are active",
+          "backToMappers": "Back to Mappers",
+          "evaluate": {
+            "description": "Runs the current pipeline order (including unsaved changes) on your input text. Each mapper's transformation is shown step by step.",
+            "failed": "Evaluation failed",
+            "finalOutput": "Final Output",
+            "inputLabel": "Input Text",
+            "inputPlaceholder": "Enter text to run through the pipeline…",
+            "noActiveMappers": "(no active mappers)",
+            "noSteps": "No mappers ran — the pipeline is empty or no mappers matched.",
+            "run": "Run",
+            "running": "Running…",
+            "stepChanged": "changed",
+            "stepEmpty": "(empty)",
+            "stepInput": "Input",
+            "stepOutput": "Output",
+            "title": "Evaluate Pipeline"
+          },
+          "inactive": "Inactive",
+          "noActive": "No active mappers",
+          "pipelineOrder": "Pipeline Order",
+          "pipelineOrderSubtitle": "Active mappers execute in order from top to bottom.",
+          "removeFromPipeline": "Remove from pipeline",
+          "reset": "Reset",
+          "saveError": "Failed to save pipeline",
+          "savePipeline": "Save Pipeline",
+          "saveSuccess": "Pipeline saved",
+          "saving": "Saving…",
+          "subtitle": "Configure which mappers are active and their execution order.",
+          "title": "Mapper Pipeline"
+        },
+        "pipelineButton": "Pipeline",
+        "save": "Save",
+        "saving": "Saving…",
+        "subtitle": "Register and manage WASM text transformation mappers.",
+        "test": {
+          "failed": "Test run failed",
+          "inputLabel": "Test Input",
+          "inputPlaceholder": "Enter text to transform…",
+          "run": "Run Test",
+          "running": "Running…"
+        },
+        "testMapper": "Test this mapper",
+        "title": "Mapper Management",
+        "updateError": "Failed to update mapper",
+        "updateSuccess": "Mapper updated",
+        "upload": "Upload",
+        "uploadButton": "Upload Mapper",
+        "uploadFormTitle": "Upload New Mapper",
+        "uploading": "Uploading…",
+        "wasmFile": "WASM File",
+        "wasmFileOptional": "(optional — keep existing)"
+      },
       "noRecentActivity": "No recent activity.",
       "notifications": {
         "subtitle": "Manage system notifications",
@@ -27,55 +127,44 @@
         "totalUsers": "Total Users"
       },
       "taps": {
-        "occupations": {
-            "verified": "Verified",
-            "official": "Official",
-            "base": "Base"
-        },
-        "permissions": {
-            "public": "Public",
-            "blacklisted": "Blacklisted Users",
-            "whitelisted": "Whitelisted Users",
-            "owner_only": "Owner Only"
-        },
         "actions": {
-          "delete": ""
+          "delete": "Delete"
         },
         "deleteConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to delete the tap {{name}}? This action cannot be undone.",
+          "title": "Delete Tap"
         },
-        "deleteSuccess": "",
-        "information": "",
-        "manageTap": "",
-        "owner": "",
+        "deleteSuccess": "Tap deleted successfully.",
+        "information": "Information",
+        "manageTap": "Manage Tap",
+        "owner": "Owner",
         "subtitle": "Manage all taps in the system",
         "tapDetails": "Tap Details",
-        "title": "Taps"
+        "title": "Taps",
+        "updateSuccess": ""
       },
       "users": {
         "actions": {
-          "ban": "",
-          "makeAdmin": "",
-          "removeAdmin": "",
-          "unban": ""
+          "ban": "Ban",
+          "makeAdmin": "Make Admin",
+          "removeAdmin": "Remove Admin",
+          "unban": "Unban"
         },
         "ban": "Ban",
         "banConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to ban user {{username}}? They will not be able to log in.",
+          "title": "Confirm Ban"
         },
-        "banConfirmDescription": "Are you sure you want to ban this user? They will not be able to log in.",
-        "banConfirmTitle": "Confirm Ban",
+        "banned": "Banned",
         "banSuccess": "User has been banned.",
-        "createdAt": "",
+        "createdAt": "Created At",
         "email": "Email",
         "grantedAdminRole": "Granted admin role.",
         "lastActive": "Last Active",
         "makeAdmin": "Make Admin",
         "makeAdminConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to grant admin role to user {{username}}? They will have full access to the admin panel.",
+          "title": "Confirm Make Admin"
         },
         "manageUser": "",
         "noTaps": "",
@@ -84,13 +173,13 @@
         "profile": "",
         "removeAdmin": "Remove Admin",
         "removeAdminConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to remove admin role from user {{username}}? They will lose access to the admin panel.",
+          "title": "Confirm Remove Admin"
         },
         "removedAdminRole": "Removed admin role.",
         "role": "Role",
         "roles": {
-          "admin": ""
+          "admin": "Admin"
         },
         "searchPlaceholder": "Search users...",
         "status": "Status",
@@ -98,35 +187,31 @@
         "title": "Users",
         "unban": "Unban",
         "unbanConfirm": {
-          "description": "",
-          "title": ""
+          "description": "Are you sure you want to unban user {{username}}? They will be able to log in again.",
+          "title": "Confirm Unban"
         },
-        "unbanConfirmDescription": "Are you sure you want to unban this user?",
-        "unbanConfirmTitle": "Confirm Unban",
         "unbanSuccess": "User has been unbanned.",
         "user": "User",
-        "userDetails": "",
-        "userId": ""
+        "userDetails": "User Details",
+        "userId": "User ID"
       },
       "verifications": {
         "approve": "Approve",
-        "approveConfirmDescription": "This will verify the tap \"{name}\". The owner will be notified.",
+        "approveConfirmDescription": "This will verify the tap {{name}}. The owner will be notified.",
         "approveConfirmTitle": "Approve Verification",
         "approveSuccess": "Verification approved successfully",
         "filterByStatus": "Filter by status",
         "noRequests": "No verification requests",
         "noRequestsDescription": "All verification requests have been reviewed",
-        "owner": "Owner",
-        "reason": "Reason",
         "reject": "Reject",
-        "rejectConfirmDescription": "Please provide a reason for rejecting \"{name}\".",
+        "rejectConfirmDescription": "Please provide a reason for rejecting {{name}}.",
         "rejectConfirmTitle": "Reject Verification",
         "rejectionReasonLabel": "Rejection Reason",
         "rejectionReasonPlaceholder": "Explain why this verification request is being rejected...",
         "rejectionReasonRequired": "Rejection reason is required",
         "rejectSuccess": "Verification rejected",
         "requestedAt": "Requested At",
-        "sidebarTitle": "",
+        "sidebarTitle": "Verification Requests",
         "status": "Status",
         "statusAll": "All",
         "statusApproved": "Approved",
@@ -135,10 +220,10 @@
         "subtitle": "Review and manage tap verification requests",
         "tapName": "Tap Name",
         "title": "Verification Requests",
-        "viewEvidence": "View Evidence"
+        "view": "View",
+        "viewDetails": "Verification Request Details"
       }
     },
-    "admin.users.status.banned": "",
     "auth": {
       "continueWithDiscord": "Continue with Discord",
       "loginRequired": "",
@@ -147,13 +232,14 @@
       "welcome": "Welcome"
     },
     "common": {
-      "actions": "",
-      "back": "",
+      "actions": "Actions",
+      "back": "Back",
       "cancel": "Cancel",
       "close": "Close",
       "confirm": "Confirm",
       "copied": "Copied to clipboard!",
-      "copyToClipboard": "Copy to clipboard",
+      "copy": "Copy to clipboard",
+      "copyIdToClipboard": "Copy ID to clipboard",
       "delete": "Delete",
       "loading": "Loading...",
       "role": "Role",
@@ -169,20 +255,34 @@
       "stats": {
         "acrossTaps": "Across all taps",
         "activeUsers": "Active Users",
-        "last24h": "Last 24 hours",
-        "lastMonth": "Last month",
         "myTaps": "My Taps",
         "tapsOwned": "Taps Owned",
         "totalUses": "Total Uses",
         "uptime": "Uptime"
       },
       "subtitle": "Welcome to your dashboard.",
+      "uses_one": "",
+      "uses_other": "",
       "welcome": "Welcome, {{name}}!"
     },
     "errors": {
       "ownerNotFound": "",
       "tapNotFound": "",
+      "updateFailed": "",
       "userNotFound": ""
+    },
+    "guilds": {
+      "settings": {
+        "action": "Guild Settings",
+        "guildSettings": "Guild Settings",
+        "guildSettingsDescription": "Manage settings for this guild, including TTS preferences and permissions.",
+        "guildSettingsNoPermission": "You don't have permission to manage this guild's settings.",
+        "mySettings": "My Settings",
+        "mySettingsDescription": "Manage your personal settings for this guild, such as TTS preferences.",
+        "resetSuccess": "Settings reset to default successfully.",
+        "resetToDefault": "Reset to Default",
+        "title": "Guild Settings"
+      }
     },
     "nav": {
       "admin": "Admin",
@@ -192,11 +292,15 @@
       "dashboard": "Dashboard",
       "explore": "Explore",
       "logout": "Logout",
+      "mappers": "Mappers",
+      "mappersManage": "Manage",
+      "mappersPipeline": "Pipeline",
       "myTaps": "My Taps",
       "notifications": "Notifications",
       "settings": "Settings",
       "taps": "Taps",
-      "users": "Users"
+      "users": "Users",
+      "verification": "Verification"
     },
     "notifications": {
       "all": "",
@@ -226,23 +330,76 @@
     "settings": {
       "account": "Account",
       "accountSubtitle": "Manage your account settings",
+      "addEmojiRule": "Add emoji rule",
+      "addRule": "Add rule",
       "appearance": "Appearance",
       "appearanceSubtitle": "Customize the look and feel",
+      "caseSensitive": "Case sensitive",
       "darkMode": "Dark Mode",
       "darkModeSubtitle": "Toggle dark mode on or off",
       "deleteAccount": "Delete Account",
       "deleteAccountWarning": "This will permanently delete your account and all associated data.",
+      "emojiId": "Emoji ID",
+      "emojiImageUrl": "Emoji Image URL",
+      "emojiMappings": "Emoji Replacements",
+      "emojiMappingsDescription": "Replace Discord emoji with custom text when reading messages aloud.",
+      "emojiName": "Emoji Name",
+      "enableTtsQueue": "TTS Queue",
+      "enableTtsQueueDescription": "Queue TTS messages instead of simultaneously playing with the current one.",
+      "joinLeaveAlert": "Join/Leave Alert",
+      "joinLeaveAlertAuto": "Auto",
+      "joinLeaveAlertCustom": "Custom messages",
+      "joinLeaveAlertJoinMessage": "Join message",
+      "joinLeaveAlertJoinMessagePlaceholder": "e.g. {{name}} has joined",
+      "joinLeaveAlertLeaveMessage": "Leave message",
+      "joinLeaveAlertLeaveMessagePlaceholder": "e.g. {{name}} has left",
+      "joinLeaveAlertOff": "Off",
+      "joinLeaveAlertTapsDescription": "You can use custom messages with {{name}} as a placeholder for the username.",
+      "joinLeaveAlertUsername": "Read as username",
+      "joinLeaveAlertUsernamePlaceholder": "e.g. StreamBot",
+      "joinLeaveAlertWithUsername": "With different username",
       "language": "Language",
       "languageSubtitle": "Select your preferred language",
+      "maxMessageLength": "Max Message Length",
+      "maxMessageLengthDescription": "Messages longer than this will be truncated before being read aloud (1–65535).",
+      "noRules": "No rules added yet.",
+      "noTapsDescription": "No TTS taps found. Try adjusting your search.",
       "notifications": "Notifications",
       "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
       "notificationsSubtitle": "Manage how you receive notifications",
+      "overriddenByUpstream": "",
+      "pattern": "Pattern",
       "profile": "Profile",
       "profileSubtitle": "Your personal information",
+      "replacement": "Replacement",
+      "save": "Save",
+      "saveError": "Failed to save settings. Please try again.",
+      "saveSuccess": "Settings saved successfully!",
+      "saving": "Saving...",
+      "scope": {
+        "important": "Important",
+        "none": "None",
+        "normal": "Normal"
+      },
+      "searchTaps": "Search taps...",
+      "selectTap": "Select a Voice Tap",
+      "selectTapDescription": "Choose a TTS tap to use as your voice.",
       "subtitle": "Manage your account settings and preferences",
-      "title": "Settings"
+      "textMappings": "Text Replacements",
+      "textMappingsDescription": "Replace words or phrases with custom text when reading messages aloud.",
+      "textReadingRule": "Read Messages",
+      "textReadingRuleAlways": "Always read messages aloud",
+      "textReadingRuleInVoiceChannel": "Only read messages aloud when I'm in a voice channel",
+      "textReadingRuleOnMicMute": "Only read messages aloud when my mic is muted",
+      "title": "Settings",
+      "tts": "TTS Settings",
+      "ttsQueue": "",
+      "ttsSubtitle": "Configure how your messages are read aloud.",
+      "ttsVoice": "TTS Voice",
+      "ttsVoiceNone": "None (use default)"
     },
     "taps": {
+      "activeCount": "{{value}} online",
       "create": "Create Tap",
       "createdAt": "",
       "createFirst": "Create your first Tap",
@@ -258,16 +415,15 @@
         "byRole": "By Role"
       },
       "form": {
-        "addBlacklistedUsers": "",
-        "addWhitelistedUsers": "",
-        "blacklistedUsers": "",
-        "blacklistedUsersHelp": "",
+        "addBlacklistedUsers": "Add Blacklisted Users",
+        "addWhitelistedUsers": "Add Whitelisted Users",
+        "baseVolume": "Base Volume",
+        "baseVolumeDescription": "Set a base volume for all messages from this tap (0-200%). This adjusts the volume of messages from this tap relative to your default TTS volume.",
+        "blacklistedUsers": "Blacklisted Users",
+        "blacklistedUsersHelp": "Select users who should be blocked from using this tap",
         "description": "Description",
         "descriptionPlaceholder": "Describe what this tap does...",
         "id": "Tap ID",
-        "idHelp": "Lowercase letters, numbers, underscores, and periods only",
-        "idPlaceholder": "my_awesome_tap",
-        "idWarning": "Changing the ID will change the tap's URL. Use with caution.",
         "name": "Name",
         "namePlaceholder": "My Awesome Tap",
         "permission": "Permission",
@@ -280,7 +436,22 @@
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
-      "permission": "",
+      "occupations": {
+        "base": "Base",
+        "official": "Official",
+        "verified": "Verified"
+      },
+      "permission": "Permission",
+      "permissions": {
+        "blacklisted": "Blacklist",
+        "owner_only": "Owner Only",
+        "public": "Public",
+        "whitelisted": "Whitelist"
+      },
+      "permissionsCard": {
+        "accessNo": "You don't have access",
+        "accessYes": "You have access"
+      },
       "report": {
         "description": "Why are you reporting this Tap?",
         "reason": "Reason",
@@ -293,8 +464,10 @@
         "tts": "Text-to-Speech"
       },
       "roles": {
-        "label": ""
+        "label": "Roles"
       },
+      "setAsMyVoice": "Set as my TTS voice",
+      "setAsMyVoiceUnavailable": "No TTS access",
       "settings": {
         "apiAccess": "API Access",
         "apiAccessDescription": "Manage API tokens for programmatic access to your tap",
@@ -336,6 +509,7 @@
         "tokenLastUsed": "Last used",
         "tokenNeverExpires": "Never expires",
         "tokenNeverUsed": "Never used",
+        "tokenOneTimeView": "This token will only be shown once. Please save it securely.",
         "tokenRegenerated": "Token regenerated successfully",
         "updateSuccess": "Tap updated successfully!",
         "yourNewToken": "Your New Token"
@@ -350,17 +524,32 @@
         "auditLog": "Audit Log",
         "cacheHitRate": "Cache Hit Rate",
         "cacheHits": "Cache Hits",
-        "currentlyActive": "",
         "noAuditLogs": "No audit logs found.",
-        "subtitle": "View statistics and activity for your tap",
+        "noData": "No Data",
+        "noDataSubtext": "Attention is all you need for the tap.",
         "title": "Tap Statistics",
-        "totalUses": "",
         "uniqueUsers": "Unique Users",
         "useRate": "Use Rate"
       },
-      "tapId": "",
-      "totalUses": "",
-      "updatedAt": ""
+      "tapId": "Tap ID",
+      "totalUses": "Total Uses",
+      "updatedAt": "Updated At",
+      "uses": "{{value}} use",
+      "verification": {
+        "description": "Verification Description",
+        "descriptionHelp": "Explain why your tap should be verified. Mention any official affiliations or public use cases.",
+        "descriptionPlaceholder": "e.g. This is the official tap for the XYZ community...",
+        "formTitle": "Request Verification",
+        "requestSuccess": "Verification request submitted successfully!",
+        "status": {
+          "approved": "Your tap is verified.",
+          "none": "Your tap is not verified. Verified taps get a badge and better visibility."
+        },
+        "subtitle": "Get your tap verified for better visibility and trust",
+        "title": "Tap Verification",
+        "titleLabel": "Request Title",
+        "titlePlaceholder": "e.g. Official verification for XYZ"
+      }
     }
   }
 }

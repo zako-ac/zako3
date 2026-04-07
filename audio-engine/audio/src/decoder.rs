@@ -1,19 +1,15 @@
-use std::collections::VecDeque;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use mockall::automock;
 use ringbuf::traits::{Observer, Producer};
 use serenity::async_trait;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::{audio::SampleBuffer, io::ReadOnlySource};
-use tokio::io::AsyncRead;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::watch;
 use tracing::instrument;
-use zako3_audio_engine_types::ZakoError;
 
-use crate::{RingCons, RingProd, async_to_sync_read, create_ringbuf_pair, speed_control};
-use crate::{error::ZakoResult, metrics, types::TrackId};
+use crate::{RingCons, RingProd, create_ringbuf_pair, speed_control};
+use crate::{error::ZakoResult, types::TrackId};
 
 pub type ArcDecoder = Arc<dyn Decoder>;
 
@@ -23,117 +19,103 @@ pub trait Decoder: Send + Sync + 'static {
     async fn start_decoding(
         &self,
         track_id: TrackId,
-        stream: Box<dyn AsyncRead + Unpin + Send + Sync>,
+        stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     ) -> ZakoResult<RingCons>;
+
+    fn pause_track(&self, track_id: TrackId);
+    fn resume_track(&self, track_id: TrackId);
+    fn stop_track(&self, track_id: TrackId);
 }
 
-pub struct SymphoniaDecoder;
+pub struct PcmDecoder {
+    pause_txs: Arc<tokio::sync::Mutex<HashMap<TrackId, watch::Sender<bool>>>>,
+}
+
+impl PcmDecoder {
+    pub fn new() -> Self {
+        PcmDecoder {
+            pause_txs: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl Default for PcmDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait]
-impl Decoder for SymphoniaDecoder {
+impl Decoder for PcmDecoder {
     #[instrument(skip(self, stream))]
     async fn start_decoding(
         &self,
         track_id: TrackId,
-        stream: Box<dyn AsyncRead + Unpin + Send + Sync>,
+        stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     ) -> ZakoResult<RingCons> {
-        let media_source = create_media_source(stream)?;
-
         let (prod, cons) = create_ringbuf_pair();
-        spawn_decode_task(track_id, media_source, prod).await?;
+
+        let (pause_tx, pause_rx) = watch::channel(false);
+
+        {
+            let mut pause_txs = self.pause_txs.lock().await;
+            pause_txs.insert(track_id, pause_tx);
+        }
+
+        let pause_txs = self.pause_txs.clone();
+
+        tokio::spawn(async move {
+            let result = spawn_decode_task(track_id, stream, prod, pause_rx).await;
+            if let Err(e) = result {
+                tracing::error!(track_id = %track_id, error = %e, "Decoding task failed");
+            }
+
+            // Clean up pause_txs entry on task exit
+            {
+                let mut pause_txs_guard = pause_txs.lock().await;
+                pause_txs_guard.remove(&track_id);
+            }
+        });
 
         Ok(cons)
     }
-}
 
-fn create_media_source(
-    stream: Box<dyn AsyncRead + Unpin + Send + Sync>,
-) -> ZakoResult<Box<dyn symphonia::core::io::MediaSource>> {
-    let reader = async_to_sync_read(stream)?;
-    Ok(Box::new(ReadOnlySource::new(reader)))
+    fn pause_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let map = pause_txs.lock().await;
+            if let Some(tx) = map.get(&track_id) {
+                let _ = tx.send(true);
+            }
+        });
+    }
+
+    fn resume_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let map = pause_txs.lock().await;
+            if let Some(tx) = map.get(&track_id) {
+                let _ = tx.send(false);
+            }
+        });
+    }
+
+    fn stop_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let mut pause_txs_guard = pause_txs.lock().await;
+            pause_txs_guard.remove(&track_id);
+        });
+    }
 }
 
 async fn spawn_decode_task(
     track_id: TrackId,
-    media_source: Box<dyn symphonia::core::io::MediaSource>,
-    producer: RingProd,
-) -> ZakoResult<()> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-
-    std::thread::spawn(move || {
-        let result = spawn_decode_task_raw(track_id, media_source, producer, sender);
-        if let Err(e) = result {
-            tracing::error!(track_id = %track_id, error = %e, "Decoding task failed to start");
-        }
-    });
-
-    match tokio::time::timeout(std::time::Duration::from_secs(5), receiver).await {
-        Ok(Ok(res)) => res,
-        Ok(Err(_)) => {
-            metrics::record_decode_error("sender_dropped");
-            Err(ZakoError::Decoding("Decoding task sender dropped".into()))
-        }
-        Err(_) => {
-            metrics::record_decode_error("startup_timeout");
-            Err(ZakoError::Decoding(
-                "Decoding task startup timed out".into(),
-            ))
-        }
-    }
-}
-
-fn spawn_decode_task_raw(
-    track_id: TrackId,
-    media_source: Box<dyn symphonia::core::io::MediaSource>,
+    mut stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     mut producer: RingProd,
-    sender: Sender<ZakoResult<()>>,
+    mut pause_rx: watch::Receiver<bool>,
 ) -> ZakoResult<()> {
-    let mss = MediaSourceStream::new(media_source, Default::default());
-
-    let mut probed = match symphonia::default::get_probe().format(
-        &Default::default(),
-        mss,
-        &Default::default(),
-        &Default::default(),
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!(track_id = %track_id, error = %e, "Failed to probe media format");
-            metrics::record_decode_error("format_probe");
-            return Err(ZakoError::Decoding(format!("Format probe failed: {}", e)));
-        }
-    };
-
-    let track = match probed.format.default_track() {
-        Some(t) => t,
-        None => {
-            tracing::error!(track_id = %track_id, "No default track found in media source");
-            metrics::record_decode_error("no_track");
-            return Err(ZakoError::Decoding(
-                "No default track found in media source".into(),
-            ));
-        }
-    };
-
-    let mut decoder =
-        match symphonia::default::get_codecs().make(&track.codec_params, &Default::default()) {
-            Ok(d) => d,
-            Err(e) => {
-                tracing::error!(track_id = %track_id, error = %e, "Failed to create codec decoder");
-                metrics::record_decode_error("codec_init");
-                return Err(ZakoError::Decoding(format!("Codec init failed: {}", e)));
-            }
-        };
-
-    let mut sample_buf = None;
-
-    sender
-        .send(Ok(()))
-        .map_err(|_| ZakoError::Decoding("Failed to send startup confirmation".into()))?;
-
-    let mut mid_buffer = VecDeque::new();
-    let mut decode_error_count = 0u32;
-    const MAX_CONSECUTIVE_ERRORS: u32 = 10;
+    tracing::debug!(track_id = %track_id, "Starting PCM decode task");
 
     let speed_control_config = speed_control::SpeedControlConfig {
         min_delay: Duration::from_millis(1),
@@ -141,78 +123,45 @@ fn spawn_decode_task_raw(
         target_fill_ratio: 0.5,
     };
 
-    loop {
-        let packet = match probed.format.next_packet() {
-            Ok(p) => {
-                decode_error_count = 0;
-                p
-            }
-            Err(symphonia::core::errors::Error::IoError(ref e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
-                tracing::debug!(track_id = %track_id, "End of stream reached");
-                break;
-            }
-            Err(e) => {
-                decode_error_count += 1;
-                tracing::warn!(track_id = %track_id, error = %e, consecutive_errors = decode_error_count, "Failed to read packet");
-                metrics::record_decode_error("io");
-                if decode_error_count >= MAX_CONSECUTIVE_ERRORS {
-                    tracing::error!(track_id = %track_id, "Too many consecutive packet read errors, aborting");
-                    break;
+    while let Some(chunk) = stream.recv().await {
+        // Pause gate: wait until resume or stop_track
+        while *pause_rx.borrow() {
+            match pause_rx.changed().await {
+                Ok(_) => {}
+                Err(_) => {
+                    // Sender dropped (stop_track called), exit cleanly
+                    tracing::debug!(track_id = %track_id, "Pause sender dropped, ending decode task");
+                    return Ok(());
                 }
-                continue;
             }
-        };
-
-        let decoded = match decoder.decode(&packet) {
-            Ok(d) => {
-                decode_error_count = 0;
-                d
-            }
-            Err(e) => {
-                decode_error_count += 1;
-                tracing::warn!(track_id = %track_id, error = %e, consecutive_errors = decode_error_count, "Decode error, skipping packet");
-                metrics::record_decode_error("codec");
-                if decode_error_count >= MAX_CONSECUTIVE_ERRORS {
-                    tracing::error!(track_id = %track_id, "Too many consecutive decode errors, aborting");
-                    break;
-                }
-                continue;
-            }
-        };
-
-        if sample_buf.is_none() {
-            sample_buf = Some(SampleBuffer::<f32>::new(
-                decoded.capacity() as u64,
-                *decoded.spec(),
-            ));
         }
 
-        if let Some(buf) = sample_buf.as_mut() {
-            buf.copy_interleaved_ref(decoded);
-            let samples = buf.samples();
-            mid_buffer.extend(samples);
-
-            let buffer_len = producer.vacant_len();
-
-            // Push as much as we can to the ring buffer
-            for _ in 0..buffer_len {
-                if let Some(sample) = mid_buffer.pop_front() {
-                    if producer.try_push(sample).is_err() {
-                        // This can only happen if the consumer was dropped, so we can just exit
-                        tracing::debug!(track_id = %track_id, "Producer push failed, consumer likely dropped, ending decode task");
-                        return Ok(());
-                    }
-                } else {
-                    break;
-                }
+        let mut idx = 0;
+        while idx < chunk.len() {
+            if !producer.read_is_held() {
+                tracing::debug!(track_id = %track_id, "Consumer dropped, ending decode task");
+                return Ok(());
             }
 
-            if !producer.read_is_held() {
-                // consumer dropped
-                tracing::debug!(track_id = %track_id, "Consumer dropped, ending decode task");
-                break;
+            let vacant = producer.vacant_len();
+            if vacant == 0 {
+                let delay = speed_control::calculate_delay(
+                    &speed_control_config,
+                    producer.occupied_len(),
+                    producer.capacity().into(),
+                );
+                tokio::time::sleep(delay).await;
+                continue;
+            }
+
+            let take = vacant.min(chunk.len() - idx);
+
+            for _ in 0..take {
+                let sample = chunk[idx];
+                if producer.try_push(sample).is_err() {
+                    return Ok(());
+                }
+                idx += 1;
             }
 
             let delay = speed_control::calculate_delay(
@@ -220,23 +169,8 @@ fn spawn_decode_task_raw(
                 producer.occupied_len(),
                 producer.capacity().into(),
             );
-
-            std::thread::sleep(delay);
-        }
-    }
-
-    // loop until the mid buffer is drained
-    while !mid_buffer.is_empty() {
-        let buffer_len = producer.vacant_len();
-
-        for _ in 0..buffer_len {
-            if let Some(sample) = mid_buffer.pop_front() {
-                if producer.try_push(sample).is_err() {
-                    tracing::debug!(track_id = %track_id, "Producer push failed during drain, consumer likely dropped, ending decode task");
-                    return Ok(());
-                }
-            } else {
-                break;
+            if delay > Duration::from_millis(0) {
+                tokio::time::sleep(delay).await;
             }
         }
     }

@@ -1,12 +1,18 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use crossbeam::channel::{Receiver, Sender};
 use mockall::automock;
+use opus::{Application, Channels, Encoder};
 use ringbuf::traits::{Consumer, Observer, Producer};
 use tokio::sync::mpsc::Sender as TokioSender;
 
-use crate::{RingCons, RingProd, constant::BUFFER_SIZE, frame_duration, metrics, types::TrackId};
+use crate::{
+    OpusProd, RingCons,
+    constant::{BUFFER_SIZE, SAMPLE_RATE},
+    frame_duration, metrics,
+    types::TrackId,
+};
 
 pub enum MixerCommand {
     AddSource(TrackId, RingCons, TokioSender<TrackId>),
@@ -23,8 +29,13 @@ struct ManagedSource {
     target_volume: f32,
 }
 
-fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: RingProd) {
+fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
     let mut sources: Vec<ManagedSource> = Vec::new();
+    let mut encoder = Encoder::new(SAMPLE_RATE, Channels::Stereo, Application::Audio)
+        .expect("Failed to create Opus encoder");
+
+    let frame_dur = frame_duration();
+    let mut next_tick = std::time::Instant::now();
 
     loop {
         let loop_start = std::time::Instant::now();
@@ -64,6 +75,7 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: RingProd) {
 
         if sources.is_empty() {
             std::thread::sleep(std::time::Duration::from_millis(10));
+            next_tick = std::time::Instant::now();
             continue;
         }
 
@@ -73,26 +85,30 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: RingProd) {
         let mut source_buffer = [0f32; BUFFER_SIZE];
 
         for source in sources.iter_mut() {
-            if !source.consumer.write_is_held() {
+            if !source.consumer.write_is_held() && source.consumer.is_empty() {
                 ended_sources.push(source.track_id);
                 let _ = source.end_tx.try_send(source.track_id);
                 continue;
             }
 
-            source_buffer.fill(0.0);
             let c = source.consumer.pop_slice(&mut source_buffer);
 
-            // Simple linear volume ramping
-            if source.current_volume != source.target_volume {
-                let step = (source.target_volume - source.current_volume) * 0.1;
-                source.current_volume += step;
-                if (source.target_volume - source.current_volume).abs() < 0.01 {
-                    source.current_volume = source.target_volume;
-                }
-            }
+            let start_vol = source.current_volume;
+            let end_vol = source.target_volume;
 
-            for i in 0..c {
-                mixed_buffer[i] += source_buffer[i] * source.current_volume;
+            if start_vol == end_vol {
+                // Fast path: Constant volume (easy to vectorize)
+                for i in 0..c {
+                    mixed_buffer[i] += source_buffer[i] * start_vol;
+                }
+            } else {
+                // Ramp path: Linearly interpolate
+                let diff = (end_vol - start_vol) / c as f32;
+                for i in 0..c {
+                    let current_v = start_vol + (diff * i as f32);
+                    mixed_buffer[i] += source_buffer[i] * current_v;
+                }
+                source.current_volume = end_vol;
             }
         }
 
@@ -106,21 +122,36 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: RingProd) {
             break;
         }
 
-        output.push_slice(&mixed_buffer);
+        let mut final_buffer = [0f32; BUFFER_SIZE];
+        for i in 0..BUFFER_SIZE {
+            final_buffer[i] = mixed_buffer[i].clamp(-1.0, 1.0);
+        }
+
+        let mut out_buf = [0u8; 4000];
+        match encoder.encode_float(&final_buffer, &mut out_buf) {
+            Ok(len) => {
+                let _ = output.try_push(bytes::Bytes::copy_from_slice(&out_buf[..len]));
+            }
+            Err(e) => {
+                tracing::error!("Opus encode error: {}", e);
+            }
+        }
 
         let processing_duration = loop_start.elapsed();
         metrics::record_mixer_processing_duration(processing_duration.as_secs_f64());
 
-        let frame_dur = frame_duration();
+        let now = std::time::Instant::now();
+        next_tick += frame_dur;
 
-        if processing_duration < frame_dur {
-            std::thread::sleep(frame_dur - processing_duration - Duration::from_millis(1));
+        if now < next_tick {
+            std::thread::sleep(next_tick - now);
         } else {
             tracing::warn!(
                 duration_ms = processing_duration.as_millis(),
                 budget_ms = frame_dur.as_millis(),
                 "Mixer loop exceeded time budget"
             );
+            next_tick = std::time::Instant::now();
         }
     }
 }
@@ -140,7 +171,7 @@ pub struct ThreadMixer {
     cmd_tx: Sender<MixerCommand>,
 }
 
-pub fn create_thread_mixer(output: RingProd) -> ThreadMixer {
+pub fn create_thread_mixer(output: OpusProd) -> ThreadMixer {
     let (cmd_tx, cmd_rx) = crossbeam::channel::unbounded();
 
     std::thread::spawn(move || {

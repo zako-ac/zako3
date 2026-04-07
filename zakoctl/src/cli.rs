@@ -14,6 +14,14 @@ pub struct Cli {
     /// Address of the Audio Engine gRPC server (overrides config)
     #[arg(global = true, long, env = "ZAKO_AE_ADDR")]
     pub ae_addr: Option<String>,
+
+    /// Address of the HQ RPC server (overrides config)
+    #[arg(global = true, long, env = "ZAKO_HQ_ADDR")]
+    pub hq_addr: Option<String>,
+
+    /// Admin token for HQ RPC server (overrides config)
+    #[arg(global = true, long, env = "ZAKO_HQ_ADMIN_TOKEN")]
+    pub hq_admin_token: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -21,6 +29,9 @@ pub enum Commands {
     /// Audio Engine service commands (abbr: ae)
     #[command(visible_alias = "ae")]
     AudioEngine(AudioEngineCommands),
+
+    /// HQ service commands
+    Hq(crate::services::hq::cli::HqCommands),
 
     /// Configuration commands
     Config(ConfigCommands),

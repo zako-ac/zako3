@@ -20,6 +20,6 @@ pub fn calculate_delay(
         let scale = (fill_ratio - config.target_fill_ratio) / config.target_fill_ratio;
         config.min_delay + (config.max_delay - config.min_delay).mul_f32(scale)
     } else {
-        config.min_delay
+        Duration::ZERO
     }
 }

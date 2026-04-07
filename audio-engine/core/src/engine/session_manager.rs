@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use tracing::instrument;
-use zako3_audio_engine_audio::{create_ringbuf_pair, create_sync_stream_input, metrics};
+use zako3_audio_engine_audio::{create_opus_ringbuf_pair, metrics};
 
 use crate::{
-    ArcDiscordService, ArcStateService, ArcTapHubService,
-    audio::{SymphoniaDecoder, create_thread_mixer},
+    audio::{PcmDecoder, create_thread_mixer},
     error::ZakoResult,
+    service::{ArcDiscordService, ArcStateService, ArcTapHubService},
     session::{SessionControl, create_session_control},
     types::{ChannelId, GuildId, SessionState},
 };
@@ -38,10 +38,10 @@ impl SessionManager {
     async fn initiate_session(&self, guild_id: GuildId) -> ZakoResult<()> {
         tracing::debug!("Initiating audio session");
 
-        let (prod, cons) = create_ringbuf_pair();
+        let (prod, cons) = create_opus_ringbuf_pair();
 
         let mixer = create_thread_mixer(prod);
-        let decoder = SymphoniaDecoder;
+        let decoder = PcmDecoder::new();
 
         let control = create_session_control(
             guild_id,
@@ -51,9 +51,7 @@ impl SessionManager {
             self.taphub_service.clone(),
         );
 
-        self.discord_service
-            .play_audio(guild_id, create_sync_stream_input(cons)?.into())
-            .await?;
+        self.discord_service.play_audio(guild_id, cons).await?;
 
         self.sessions.insert(guild_id, control);
 
@@ -82,6 +80,27 @@ impl SessionManager {
         self.initiate_session(guild_id).await?;
 
         Ok(())
+    }
+
+    #[instrument(skip(self, session), fields(guild_id = %session.guild_id, channel_id = %session.channel_id))]
+    pub async fn rejoin(&self, session: &SessionState) -> ZakoResult<()> {
+        tracing::info!("Rejoining voice channel");
+
+        self.discord_service
+            .join_voice_channel(session.guild_id, session.channel_id)
+            .await?;
+
+        self.initiate_session(session.guild_id).await?;
+
+        Ok(())
+    }
+
+    pub async fn list_sessions(&self) -> ZakoResult<Vec<SessionState>> {
+        self.state_service.list_sessions().await
+    }
+
+    pub async fn get_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
+        self.state_service.list_sessions_in_guild(guild_id).await
     }
 
     #[instrument(skip(self), fields(guild_id = %guild_id))]

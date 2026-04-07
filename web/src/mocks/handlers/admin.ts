@@ -60,7 +60,9 @@ const generateMockVerificationRequest = (
     id: faker.string.uuid(),
     tapId: tap.id,
     tap,
-    reason: faker.helpers.arrayElement([
+    requesterId: faker.string.uuid(),
+    title: faker.lorem.sentence(),
+    description: faker.helpers.arrayElement([
       'This tap is used by a verified organization',
       'Official tap for our company',
       'Widely used tap with substantial user base',
@@ -68,11 +70,9 @@ const generateMockVerificationRequest = (
       'Government agency official tap',
       'Non-profit organization verified account',
     ]),
-    evidence: faker.datatype.boolean({ probability: 0.6 })
-      ? faker.internet.url()
-      : undefined,
     status: requestStatus,
-    requestedAt: requestedAt.toISOString(),
+    createdAt: requestedAt.toISOString(),
+    updatedAt: requestedAt.toISOString(),
     reviewedAt:
       requestStatus !== 'pending'
         ? faker.date
@@ -108,7 +108,7 @@ const mockVerificationRequests: VerificationRequestFull[] = [
   ),
 ].sort(
   (a, b) =>
-    new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 )
 
 export const adminHandlers = [
@@ -219,7 +219,9 @@ export const adminHandlers = [
       }
 
       // Also update the tap occupation to 'verified'
-      mockVerificationRequests[requestIndex].tap.occupation = 'verified'
+      if (mockVerificationRequests[requestIndex].tap) {
+        mockVerificationRequests[requestIndex].tap!.occupation = 'verified'
+      }
 
       return HttpResponse.json(mockVerificationRequests[requestIndex])
     }

@@ -55,6 +55,9 @@ Enum-based types implement trait that shows description of each variant.
         - `sticker`
         - `text or off`
 - `TapRef`: Simple reference to a tap
+- `TTSChannelConfig`: one of
+    - `ReadAll`: Read to all voice channels
+    - `SpecificChannels`: List of ChannelId to voice channels where TTS is enabled
 
 ## Scope System
 Each kind of settings has their own set of scopes. Scopes are used to implement cascading default-value of the settings.
@@ -107,6 +110,7 @@ Precedence merging allows a value with multiple items inside to be merged. For e
 | Join Leave Command Permission | `MemberFilter` | Select who can use `/join` and `/leave` | Anyone |
 | Enable Disable Command Permission | `MemberFilter` | Select who can use `/tts-channel enable` and `/tts-channel disable` | Anyone |
 | Can User Make Bot Join Channel Without Permission | `Boolean` | Whether a user can use `/join` or `/leave`, `/tts-channel` for channels that the user doesn't have access to | False |
+| TTS Channels | `Map<ChannelId, TTSChannelConfig>` | List of channels where TTS is enabled | Empty |
 
 ### Admin Settings
 | Name | Type | Description | Default |

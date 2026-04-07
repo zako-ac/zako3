@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockCurrentUser, mockAdminUser } from '../data/users'
-import type { AuthUser, LoginResponse, AuthCallbackResponse } from '@zako-ac/zako3-data'
+import type { AuthUser, AuthCallbackResponse } from '@zako-ac/zako3-data'
 
 const API_BASE = '/api'
 
@@ -25,10 +25,7 @@ setMockUser(true)
 export const authHandlers = [
     http.get(`${API_BASE}/auth/login`, async () => {
         await delay(100)
-        const response: LoginResponse = {
-            redirectUrl: '/auth/callback?code=mock_auth_code',
-        }
-        return HttpResponse.json(response)
+        return HttpResponse.redirect('/auth/callback?code=mock_auth_code')
     }),
 
     http.get(`${API_BASE}/auth/callback`, async ({ request }) => {
@@ -56,6 +53,7 @@ export const authHandlers = [
         const response: AuthCallbackResponse = {
             token: 'mock_jwt_token_' + Date.now(),
             user: currentUser,
+            redirectUrl: null,
         }
 
         return HttpResponse.json(response)
@@ -86,6 +84,7 @@ export const authHandlers = [
         const response: AuthCallbackResponse = {
             token: 'mock_jwt_token_' + Date.now(),
             user: currentUser,
+            redirectUrl: null,
         }
 
         return HttpResponse.json(response)

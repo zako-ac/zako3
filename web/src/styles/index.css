@@ -1,8 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@tailwind base;
-@tailwind components;
+@import "tailwindcss/preflight"
 @tailwind utilities;
 
 @theme {
@@ -27,8 +26,8 @@
   --color-secondary-foreground: oklch(0.2 0 0);
   --color-muted: oklch(0.94 0 0);
   --color-muted-foreground: oklch(0.55 0 0);
-  --color-accent: oklch(0.62 0.25 340);
-  --color-accent-foreground: oklch(0.98 0 0);
+  --color-accent: oklch(0.9 0 0);
+  --color-accent-foreground: oklch(0.15 0 0);
   --color-destructive: oklch(0.577 0.245 27.325);
   --color-destructive-foreground: oklch(0.985 0 0);
   --color-success: oklch(0.6 0.18 145);
@@ -37,8 +36,8 @@
   --color-warning-foreground: oklch(0.15 0 0);
   --color-info: oklch(0.6 0.15 240);
   --color-info-foreground: oklch(0.985 0 0);
-  --color-border: oklch(0.88 0 0);
-  --color-input: oklch(0.88 0 0);
+  --color-border: oklch(0.8 0 0);
+  --color-input: oklch(0.8 0 0);
   --color-ring: oklch(0.62 0.25 340);
 
   /* Chart colors - using OKLCH */
@@ -75,7 +74,7 @@
     --color-secondary-foreground: oklch(0.96 0 0);
     --color-muted: oklch(0.2 0.01 270);
     --color-muted-foreground: oklch(0.65 0.01 270);
-    --color-accent: oklch(0.65 0.27 340);
+    --color-accent: oklch(0.28 0.01 270);
     --color-accent-foreground: oklch(0.98 0 0);
     --color-destructive: oklch(0.5 0.2 25);
     --color-destructive-foreground: oklch(0.98 0 0);
@@ -85,8 +84,8 @@
     --color-warning-foreground: oklch(0.15 0 0);
     --color-info: oklch(0.55 0.18 240);
     --color-info-foreground: oklch(0.98 0 0);
-    --color-border: oklch(0.24 0.02 270);
-    --color-input: oklch(0.24 0.02 270);
+    --color-border: oklch(0.3 0.02 270);
+    --color-input: oklch(0.4 0.02 270);
     --color-ring: oklch(0.65 0.27 340);
     --color-chart-1: oklch(0.65 0.27 340);
     --color-chart-2: oklch(0.58 0.22 280);

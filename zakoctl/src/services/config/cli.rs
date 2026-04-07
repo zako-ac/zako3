@@ -17,12 +17,18 @@ pub enum ConfigSubcommands {
         #[arg(help = "Name of the context to use")]
         name: String,
     },
-    /// Set a context entry in kubeconfig
+    /// Set a context entry in zakoctl config
     SetContext {
         #[arg(help = "Name of the context")]
         name: String,
-        #[arg(long, help = "Address of the Audio Engine gRPC server")]
+        #[arg(long, help = "Address of the Audio Engine server")]
         ae_addr: String,
+        #[arg(long, help = "Token for Audio Engine authentication")]
+        ae_token: Option<String>,
+        #[arg(long, help = "Address of the HQ RPC server")]
+        hq_addr: String,
+        #[arg(long, help = "Admin token for HQ RPC server")]
+        hq_admin_token: Option<String>,
         #[arg(long, help = "Default Guild ID for this context")]
         default_guild_id: Option<String>,
     },

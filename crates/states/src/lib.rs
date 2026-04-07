@@ -1,0 +1,458 @@
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use thiserror::Error;
+use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId, hq::UserId, hq::settings::PartialUserSettings};
+
+#[derive(Error, Debug)]
+pub enum StateServiceError {
+    #[error("Cache error")]
+    CacheError,
+    #[cfg(feature = "redis")]
+    #[error("Redis error: {0}")]
+    RedisError(#[from] redis::RedisError),
+}
+
+type Result<T> = std::result::Result<T, StateServiceError>;
+
+#[async_trait]
+pub trait CacheRepository: Send + Sync {
+    async fn get(&self, key: &str) -> Option<String>;
+    async fn set(&self, key: &str, value: &str);
+    async fn del(&self, key: &str);
+    async fn incr(&self, key: &str) -> Result<i64>;
+    async fn decr(&self, key: &str) -> Result<i64>;
+    async fn incrby(&self, key: &str, amount: i64) -> Result<i64>;
+    async fn pfadd(&self, key: &str, element: &str) -> Result<()>;
+    async fn pfcount(&self, key: &str) -> Result<u64>;
+    async fn sadd(&self, key: &str, member: &str) -> Result<()>;
+    async fn smembers(&self, key: &str) -> Result<Vec<String>>;
+}
+
+pub type CacheRepositoryRef = Arc<dyn CacheRepository>;
+
+#[derive(Clone)]
+pub struct TapHubStateService {
+    pub cache_repository: CacheRepositoryRef,
+}
+
+impl TapHubStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    pub async fn get_tap_id_by_name(&self, tap_name: &TapName) -> Result<Option<TapId>> {
+        let name_key = format!("tap_name:{}", tap_name.0);
+        let id_str = self.cache_repository.get(&name_key).await;
+        Ok(id_str.map(TapId))
+    }
+
+    pub async fn get_tap_states(&self, tap_id: &TapId) -> Result<OnlineTapStates> {
+        let key = format!("tap:{}", tap_id.0);
+
+        let state_str = match self.cache_repository.get(&key).await {
+            Some(state) => state,
+            None => return Ok(vec![]),
+        };
+
+        let state: OnlineTapStates =
+            serde_json::from_str(&state_str).map_err(|_| StateServiceError::CacheError)?;
+
+        Ok(state)
+    }
+
+    pub async fn set_tap_states(&self, tap_id: &TapId, state: &OnlineTapStates) -> Result<()> {
+        let key = format!("tap:{}", tap_id.0);
+
+        let state_str = serde_json::to_string(state).map_err(|_| StateServiceError::CacheError)?;
+        self.cache_repository.set(&key, &state_str).await;
+        Ok(())
+    }
+
+    pub async fn set_connection_state(&self, state: OnlineTapState) -> Result<()> {
+        let tap_id = state.tap_id.clone();
+
+        let name_key = format!("tap_name:{}", state.tap_name.0);
+        self.cache_repository.set(&name_key, &tap_id.0).await;
+
+        let mut states = self.get_tap_states(&state.tap_id).await?;
+
+        states.retain(|s| !(s.tap_id == state.tap_id && s.connection_id == state.connection_id));
+        states.push(state);
+
+        self.set_tap_states(&tap_id, &states).await?;
+
+        Ok(())
+    }
+
+    pub async fn get_connection_state(
+        &self,
+        state: OnlineTapState,
+    ) -> Result<Option<OnlineTapState>> {
+        let states = self.get_tap_states(&state.tap_id).await?;
+        let found = states
+            .into_iter()
+            .find(|s| s.tap_id == state.tap_id && s.connection_id == state.connection_id);
+
+        Ok(found)
+    }
+
+    pub async fn remove_connection_state(&self, tap_id: &TapId, connection_id: u64) -> Result<()> {
+        let mut states = self.get_tap_states(tap_id).await?;
+        states.retain(|s| !(&s.tap_id == tap_id && s.connection_id == connection_id));
+        self.set_tap_states(tap_id, &states).await?;
+
+        Ok(())
+    }
+
+    pub async fn get_online_count(&self, tap_id: &TapId) -> Result<usize> {
+        Ok(self.get_tap_states(tap_id).await?.len())
+    }
+
+    pub async fn clear_all_tap_states(&self, tap_ids: &[TapId]) -> Result<()> {
+        for tap_id in tap_ids {
+            let key = format!("tap:{}", tap_id.0);
+            self.cache_repository.del(&key).await;
+        }
+        Ok(())
+    }
+}
+
+pub enum TapMetricKey {
+    TotalUses,
+    CacheHits,
+    UniqueUsers,
+    UptimeSecs,
+}
+
+impl TapMetricKey {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::TotalUses => "total_uses",
+            Self::CacheHits => "cache_hits",
+            Self::UniqueUsers => "unique_users",
+            Self::UptimeSecs => "uptime_secs",
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct TapMetricsStateService {
+    pub cache_repository: CacheRepositoryRef,
+}
+
+impl TapMetricsStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    fn get_key(&self, tap_id: TapId, key: TapMetricKey) -> String {
+        format!("metrics:{}:{}", tap_id.0, key.as_str())
+    }
+
+    pub async fn inc_total_uses(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::TotalUses);
+        self.cache_repository.incr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn inc_cache_hits(&self, tap_id: TapId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::CacheHits);
+        self.cache_repository.incr(&key).await?;
+        Ok(())
+    }
+
+    pub async fn record_unique_user(&self, tap_id: TapId, user_id: UserId) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
+        self.cache_repository.pfadd(&key, &user_id.0).await?;
+        Ok(())
+    }
+
+    pub async fn get_unique_users_count(&self, tap_id: TapId) -> Result<u64> {
+        let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
+        self.cache_repository.pfcount(&key).await
+    }
+
+    pub async fn get_metric(&self, tap_id: TapId, key: TapMetricKey) -> Result<u64> {
+        let redis_key = self.get_key(tap_id, key);
+        let val = self.cache_repository.get(&redis_key).await;
+        match val {
+            Some(v) => Ok(v.parse().unwrap_or(0)),
+            None => Ok(0),
+        }
+    }
+
+    pub async fn register_tap(&self, tap_id: TapId) -> Result<()> {
+        let key = "metrics:known_taps";
+        self.cache_repository
+            .sadd(key, &tap_id.0.to_string())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn acc_uptime(&self, tap_id: TapId, secs: i64) -> Result<()> {
+        let key = self.get_key(tap_id, TapMetricKey::UptimeSecs);
+        self.cache_repository.incrby(&key, secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_known_taps(&self) -> Result<Vec<TapId>> {
+        let key = "metrics:known_taps";
+        let members = self.cache_repository.smembers(key).await?;
+        Ok(members.into_iter().map(TapId).collect())
+    }
+}
+
+#[derive(Clone)]
+pub struct UserSettingsStateService {
+    cache_repository: CacheRepositoryRef,
+}
+
+impl UserSettingsStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    fn user_key(user_id: &UserId) -> String {
+        format!("user_settings:{}", user_id.0)
+    }
+
+    fn guild_user_key(user_id: &UserId, guild_id: &str) -> String {
+        format!("user_guild_settings:{}:{}", user_id.0, guild_id)
+    }
+
+    fn guild_key(guild_id: &str) -> String {
+        format!("guild_settings:{}", guild_id)
+    }
+
+    fn global_key() -> &'static str {
+        "global_settings"
+    }
+
+    // --- User scope ---
+
+    pub async fn get_user_cached(&self, user_id: &UserId) -> Option<PartialUserSettings> {
+        let raw = self.cache_repository.get(&Self::user_key(user_id)).await?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    pub async fn set_user_cached(&self, user_id: &UserId, settings: &PartialUserSettings) {
+        if let Ok(raw) = serde_json::to_string(settings) {
+            self.cache_repository.set(&Self::user_key(user_id), &raw).await;
+        }
+    }
+
+    pub async fn invalidate_user(&self, user_id: &UserId) {
+        self.cache_repository.del(&Self::user_key(user_id)).await;
+    }
+
+    // --- GuildUser scope ---
+
+    pub async fn get_guild_user_cached(&self, user_id: &UserId, guild_id: &str) -> Option<PartialUserSettings> {
+        let raw = self.cache_repository.get(&Self::guild_user_key(user_id, guild_id)).await?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    pub async fn set_guild_user_cached(&self, user_id: &UserId, guild_id: &str, settings: &PartialUserSettings) {
+        if let Ok(raw) = serde_json::to_string(settings) {
+            self.cache_repository.set(&Self::guild_user_key(user_id, guild_id), &raw).await;
+        }
+    }
+
+    pub async fn invalidate_guild_user(&self, user_id: &UserId, guild_id: &str) {
+        self.cache_repository.del(&Self::guild_user_key(user_id, guild_id)).await;
+    }
+
+    // --- Guild scope ---
+
+    pub async fn get_guild_cached(&self, guild_id: &str) -> Option<PartialUserSettings> {
+        let raw = self.cache_repository.get(&Self::guild_key(guild_id)).await?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    pub async fn set_guild_cached(&self, guild_id: &str, settings: &PartialUserSettings) {
+        if let Ok(raw) = serde_json::to_string(settings) {
+            self.cache_repository.set(&Self::guild_key(guild_id), &raw).await;
+        }
+    }
+
+    pub async fn invalidate_guild(&self, guild_id: &str) {
+        self.cache_repository.del(&Self::guild_key(guild_id)).await;
+    }
+
+    // --- Global scope ---
+
+    pub async fn get_global_cached(&self) -> Option<PartialUserSettings> {
+        let raw = self.cache_repository.get(Self::global_key()).await?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    pub async fn set_global_cached(&self, settings: &PartialUserSettings) {
+        if let Ok(raw) = serde_json::to_string(settings) {
+            self.cache_repository.set(Self::global_key(), &raw).await;
+        }
+    }
+
+    pub async fn invalidate_global(&self) {
+        self.cache_repository.del(Self::global_key()).await;
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceChannelLocation {
+    pub guild_id: u64,
+    pub channel_id: u64,
+    #[serde(default)]
+    pub guild_name: String,
+    #[serde(default)]
+    pub channel_name: String,
+}
+
+#[derive(Clone)]
+pub struct VoiceStateService {
+    cache_repository: CacheRepositoryRef,
+}
+
+impl VoiceStateService {
+    pub fn new(cache_repository: CacheRepositoryRef) -> Self {
+        Self { cache_repository }
+    }
+
+    fn key(discord_user_id: &str) -> String {
+        format!("voice_state:{}", discord_user_id)
+    }
+
+    pub async fn set_user_channel(
+        &self,
+        discord_user_id: &str,
+        guild_id: u64,
+        channel_id: u64,
+        guild_name: String,
+        channel_name: String,
+    ) -> Result<()> {
+        let mut locations = self.get_user_channels(discord_user_id).await?;
+        locations.retain(|loc| loc.guild_id != guild_id);
+        locations.push(VoiceChannelLocation { guild_id, channel_id, guild_name, channel_name });
+        let serialized =
+            serde_json::to_string(&locations).map_err(|_| StateServiceError::CacheError)?;
+        self.cache_repository.set(&Self::key(discord_user_id), &serialized).await;
+        Ok(())
+    }
+
+    pub async fn remove_user_from_guild(
+        &self,
+        discord_user_id: &str,
+        guild_id: u64,
+    ) -> Result<()> {
+        let mut locations = self.get_user_channels(discord_user_id).await?;
+        locations.retain(|loc| loc.guild_id != guild_id);
+        if locations.is_empty() {
+            self.cache_repository.del(&Self::key(discord_user_id)).await;
+        } else {
+            let serialized =
+                serde_json::to_string(&locations).map_err(|_| StateServiceError::CacheError)?;
+            self.cache_repository.set(&Self::key(discord_user_id), &serialized).await;
+        }
+        Ok(())
+    }
+
+    pub async fn get_user_channels(
+        &self,
+        discord_user_id: &str,
+    ) -> Result<Vec<VoiceChannelLocation>> {
+        match self.cache_repository.get(&Self::key(discord_user_id)).await {
+            None => Ok(vec![]),
+            Some(raw) => {
+                serde_json::from_str(&raw).map_err(|_| StateServiceError::CacheError)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "redis")]
+#[derive(Clone)]
+pub struct RedisCacheRepository {
+    client: redis::aio::ConnectionManager,
+}
+
+#[cfg(feature = "redis")]
+impl RedisCacheRepository {
+    pub async fn new(redis_url: &str) -> Result<Self> {
+        let client = redis::Client::open(redis_url)?;
+        let connection_manager = client.get_connection_manager().await?;
+        Ok(Self {
+            client: connection_manager,
+        })
+    }
+}
+
+#[cfg(feature = "redis")]
+#[async_trait]
+impl CacheRepository for RedisCacheRepository {
+    async fn get(&self, key: &str) -> Option<String> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        conn.get(key).await.ok()
+    }
+
+    async fn set(&self, key: &str, value: &str) {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: redis::RedisResult<()> = conn.set(key, value).await;
+    }
+
+    async fn del(&self, key: &str) {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: redis::RedisResult<()> = conn.del(key).await;
+    }
+
+    async fn incr(&self, key: &str) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.incr(key, 1).await?;
+        Ok(val)
+    }
+
+    async fn decr(&self, key: &str) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.decr(key, 1).await?;
+        Ok(val)
+    }
+
+    async fn incrby(&self, key: &str, amount: i64) -> Result<i64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: i64 = conn.incr(key, amount).await?;
+        Ok(val)
+    }
+
+    async fn pfadd(&self, key: &str, element: &str) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: () = conn.pfadd(key, element).await?;
+        Ok(())
+    }
+
+    async fn pfcount(&self, key: &str) -> Result<u64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: u64 = conn.pfcount(key).await?;
+        Ok(val)
+    }
+
+    async fn sadd(&self, key: &str, member: &str) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: () = conn.sadd(key, member).await?;
+        Ok(())
+    }
+
+    async fn smembers(&self, key: &str) -> Result<Vec<String>> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: Vec<String> = conn.smembers(key).await?;
+        Ok(val)
+    }
+}

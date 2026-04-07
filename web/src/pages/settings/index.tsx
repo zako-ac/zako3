@@ -14,12 +14,30 @@ import { LanguageToggle } from '@/components/layout/language-toggle'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
+import { useTaps } from '@/features/taps'
+import { UserSettingsCard, usePartialUserSettings, useSavePartialUserSettings, emptyPartial } from '@/features/settings'
+import type { PartialUserSettings } from '@/features/settings'
+import { LoadingSkeleton } from '@/components/common'
+import { toast } from 'sonner'
 
 export const SettingsPage = () => {
     const { t } = useTranslation()
     const { user } = useAuthStore()
 
+    const { data: tapsData } = useTaps()
+    const { data: settingsData, isLoading: isLoadingSettings } = usePartialUserSettings()
+    const { mutateAsync: saveSettings } = useSavePartialUserSettings()
+
     if (!user) return null
+
+    const handleSaveSettings = async (settings: PartialUserSettings) => {
+        try {
+            await saveSettings(settings)
+            toast.success(t('settings.saveSuccess'))
+        } catch {
+            toast.error(t('settings.saveError'))
+        }
+    }
 
     return (
         <div className="mx-auto max-w-4xl space-y-6">
@@ -84,6 +102,16 @@ export const SettingsPage = () => {
                     </div>
                 </CardContent>
             </Card>
+
+            {isLoadingSettings ? (
+                <LoadingSkeleton count={1} variant="card" />
+            ) : (
+                <UserSettingsCard
+                    initialValue={settingsData ?? emptyPartial}
+                    taps={tapsData?.data ?? []}
+                    onSave={handleSaveSettings}
+                />
+            )}
 
             <Card>
                 <CardHeader>

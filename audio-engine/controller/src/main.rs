@@ -1,26 +1,30 @@
 use std::sync::Arc;
 
+use sha2::{Sha256, Digest};
 use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
 
-use zako3_audio_engine_controller::{AudioEngineServer, config::AppConfig};
-use zako3_audio_engine_protos::audio_engine_server::AudioEngineServer as GrpcServer;
+use zako3_audio_engine_controller::{
+    config::AppConfig, ready_waiter::create_ready_waiter, server::AudioEngineServer,
+};
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
-    discord::SongbirdDiscordService, state::RedisStateService, taphub::StubTapHubService,
+    discord::SongbirdDiscordService, state::RedisStateService, taphub::RealTapHubService,
 };
 
-use tonic::transport::Server;
 use zako3_audio_engine_telemetry::TelemetryConfig;
+use zako3_taphub_transport_client::{TransportClient, load_certs};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
-    let addr = config.addr();
+    let nats_url = config.nats_url.clone();
 
-    println!("Starting zako3 audio engine...");
+    println!("Starting zako3 audio engine (NATS)...");
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let telem_config = TelemetryConfig {
         service_name: config.service_name.clone(),
@@ -30,8 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;
 
+    let (ready_waiter, mut ready_recv) = create_ready_waiter();
+
     let intents = GatewayIntents::GUILD_VOICE_STATES;
     let mut client = Client::builder(&config.discord_token, intents)
+        .event_handler_arc(ready_waiter)
         .register_songbird()
         .await
         .expect("Err creating client");
@@ -50,9 +57,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     });
 
+    let certs = load_certs("cert.pem").unwrap_or_else(|_| vec![]);
+
+    let taphub_transport = TransportClient::new(
+        "0.0.0.0:0".parse()?,
+        "127.0.0.1:4000".parse()?,
+        "localhost".to_string(),
+        certs,
+    )?;
+
+    if let Err(e) = taphub_transport.connect().await {
+        tracing::warn!("Failed to connect to taphub: {:?}", e);
+    }
+
+    let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
+
+    let ae_id = {
+        let hash = Sha256::digest(config.discord_token.as_bytes());
+        format!("{:x}", hash)[..16].to_string()
+    };
+    tracing::info!(ae_id, "Audio Engine starting");
+
     let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager));
-    let state_service = Arc::new(RedisStateService::new(&config.redis_url)?);
-    let taphub_service = Arc::new(StubTapHubService);
+    let state_service = Arc::new(RedisStateService::new(&config.redis_url, ae_id).await?);
 
     let session_manager = Arc::new(SessionManager::new(
         discord_service,
@@ -60,16 +87,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         taphub_service,
     ));
 
-    tracing::info!("Audio Engine Server listening on {}", addr);
+    tracing::info!("Audio Engine connecting to NATS at {}", nats_url);
 
-    let engine_server = AudioEngineServer::new(session_manager);
+    let engine_server = Arc::new(AudioEngineServer::new(session_manager, nats_url));
+
+    ready_recv.recv().await;
+
+    tracing::info!("Audio Engine is ready and connected to Discord!");
 
     telemetry.healthy();
 
-    Server::builder()
-        .add_service(GrpcServer::new(engine_server))
-        .serve(addr)
-        .await?;
+    // Start consuming
+    if let Err(e) = engine_server.run().await {
+        tracing::error!("RabbitMQ server error: {:?}", e);
+    }
 
     Ok(())
 }

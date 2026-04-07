@@ -58,6 +58,7 @@ class ApiClient {
 
       if (response.status === 401) {
         localStorage.removeItem(AUTH_TOKEN_KEY)
+        localStorage.removeItem('zako_auth_user') // Clear Zustand persist store
         window.location.href = '/login'
       }
 
@@ -102,6 +103,52 @@ class ApiClient {
 
   delete<T>(endpoint: string, signal?: AbortSignal): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'DELETE', signal })
+  }
+
+  async postFormData<T>(endpoint: string, body: FormData): Promise<ApiResponse<T>> {
+    return this.requestFormData<T>(endpoint, 'POST', body)
+  }
+
+  async putFormData<T>(endpoint: string, body: FormData): Promise<ApiResponse<T>> {
+    return this.requestFormData<T>(endpoint, 'PUT', body)
+  }
+
+  private async requestFormData<T>(
+    endpoint: string,
+    method: 'POST' | 'PUT',
+    body: FormData
+  ): Promise<ApiResponse<T>> {
+    const token = this.getToken()
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    // Do NOT set Content-Type — browser sets it with the multipart boundary
+
+    const url = `${this.baseUrl}${endpoint}`
+    const response = await fetch(url, { method, headers, body })
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        code: 'UNKNOWN_ERROR',
+        message: response.statusText,
+      }))
+
+      if (response.status === 401) {
+        localStorage.removeItem(AUTH_TOKEN_KEY)
+        localStorage.removeItem('zako_auth_user')
+        window.location.href = '/login'
+      }
+
+      return { data: null as T, error }
+    }
+
+    if (response.status === 204) {
+      return { data: null as T }
+    }
+
+    const data = await response.json()
+    return { data }
   }
 }
 

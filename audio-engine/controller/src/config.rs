@@ -4,8 +4,8 @@ use serde::Deserialize;
 pub struct AppConfig {
     pub redis_url: String,
     pub discord_token: String,
-    pub port: u16,
-    pub host: String,
+    #[serde(default = "default_nats_url")]
+    pub nats_url: String,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]
@@ -13,6 +13,10 @@ pub struct AppConfig {
     pub otlp_endpoint: Option<String>,
     #[serde(default = "default_metrics_port")]
     pub metrics_port: u16,
+}
+
+fn default_nats_url() -> String {
+    "nats://127.0.0.1:4222".to_string()
 }
 
 fn default_service_name() -> String {
@@ -25,10 +29,8 @@ fn default_metrics_port() -> u16 {
 
 impl AppConfig {
     pub fn load() -> Self {
-        // Load .env file if it exists
         dotenvy::dotenv().ok();
 
-        // Enforce required variables via envy
         match envy::from_env::<AppConfig>() {
             Ok(config) => config,
             Err(e) => {
@@ -36,11 +38,5 @@ impl AppConfig {
                 std::process::exit(1);
             }
         }
-    }
-
-    pub fn addr(&self) -> std::net::SocketAddr {
-        format!("{}:{}", self.host, self.port)
-            .parse()
-            .expect("Invalid host/port configuration")
     }
 }

@@ -201,3 +201,5 @@ cabal.project.local~
 .direnv
 
 *-prompt.md
+
+claude-docs

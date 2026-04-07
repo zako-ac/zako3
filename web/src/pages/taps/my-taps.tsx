@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
 import { Plus, Compass } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMyTaps, useDeleteTap } from '@/features/taps'
-import { useAuthStore } from '@/features/auth'
 import { TapList } from '@/components/tap/tap-list'
 import {
   ConfirmDialog,
@@ -14,12 +13,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { usePagination } from '@/hooks'
 import { ROUTES } from '@/lib/constants'
-import type { Tap, TapWithAccess } from '@zako-ac/zako3-data'
+import type { Tap } from '@zako-ac/zako3-data'
 
 export const MyTapsPage = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
   const { pagination, setPage, setPerPage, getPaginationInfo } = usePagination()
 
   // Delete confirmation state
@@ -32,22 +30,8 @@ export const MyTapsPage = () => {
   })
   const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
 
-  const taps = data?.data ?? []
+  const tapsWithAccess = data?.data ?? []
   const paginationInfo = getPaginationInfo(data?.meta)
-
-  // Transform Tap[] to TapWithAccess[] by adding owner and hasAccess
-  const tapsWithAccess: TapWithAccess[] = useMemo(() => {
-    if (!user) return []
-    return taps.map((tap) => ({
-      ...tap,
-      hasAccess: true,
-      owner: {
-        id: user.id,
-        username: user.username,
-        avatar: user.avatar,
-      },
-    }))
-  }, [taps, user])
 
   const handleTapClick = (tapId: string) => {
     navigate(ROUTES.TAP_STATS(tapId))
@@ -100,7 +84,7 @@ export const MyTapsPage = () => {
         </Button>
       </div>
 
-      {taps.length === 0 ? (
+      {tapsWithAccess.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
           <Compass className="text-muted-foreground mb-4 h-12 w-12" />
           <h3 className="text-lg font-semibold">{t('taps.noTapsOwned')}</h3>

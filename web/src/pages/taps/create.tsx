@@ -44,7 +44,6 @@ export const CreateTapPage = () => {
     const form = useForm({
         resolver: zodResolver(createTapSchema),
         defaultValues: {
-            id: '',
             name: '',
             description: '',
             roles: [] as TapRole[],
@@ -83,25 +82,6 @@ export const CreateTapPage = () => {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <FormField
-                                control={form.control}
-                                name="id"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t('taps.form.id')}</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                placeholder={t('taps.form.idPlaceholder')}
-                                                {...field}
-                                                className="font-mono"
-                                            />
-                                        </FormControl>
-                                        <FormDescription>{t('taps.form.idHelp')}</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
                             <FormField
                                 control={form.control}
                                 name="name"

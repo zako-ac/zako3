@@ -4,17 +4,23 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-prost = "0.14.1"
 tokio = { version = "1.49.0", features = ["full"] }
-tonic = "0.14.2"
 dotenvy = "0.15"
 envy = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-songbird = "0.5.0"
-zako3-audio-engine-types.workspace = true
+songbird.workspace = true
+zako3-types.workspace = true
 zako3-audio-engine-core.workspace = true
 zako3-audio-engine-infra.workspace = true
-zako3-audio-engine-protos.workspace = true
 zako3-audio-engine-telemetry.workspace = true
+zako3-audio-engine-client = { workspace = true }
+zako3-taphub-transport-client.workspace = true
 tracing = "0.1.44"
+rustls = { version = "0.23.37", features = ["aws-lc-rs"] }
+async-nats = { workspace = true }
+futures-util = "0.3"
+serde_json.workspace = true
+dashmap = "6.1.0"
+anyhow.workspace = true
+sha2 = "0.10"

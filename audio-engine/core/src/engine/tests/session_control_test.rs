@@ -4,27 +4,34 @@ use mockall::predicate::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zako3_audio_engine_audio::{MockDecoder, MockMixer, create_boxed_ringbuf_pair};
+use zako3_audio_engine_audio::{MockDecoder, MockMixer, create_ringbuf_pair};
 
 use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
-    AudioMetaResponse, AudioRequestString, AudioResponse, CachedAudioRequest, ChannelId, GuildId,
-    QueueName, SessionState, StreamCacheKey, TapName, Track, TrackDescription, TrackId, Volume,
+    AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
+    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, TapName, Track,
+    TrackId, Volume,
 };
+use zako3_types::hq::DiscordUserId;
 
 // Helper to create a dummy track
 fn create_dummy_track(id: u64, queue: &str) -> Track {
     Track {
         track_id: TrackId::from(id),
-        description: TrackDescription::from("Test Track".to_string()),
+        metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
         request: CachedAudioRequest {
             tap_name: TapName::from("yt".to_string()),
             audio_request: AudioRequestString::from("req".to_string()),
-            cache_key: StreamCacheKey::from("key".to_string()),
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("key".to_string()),
+                ttl_seconds: None,
+            },
+            discord_user_id: DiscordUserId::from("123".to_string()),
         },
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
+        paused: false,
     }
 }
 
@@ -42,8 +49,12 @@ async fn test_play_success() {
         .times(1)
         .returning(|_| {
             Ok(AudioMetaResponse {
-                description: TrackDescription::from("Test Track".to_string()),
-                cache_key: StreamCacheKey::from("test_key".to_string()),
+                metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
+                cache_key: AudioCachePolicy {
+                    cache_type: AudioCacheType::CacheKey("test_key".to_string()),
+                    ttl_seconds: None,
+                },
+                base_volume: 1.0,
             })
         });
 
@@ -92,9 +103,12 @@ async fn test_play_success() {
     // 6. play_now -> request_audio
     mock_taphub.expect_request_audio().times(1).returning(|_| {
         Ok(AudioResponse {
-            description: TrackDescription::from("Test Track".to_string()),
-            cache_key: Some(StreamCacheKey::from("test_key".to_string())),
-            stream: Box::new(tokio::io::empty()),
+            metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("test_key".to_string()),
+                ttl_seconds: None,
+            }),
+            stream: tokio::sync::mpsc::channel(1).1,
         })
     });
 
@@ -103,7 +117,7 @@ async fn test_play_success() {
         .expect_start_decoding()
         .times(1)
         .returning(|_, _| {
-            let (_, c) = create_boxed_ringbuf_pair();
+            let (_, c) = create_ringbuf_pair();
             Ok(c)
         });
 
@@ -125,6 +139,7 @@ async fn test_play_success() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("test".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 
@@ -142,8 +157,12 @@ async fn test_play_queued() {
     // 1. Meta
     mock_taphub.expect_request_audio_meta().returning(|_| {
         Ok(AudioMetaResponse {
-            description: TrackDescription::from("T2".to_string()),
-            cache_key: StreamCacheKey::from("k2".to_string()),
+            metadatas: vec![AudioMetadata::Title("T2".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("k2".to_string()),
+                ttl_seconds: None,
+            },
+            base_volume: 1.0,
         })
     });
 
@@ -207,6 +226,7 @@ async fn test_play_queued() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 
@@ -217,13 +237,19 @@ async fn test_play_queued() {
 async fn test_stop_success() {
     let guild_id = GuildId::from(2);
     let mut mock_mixer = MockMixer::new();
-    let mock_decoder = MockDecoder::new();
+    let mut mock_decoder = MockDecoder::new();
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(100);
 
     mock_mixer
         .expect_remove_source()
+        .with(eq(track_id))
+        .times(1)
+        .return_const(());
+
+    mock_decoder
+        .expect_stop_track()
         .with(eq(track_id))
         .times(1)
         .return_const(());
@@ -291,7 +317,7 @@ async fn test_stop_success() {
 async fn test_stop_non_existent() {
     let guild_id = GuildId::from(2);
     let mut mock_mixer = MockMixer::new();
-    let mock_decoder = MockDecoder::new();
+    let mut mock_decoder = MockDecoder::new();
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(999);
@@ -299,6 +325,12 @@ async fn test_stop_non_existent() {
     mock_mixer
         .expect_remove_source()
         .with(eq(track_id))
+        .return_const(());
+
+    mock_decoder
+        .expect_stop_track()
+        .with(eq(track_id))
+        .times(1)
         .return_const(());
 
     // Get session for queue name (metrics) - empty, track doesn't exist
@@ -483,13 +515,16 @@ async fn test_next_music_success() {
         .returning(|_| false);
     mock_taphub.expect_request_audio().returning(|_| {
         Ok(AudioResponse {
-            description: TrackDescription::from("T2".to_string()),
-            cache_key: Some(StreamCacheKey::from("k2".to_string())),
-            stream: Box::new(tokio::io::empty()),
+            metadatas: vec![AudioMetadata::Title("T2".to_string())],
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("k2".to_string()),
+                ttl_seconds: None,
+            }),
+            stream: tokio::sync::mpsc::channel(1).1,
         })
     });
     mock_decoder.expect_start_decoding().returning(|_, _| {
-        let (_, c) = create_boxed_ringbuf_pair();
+        let (_, c) = create_ringbuf_pair();
         Ok(c)
     });
     mock_mixer.expect_add_source().return_const(());
@@ -589,8 +624,12 @@ async fn test_end_of_track_handling_and_preload() {
     // Taphub meta (for play call)
     mock_taphub.expect_request_audio_meta().returning(|_| {
         Ok(AudioMetaResponse {
-            description: TrackDescription::from("".to_string()),
-            cache_key: StreamCacheKey::from("".to_string()),
+            metadatas: vec![AudioMetadata::Title("".to_string())],
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("".to_string()),
+                ttl_seconds: None,
+            },
+            base_volume: 1.0,
         })
     });
 
@@ -614,15 +653,18 @@ async fn test_end_of_track_handling_and_preload() {
     // Audio Request
     mock_taphub.expect_request_audio().returning(|_| {
         Ok(AudioResponse {
-            description: TrackDescription::from("".to_string()),
-            cache_key: Some(StreamCacheKey::from("".to_string())),
-            stream: Box::new(tokio::io::empty()),
+            metadatas: vec![AudioMetadata::Title("".to_string())],
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("".to_string()),
+                ttl_seconds: None,
+            }),
+            stream: tokio::sync::mpsc::channel(1).1,
         })
     });
 
     // Decoder
     mock_decoder.expect_start_decoding().returning(|_, _| {
-        let (_, c) = create_boxed_ringbuf_pair();
+        let (_, c) = create_ringbuf_pair();
         Ok(c)
     });
 
@@ -653,12 +695,27 @@ async fn test_end_of_track_handling_and_preload() {
         .times(1)
         .return_const(());
 
+    mock_decoder
+        .expect_stop_track()
+        .with(eq(TrackId::from(1)))
+        .times(1)
+        .return_const(());
+
     // Preload Track 2
     mock_taphub
         .expect_preload_audio()
         .withf(|req| req.audio_request == AudioRequestString::from("t".to_string()))
         .times(0)
-        .returning(|_| Ok(()));
+        .returning(|_| {
+            Ok(AudioMetaResponse {
+                metadatas: vec![],
+                cache_key: AudioCachePolicy {
+                    cache_type: AudioCacheType::None,
+                    ttl_seconds: None,
+                },
+                base_volume: 1.0,
+            })
+        });
 
     let control = create_session_control(
         guild_id,
@@ -676,6 +733,7 @@ async fn test_end_of_track_handling_and_preload() {
             TapName::from("yt".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
         )
         .await;
 

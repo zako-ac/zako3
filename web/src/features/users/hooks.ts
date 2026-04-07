@@ -31,14 +31,6 @@ export const useUser = (userId: string | undefined) => {
     })
 }
 
-export const useUserPublic = (userId: string | undefined) => {
-    return useQuery({
-        queryKey: userKeys.public(userId!),
-        queryFn: () => usersApi.getUserPublic(userId!),
-        enabled: !!userId,
-    })
-}
-
 export const useBanUser = () => {
     const queryClient = useQueryClient()
 

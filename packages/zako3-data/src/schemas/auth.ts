@@ -26,6 +26,7 @@ export const loginResponseSchema = z.object({
 export const authCallbackResponseSchema = z.object({
   token: z.string(),
   user: authUserSchema,
+  redirectUrl: z.string().nullable(),
 });
 
 export const refreshTokenResponseSchema = z.object({

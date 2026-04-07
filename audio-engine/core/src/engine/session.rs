@@ -3,13 +3,12 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc::Sender;
 use tracing::instrument;
 use zako3_audio_engine_audio::metrics;
-use zako3_audio_engine_types::SessionState;
+use zako3_types::SessionState;
 
 use crate::{
-    ArcStateService, ArcTapHubService,
     audio::{ArcDecoder, ArcMixer},
     error::ZakoResult,
-    modify_state_session,
+    service::{ArcStateService, ArcTapHubService, modify_state_session},
     types::{
         AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, GuildId, QueueName,
         TapName, Track, TrackId, Volume,
@@ -55,11 +54,13 @@ impl SessionControl {
         tap_name: TapName,
         request: AudioRequestString,
         volume: Volume,
+        discord_user_id: zako3_types::hq::DiscordUserId,
     ) -> ZakoResult<TrackId> {
         tracing::info!(
             queue_name = %queue_name,
             tap_name = %tap_name,
             volume = %volume,
+            discord_user_id = %discord_user_id,
             "Playing audio"
         );
 
@@ -68,22 +69,28 @@ impl SessionControl {
         let ar = AudioRequest {
             tap_name: tap_name.clone(),
             request: request.clone(),
+            discord_user_id: discord_user_id.clone(),
         };
 
         let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
+        tracing::info!("base_volume = {}", meta.base_volume);
+
+        let effective_volume = Volume::from(f32::from(volume) * meta.base_volume);
 
         let queue_name_for_metric = queue_name.clone();
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             let track = Track {
                 track_id,
-                description: meta.description,
+                metadatas: meta.metadatas,
                 request: CachedAudioRequest {
                     tap_name,
                     audio_request: request,
                     cache_key: meta.cache_key,
+                    discord_user_id,
                 },
-                volume,
+                volume: effective_volume,
                 queue_name: queue_name.clone(),
+                paused: false,
             };
 
             upsert_track(&mut session.queues, queue_name.clone(), track);
@@ -111,6 +118,32 @@ impl SessionControl {
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn pause(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Pausing track");
+        self.decoder.pause_track(track_id);
+        modify_state_session(&self.state_service, self.guild_id, move |session| {
+            if let Some(track) = session.find_track_mut(track_id) {
+                track.paused = true;
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn resume(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Resuming track");
+        modify_state_session(&self.state_service, self.guild_id, move |session| {
+            if let Some(track) = session.find_track_mut(track_id) {
+                track.paused = false;
+            }
+        })
+        .await?;
+        self.decoder.resume_track(track_id);
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn stop(&self, track_id: TrackId) -> ZakoResult<()> {
         tracing::info!(track_id = %track_id, "Stopping track");
 
@@ -121,6 +154,7 @@ impl SessionControl {
             .and_then(|s| s.find_track(track_id).map(|t| t.queue_name.clone()));
 
         self.mixer.remove_source(track_id);
+        self.decoder.stop_track(track_id);
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             session.remove_track(track_id);
         })
@@ -146,7 +180,7 @@ impl SessionControl {
                 AudioStopFilter::All => s.get_all_track_ids(),
                 AudioStopFilter::Music => s.get_all_track_ids_by_queue_name_prefix("music"),
                 AudioStopFilter::TTS(user_id) => {
-                    s.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", u64::from(user_id)))
+                    s.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", user_id))
                 }
             })
             .unwrap_or_default();
@@ -155,6 +189,7 @@ impl SessionControl {
 
         for track_id in track_ids {
             self.mixer.remove_source(track_id);
+            self.decoder.stop_track(track_id);
 
             if let Some(session) = session.as_mut() {
                 if let Some(track) = session.find_track(track_id) {
@@ -229,6 +264,9 @@ impl SessionControl {
             let active_tracks = session.get_active_tracks();
 
             for track in active_tracks {
+                if track.paused {
+                    continue;
+                }
                 if !self.mixer.has_source(track.track_id).await {
                     self.play_now(track).await?;
                 }

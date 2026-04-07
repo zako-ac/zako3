@@ -1,0 +1,313 @@
+use crate::CoreResult;
+use async_trait::async_trait;
+use hq_types::hq::{Tap, TapId, TapName, UserId};
+use sqlx::{PgPool, Row};
+
+#[async_trait]
+pub trait TapRepository: Send + Sync {
+    async fn create(&self, tap: &Tap) -> CoreResult<Tap>;
+    async fn list_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>>;
+    async fn find_by_id(&self, id: TapId) -> CoreResult<Option<Tap>>;
+    async fn update(&self, tap: &Tap) -> CoreResult<Tap>;
+    async fn delete(&self, id: TapId) -> CoreResult<()>;
+    async fn list_all(&self) -> CoreResult<Vec<Tap>>;
+    async fn find_by_ids(&self, ids: Vec<TapId>) -> CoreResult<Vec<Tap>>;
+}
+
+pub struct PgTapRepository {
+    pool: PgPool,
+}
+
+impl PgTapRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl TapRepository for PgTapRepository {
+    async fn create(&self, tap: &Tap) -> CoreResult<Tap> {
+        let id = tap.id.0.clone();
+        let owner_id = tap.owner_id.0.clone();
+        let name = tap.name.0.clone();
+        let description = tap.description.clone();
+        let occupation = serde_json::to_string(&tap.occupation)?
+            .trim_matches('"')
+            .to_string();
+        let permission = serde_json::to_value(&tap.permission)?;
+        let roles = serde_json::to_value(&tap.roles)?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO taps (id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+        )
+        .bind(id)
+        .bind(owner_id)
+        .bind(name)
+        .bind(description)
+        .bind(occupation)
+        .bind(permission)
+        .bind(roles)
+        .bind(tap.base_volume)
+        .bind(tap.timestamp.created_at)
+        .bind(tap.timestamp.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(tap.clone())
+    }
+
+    async fn list_by_owner(&self, owner_id: UserId) -> CoreResult<Vec<Tap>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
+            FROM taps
+            WHERE owner_id = $1
+            "#,
+        )
+        .bind(owner_id.0)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let taps = rows
+            .into_iter()
+            .map(|row| {
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
+
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
+
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
+
+                let base_volume: f32 = row.try_get("base_volume")?;
+
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+                Ok(Tap {
+                    id: TapId(id),
+                    name: TapName(name),
+                    description,
+                    owner_id: UserId(owner_id),
+                    occupation,
+                    permission,
+                    roles,
+                    base_volume,
+                    timestamp: hq_types::hq::ResourceTimestamp {
+                        created_at,
+                        updated_at,
+                    },
+                })
+            })
+            .collect::<CoreResult<Vec<Tap>>>()?;
+
+        Ok(taps)
+    }
+
+    async fn find_by_id(&self, id: TapId) -> CoreResult<Option<Tap>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
+            FROM taps
+            WHERE id = $1
+            "#,
+        )
+        .bind(id.0)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let id: String = row.try_get("id")?;
+            let owner_id: String = row.try_get("owner_id")?;
+            let name: String = row.try_get("name")?;
+            let description: Option<String> = row.try_get("description")?;
+
+            let occupation_str: String = row.try_get("occupation")?;
+            let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+            let permission_val: serde_json::Value = row.try_get("permission")?;
+            let permission = serde_json::from_value(permission_val)?;
+
+            let roles_val: serde_json::Value = row.try_get("roles")?;
+            let roles = serde_json::from_value(roles_val)?;
+
+            let base_volume: f32 = row.try_get("base_volume")?;
+
+            let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+            let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+            Ok(Some(Tap {
+                id: TapId(id),
+                name: TapName(name),
+                description,
+                owner_id: UserId(owner_id),
+                occupation,
+                permission,
+                roles,
+                base_volume,
+                timestamp: hq_types::hq::ResourceTimestamp {
+                    created_at,
+                    updated_at,
+                },
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn update(&self, tap: &Tap) -> CoreResult<Tap> {
+        let id = tap.id.0.clone();
+        let name = tap.name.0.clone();
+        let description = tap.description.clone();
+        let occupation = serde_json::to_string(&tap.occupation)?
+            .trim_matches('"')
+            .to_string();
+        let permission = serde_json::to_value(&tap.permission)?;
+        let roles = serde_json::to_value(&tap.roles)?;
+
+        sqlx::query(
+            r#"
+            UPDATE taps
+            SET name = $1, description = $2, occupation = $3, permission = $4, roles = $5, base_volume = $6, updated_at = $7
+            WHERE id = $8
+            "#,
+        )
+        .bind(name)
+        .bind(description)
+        .bind(occupation)
+        .bind(permission)
+        .bind(roles)
+        .bind(tap.base_volume)
+        .bind(tap.timestamp.updated_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(tap.clone())
+    }
+
+    async fn delete(&self, id: TapId) -> CoreResult<()> {
+        sqlx::query("DELETE FROM taps WHERE id = $1")
+            .bind(id.0)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn list_all(&self) -> CoreResult<Vec<Tap>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
+            FROM taps
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let taps = rows
+            .into_iter()
+            .map(|row| {
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
+
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
+
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
+
+                let base_volume: f32 = row.try_get("base_volume")?;
+
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+                Ok(Tap {
+                    id: hq_types::hq::TapId(id),
+                    name: hq_types::hq::TapName(name),
+                    description,
+                    owner_id: hq_types::hq::UserId(owner_id),
+                    occupation,
+                    permission,
+                    roles,
+                    base_volume,
+                    timestamp: hq_types::hq::ResourceTimestamp {
+                        created_at,
+                        updated_at,
+                    },
+                })
+            })
+            .collect::<CoreResult<Vec<Tap>>>()?;
+
+        Ok(taps)
+    }
+
+    async fn find_by_ids(&self, ids: Vec<TapId>) -> CoreResult<Vec<Tap>> {
+        let ids_str: Vec<String> = ids.into_iter().map(|id| id.0).collect();
+        let rows = sqlx::query(
+            r#"
+            SELECT id, owner_id, name, description, occupation, permission, roles, base_volume, created_at, updated_at
+            FROM taps
+            WHERE id = ANY($1)
+            "#,
+        )
+        .bind(&ids_str)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let taps = rows
+            .into_iter()
+            .map(|row| {
+                let id: String = row.try_get("id")?;
+                let owner_id: String = row.try_get("owner_id")?;
+                let name: String = row.try_get("name")?;
+                let description: Option<String> = row.try_get("description")?;
+
+                let occupation_str: String = row.try_get("occupation")?;
+                let occupation = serde_json::from_str(&format!("\"{}\"", occupation_str))?;
+
+                let permission_val: serde_json::Value = row.try_get("permission")?;
+                let permission = serde_json::from_value(permission_val)?;
+
+                let roles_val: serde_json::Value = row.try_get("roles")?;
+                let roles = serde_json::from_value(roles_val)?;
+
+                let base_volume: f32 = row.try_get("base_volume")?;
+
+                let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+                let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+                Ok(Tap {
+                    id: TapId(id),
+                    name: TapName(name),
+                    description,
+                    owner_id: UserId(owner_id),
+                    occupation,
+                    permission,
+                    roles,
+                    base_volume,
+                    timestamp: hq_types::hq::ResourceTimestamp {
+                        created_at,
+                        updated_at,
+                    },
+                })
+            })
+            .collect::<CoreResult<Vec<Tap>>>()?;
+
+        Ok(taps)
+    }
+}

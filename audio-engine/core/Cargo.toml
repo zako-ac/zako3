@@ -20,7 +20,6 @@ sha2 = "0.10.9"
 redis = { version = "0.27", features = ["tokio-comp"] }
 serde_json = "1.0"
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-songbird = "0.5.0"
 symphonia = "0.5.5"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["full"] }
@@ -28,4 +27,5 @@ tokio-util = { version = "0.7.17", features = ["io", "io-util"] }
 
 tracing = "0.1.44"
 zako3-audio-engine-audio.workspace = true
-zako3-audio-engine-types.workspace = true
+zako3-types.workspace = true
+songbird.workspace = true

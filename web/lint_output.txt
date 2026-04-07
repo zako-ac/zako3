@@ -1,0 +1,139 @@
+
+src/pages/hotkey-test.tsx
+  46: Error: Found hardcoded string: "Hotkey Test Page"
+  47: Error: Found hardcoded string: "Test keyboard shortcuts:"
+  50: Error: Found hardcoded string: "Toggle sidebar"
+  54: Error: Found hardcoded string: "Show help"
+  58: Error: Found hardcoded string: "Open search"
+  62: Error: Found hardcoded string: "Go to dashboard"
+  66: Error: Found hardcoded string: "Test Button Click"
+  72: Error: Found hardcoded string: "Tab Navigation Test"
+  73: Error: Found hardcoded string: "Use Alt+Up/Down to navigate between tabs"
+  87: Error: Found hardcoded string: "Tab 1 Content"
+  88: Error: Found hardcoded string: "Press Alt+Down to go to Tab 2"
+  93: Error: Found hardcoded string: "Tab 2 Content"
+  94: Error: Found hardcoded string: "Press Alt+Up to go to Tab 1, or Alt+Down to go to Tab 3"
+  99: Error: Found hardcoded string: "Tab 3 Content"
+  100: Error: Found hardcoded string: "Press Alt+Up to go to Tab 2"
+  107: Error: Found hardcoded string: "Open browser console to see logs"
+
+src/layouts/auth-layout.tsx
+  16: Error: Found hardcoded string: "ZAKO. All rights reserved."
+
+src/examples/keyboard-shortcuts-usage.tsx
+  25: Error: Found hardcoded string: "Save"
+  41: Error: Found hardcoded string: "Toggle sidebar"
+  47: Error: Found hardcoded string: "Go to dashboard"
+  53: Error: Found hardcoded string: "Open search"
+  59: Error: Found hardcoded string: "Show help"
+  107: Error: Found hardcoded string: "Press Cmd/Ctrl+S to save"
+  108: Error: Found hardcoded string: "Save"
+
+src/pages/taps/stats.tsx
+  81: Error: Found hardcoded string: "Tap not found"
+
+src/pages/taps/settings.tsx
+  165: Error: Found hardcoded string: "Tap not found"
+
+src/pages/dashboard/index.tsx
+  114: Error: Found hardcoded string: "uses"
+
+src/pages/auth/login.tsx
+  33: Error: Found hardcoded string: "Z"
+
+src/pages/auth/callback.tsx
+  44: Error: Found hardcoded string: "Authenticating..."
+
+src/pages/admin/dashboard.tsx
+  136: Error: Found hardcoded string: "on"
+
+src/components/ui/tabs-navigable.tsx
+  137: Error: Found hardcoded string: "to navigate"
+
+src/components/ui/sidebar.tsx
+  268: Error: Found hardcoded string: "Toggle Sidebar"
+  273: Error: Found hardcoded string: "Toggle Sidebar"
+  289: Error: Found hardcoded string: "Toggle Sidebar"
+  292: Error: Found hardcoded string: "Toggle Sidebar"
+
+src/components/ui/sheet.tsx
+  19: Error: Found hardcoded string: "Close"
+
+src/components/ui/pagination.tsx
+  15: Error: Found hardcoded string: "pagination"
+  68: Error: Found hardcoded string: "Previous"
+  85: Error: Found hardcoded string: "Next"
+  114: Error: Found hardcoded string: "More pages"
+
+src/components/ui/kbd.tsx
+  47: Error: Found hardcoded string: "then"
+
+src/components/ui/dialog.tsx
+  27: Error: Found hardcoded string: "Close"
+
+src/components/ui/carousel.tsx
+  125: Error: Found hardcoded string: "carousel"
+  162: Error: Found hardcoded string: "slide"
+  199: Error: Found hardcoded string: "Previous slide"
+  229: Error: Found hardcoded string: "Next slide"
+
+src/components/ui/breadcrumb.tsx
+  8: Error: Found hardcoded string: "breadcrumb"
+  95: Error: Found hardcoded string: "More"
+
+src/components/layout/theme-toggle.tsx
+  19: Error: Found hardcoded string: "Toggle theme"
+
+src/components/layout/language-toggle.tsx
+  24: Error: Found hardcoded string: "Change language"
+
+src/components/layout/app-sidebar.tsx
+  93: Error: Found hardcoded string: "ZAKO"
+  97: Error: Found hardcoded string: "ZAKO"
+
+src/components/layout/admin-sidebar.tsx
+  218: Error: Found hardcoded string: "ZAKO"
+  223: Error: Found hardcoded string: "ZAKO"
+  224: Error: Found hardcoded string: "Admin"
+  268: Error: Found hardcoded string: "Admin"
+
+src/components/tap/user-list-selector.tsx
+  188: Error: Found hardcoded string: "Import"
+  199: Error: Found hardcoded string: "Export"
+  210: Error: Found hardcoded string: "Export as JSON"
+  218: Error: Found hardcoded string: "Export as CSV"
+  270: Error: Found hardcoded string: "This user doesn't exist yet. This is allowed - they may be
+                      added later."
+  287: Error: Found hardcoded string: "Clear all"
+  318: Error: Found hardcoded string: "No users found."
+  333: Error: Found hardcoded string: "Add ""
+  334: Error: Found hardcoded string: "" as user ID"
+
+src/components/tap/tap-card.tsx
+  177: Error: Found hardcoded string: "uses"
+
+src/components/tap/report-modal.tsx
+  121: Error: Found hardcoded string: "Please provide details about the issue..."
+
+src/components/dashboard/notification-bell.tsx
+  45: Error: Found hardcoded string: "Notifications"
+
+src/components/dashboard/activity-log.tsx
+  80: Error: Found hardcoded string: "No activity yet"
+
+src/components/common/keyboard-shortcuts-dialog.tsx
+  64: Error: Found hardcoded string: "Press"
+  65: Error: Found hardcoded string: "to
+            close this dialog"
+
+src/components/common/filter-dropdown.tsx
+  69: Error: Found hardcoded string: "Clear"
+
+src/components/common/data-pagination.tsx
+  46: Error: Found hardcoded string: "of"
+  66: Error: Found hardcoded string: "per page"
+  88: Error: Found hardcoded string: "Page"
+  89: Error: Found hardcoded string: "of"
+
+src/components/common/data-table/data-table.tsx
+  84: Error: Found hardcoded string: "Error loading data:"
