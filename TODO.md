@@ -11,6 +11,7 @@ refer hq todo
 
 - [ ] Implement text preprocessing
 - [ ] implement cache: max cache size, score-based cache eviction worker
+- [ ] refactor TH
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -30,6 +31,8 @@ refer hq todo
 - [x] Add timeout to AE client
 
 - [ ] otel and prometheus and logging(promtail)
+- [ ] Plan proper logging with context
+
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 - [ ] implement ban
@@ -40,8 +43,8 @@ refer hq todo
 - [ ] Make cache removation command
 - [ ] Add base volume for tap
 
-- [ ] Make cache get removed when early stop
-- [ ] Async decoding performance issue in pf2 maybe?
+- [x] Make cache get removed when early stop
+- [x] Async decoding performance issue in pf2 maybe?
 
 ## Text Preprocessing
 - [ ] ㅏ -> 아

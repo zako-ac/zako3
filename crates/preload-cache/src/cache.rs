@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::{Path, PathBuf}, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -17,7 +17,7 @@ use zako3_types::{
 use crate::{
     db::{CacheDb, DbEntry},
     preload::PreloadReader,
-    types::CacheEntry,
+    types::{CacheEntry, CacheEntryKind},
 };
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ pub trait AudioCache: Send + Sync {
         item: AudioCacheItem,
         metadatas: Vec<AudioMetadata>,
         cache_key: AudioCachePolicy,
-        opus_path: &PathBuf,
+        opus_path: &Path,
     ) -> io::Result<()>;
 
     /// Open a reader for cached audio. Returns `None` if not cached, expired, or still downloading.
@@ -99,6 +99,11 @@ impl FileAudioCache {
         let db_path = dir.join("cache.db");
         let db = CacheDb::open(db_path).await?;
         Ok(Self { dir, max_file_bytes, db: Arc::new(db) })
+    }
+
+    /// Expose the underlying `CacheDb` for external tools (e.g. cache-gc).
+    pub fn db(&self) -> &CacheDb {
+        &self.db
     }
 
     /// Update the GDSF eviction priority for a cached entry.
@@ -186,14 +191,14 @@ impl AudioCache for FileAudioCache {
             let mut total_bytes: u64 = 0;
             while let Some(frame) = stream.recv().await {
                 total_bytes += 4 + frame.len() as u64;
-                if let Some(max) = self.max_file_bytes {
-                    if total_bytes > max {
-                        warn!(tap_id = %item.tap_id, "cache store exceeded max_file_bytes ({max}), dropping");
-                        return Err(io::Error::new(
-                            io::ErrorKind::FileTooLarge,
-                            "cache store exceeded max_file_bytes",
-                        ));
-                    }
+                if let Some(max) = self.max_file_bytes
+                    && total_bytes > max
+                {
+                    warn!(tap_id = %item.tap_id, "cache store exceeded max_file_bytes ({max}), dropping");
+                    return Err(io::Error::new(
+                        io::ErrorKind::FileTooLarge,
+                        "cache store exceeded max_file_bytes",
+                    ));
                 }
                 let len = frame.len() as u32;
                 file.write_all(&len.to_le_bytes()).await?;
@@ -229,7 +234,7 @@ impl AudioCache for FileAudioCache {
         item: AudioCacheItem,
         metadatas: Vec<AudioMetadata>,
         cache_key: AudioCachePolicy,
-        opus_path: &PathBuf,
+        opus_path: &Path,
     ) -> io::Result<()> {
         if let Some(max) = self.max_file_bytes {
             let size = fs::metadata(opus_path).await?.len();
@@ -327,7 +332,12 @@ impl AudioCache for FileAudioCache {
             tap_id: tap_id.clone(),
             expire_at,
         };
-        Some(CacheEntry { item, metadatas, cache_key, is_downloading: entry.is_downloading })
+        let kind = if entry.opus_path.is_some() {
+            CacheEntryKind::Audio { is_downloading: entry.is_downloading }
+        } else {
+            CacheEntryKind::Metadata
+        };
+        Some(CacheEntry { item, metadatas, cache_key, kind })
     }
 
     async fn store_metadata(
@@ -357,10 +367,10 @@ impl AudioCache for FileAudioCache {
 
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()> {
         let key_json = key_to_json(key);
-        if let Ok(Some(entry)) = self.db.get(tap_id.to_string(), key_json.clone()).await {
-            if let Some(path) = entry.opus_path {
-                let _ = remove_if_exists(&PathBuf::from(path)).await;
-            }
+        if let Ok(Some(entry)) = self.db.get(tap_id.to_string(), key_json.clone()).await
+            && let Some(path) = entry.opus_path
+        {
+            let _ = remove_if_exists(&PathBuf::from(path)).await;
         }
         self.db.delete(tap_id.to_string(), key_json).await
     }

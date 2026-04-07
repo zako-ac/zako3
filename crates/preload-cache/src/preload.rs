@@ -73,15 +73,15 @@ async fn write_task(
         let mut total_bytes: u64 = 0;
         while let Some(frame) = stream.recv().await {
             total_bytes += 4 + frame.len() as u64;
-            if let Some(max) = max_file_bytes {
-                if total_bytes > max {
-                    warn!("preload exceeded max_file_bytes ({max}), dropping");
-                    drop(stream);
-                    return Err(io::Error::new(
-                        io::ErrorKind::FileTooLarge,
-                        "preload exceeded max_file_bytes",
-                    ));
-                }
+            if let Some(max) = max_file_bytes
+                && total_bytes > max
+            {
+                warn!("preload exceeded max_file_bytes ({max}), dropping");
+                drop(stream);
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    "preload exceeded max_file_bytes",
+                ));
             }
             let len = frame.len() as u32;
             file.write_all(&len.to_le_bytes()).await?;

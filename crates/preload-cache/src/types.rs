@@ -9,16 +9,33 @@ use zako3_types::{AudioCachePolicy, AudioMetadata, cache::AudioCacheItem};
 pub struct PreloadId(pub u64);
 
 // ---------------------------------------------------------------------------
-// CacheEntry
+// CacheEntryKind / CacheEntry
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub enum CacheEntryKind {
+    /// Entry has an associated `.opus` audio file.
+    Audio { is_downloading: bool },
+    /// Entry stores only metadata; no `.opus` file.
+    Metadata,
+}
 
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub item: AudioCacheItem,
     pub metadatas: Vec<AudioMetadata>,
     pub cache_key: AudioCachePolicy,
-    /// True while the opus file is still being written to disk.
-    pub is_downloading: bool,
+    pub kind: CacheEntryKind,
+}
+
+impl CacheEntry {
+    pub fn has_audio(&self) -> bool {
+        matches!(self.kind, CacheEntryKind::Audio { .. })
+    }
+
+    pub fn is_downloading(&self) -> bool {
+        matches!(self.kind, CacheEntryKind::Audio { is_downloading: true })
+    }
 }
 
 // ---------------------------------------------------------------------------

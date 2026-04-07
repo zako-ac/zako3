@@ -19,6 +19,7 @@ use zako3_types::{
 };
 
 use crate::hub::TapHub;
+use zakofish::types::message::AttachedMetadata;
 
 #[async_trait]
 impl TapHubBridgeHandler for TapHub {
@@ -62,44 +63,47 @@ impl TapHubBridgeHandler for TapHub {
 
         if let Some(ref item) = cache_item {
             if let Some(entry) = self.audio_cache.get_entry(&item.tap_id, &item.key).await {
-                tracing::info!("Cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
+                if entry.has_audio() && !entry.is_downloading() {
+                    tracing::info!("Cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
+                    if let Some(reader) =
+                        self.audio_cache.open_reader(&item.tap_id, &item.key).await
+                    {
+                        self.metrics_service
+                            .inc_cache_hits(tap_id.clone())
+                            .await
+                            .ok();
 
-                if let Some(reader) = self.audio_cache.open_reader(&item.tap_id, &item.key).await {
-                    self.metrics_service
-                        .inc_cache_hits(tap_id.clone())
-                        .await
-                        .ok();
-
-                    let (tx, rx) = mpsc::channel(100);
-                    tokio::spawn(async move {
-                        let mut reader = reader;
-                        let mut frame_count = 0u64;
-                        loop {
-                            match reader.next_frame().await {
-                                Ok(NextFrame::Frame(bytes)) => {
-                                    let ts = Timestamp(frame_count * 20);
-                                    frame_count += 1;
-                                    if tx.send((ts, bytes)).await.is_err() {
-                                        break;
+                        let (tx, rx) = mpsc::channel(100);
+                        tokio::spawn(async move {
+                            let mut reader = reader;
+                            let mut frame_count = 0u64;
+                            loop {
+                                match reader.next_frame().await {
+                                    Ok(NextFrame::Frame(bytes)) => {
+                                        let ts = Timestamp(frame_count * 20);
+                                        frame_count += 1;
+                                        if tx.send((ts, bytes)).await.is_err() {
+                                            break;
+                                        }
                                     }
+                                    // Cache files are fully written — Pending cannot occur.
+                                    Ok(NextFrame::Pending) | Ok(NextFrame::Done) | Err(_) => break,
                                 }
-                                // Cache files are fully written — Pending cannot occur.
-                                Ok(NextFrame::Pending) | Ok(NextFrame::Done) | Err(_) => break,
                             }
-                        }
-                    });
-                    let meta = AudioMetaResponse {
-                        metadatas: entry.metadatas,
-                        cache_key: entry.cache_key,
-                        base_volume: tap.base_volume,
-                    };
-                    return Ok((meta, rx));
-                } else {
-                    tracing::warn!(
-                        "Cache entry found but failed to open reader for tap_id={}, key={}",
-                        item.tap_id.0,
-                        item.key
-                    );
+                        });
+                        let meta = AudioMetaResponse {
+                            metadatas: entry.metadatas,
+                            cache_key: entry.cache_key,
+                            base_volume: tap.base_volume,
+                        };
+                        return Ok((meta, rx));
+                    } else {
+                        tracing::warn!(
+                            "Cache entry found but failed to open reader for tap_id={}, key={}",
+                            item.tap_id.0,
+                            item.key
+                        );
+                    }
                 }
             }
         }
@@ -172,19 +176,45 @@ impl TapHubBridgeHandler for TapHub {
 
         // Cache _rel
         let (rel_rx, done_rx) = bridge_rel(rel, disconnect_rx);
+
+        // Resolve AttachedMetadata to Vec<AudioMetadata>
+        let metadatas: Vec<zako3_types::AudioMetadata> = match succ.metadatas {
+            AttachedMetadata::Metadatas(v) => v,
+            AttachedMetadata::UseCached => {
+                let meta_hash =
+                    hex::encode(Sha256::digest(request.audio_request.to_string().as_bytes()));
+                let meta_key = AudioCacheItemKey::ARHash(meta_hash);
+                self.audio_cache
+                    .get_entry(&tap_id, &meta_key)
+                    .await
+                    .map(|e| e.metadatas)
+                    .unwrap_or_else(|| {
+                        tracing::warn!(
+                            "UseCached metadata requested but no cache entry found for tap_id={}",
+                            tap_id.0
+                        );
+                        vec![]
+                    })
+            }
+        };
+
         if let Some(item) = cache_item {
             let cache = Arc::clone(&self.audio_cache);
-            let metadatas = succ.metadatas.clone();
+            let metadatas_clone = metadatas.clone();
             let cache_key = succ.cache.clone();
+
             tokio::spawn(async move {
-                if let Err(e) = cache.store(item, metadatas, cache_key, rel_rx, done_rx).await {
+                if let Err(e) = cache
+                    .store(item.clone(), metadatas_clone, cache_key, rel_rx, done_rx)
+                    .await
+                {
                     tracing::warn!(%e, "Failed to store audio in cache");
                 }
             });
         }
 
         let meta = AudioMetaResponse {
-            metadatas: succ.metadatas,
+            metadatas,
             cache_key: succ.cache,
             base_volume: tap.base_volume,
         };
@@ -296,6 +326,27 @@ impl TapHubBridgeHandler for TapHub {
                 rx
             });
 
+        // Resolve AttachedMetadata to Vec<AudioMetadata>
+        let metadatas: Vec<zako3_types::AudioMetadata> = match succ.metadatas {
+            AttachedMetadata::Metadatas(v) => v,
+            AttachedMetadata::UseCached => {
+                let meta_hash =
+                    hex::encode(Sha256::digest(req.audio_request.to_string().as_bytes()));
+                let meta_key = AudioCacheItemKey::ARHash(meta_hash);
+                self.audio_cache
+                    .get_entry(&tap_id, &meta_key)
+                    .await
+                    .map(|e| e.metadatas)
+                    .unwrap_or_else(|| {
+                        tracing::warn!(
+                            "UseCached metadata requested but no cache entry found for tap_id={}",
+                            tap_id.0
+                        );
+                        vec![]
+                    })
+            }
+        };
+
         // Preload _rel to disk
         let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
         let (rel_rx, _done_rx) = bridge_rel(rel, disconnect_rx);
@@ -305,7 +356,7 @@ impl TapHubBridgeHandler for TapHub {
         let action = match cache_item {
             Some(item) => PreloadReadEndAction::MoveToCache {
                 item,
-                metadatas: succ.metadatas.clone(),
+                metadatas: metadatas.clone(),
                 cache_key: succ.cache.clone(),
                 cache: Arc::clone(&self.audio_cache) as Arc<dyn AudioCache>,
             },
@@ -344,7 +395,7 @@ impl TapHubBridgeHandler for TapHub {
         });
 
         Ok(AudioMetaResponse {
-            metadatas: succ.metadatas,
+            metadatas,
             cache_key: succ.cache,
             base_volume: tap.base_volume,
         })
@@ -375,6 +426,7 @@ impl TapHubBridgeHandler for TapHub {
         let meta_key = AudioCacheItemKey::ARHash(meta_hash);
         if let Some(entry) = self.audio_cache.get_entry(&tap_id, &meta_key).await {
             tracing::info!("Metadata cache hit for tap_id={}", tap_id.0);
+
             return Ok(AudioMetaResponse {
                 metadatas: entry.metadatas,
                 cache_key: entry.cache_key,
@@ -542,7 +594,9 @@ fn bridge_rel(
     tokio::spawn(async move {
         // Already disconnected before the stream even started.
         if *disconnect_rx.borrow() {
-            tracing::warn!("Tap already disconnected before stream started; stream will not be cached");
+            tracing::warn!(
+                "Tap already disconnected before stream started; stream will not be cached"
+            );
             return;
         }
 
