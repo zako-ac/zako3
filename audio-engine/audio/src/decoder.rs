@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use mockall::automock;
 use ringbuf::traits::{Observer, Producer};
 use serenity::async_trait;
+use tokio::sync::watch;
 use tracing::instrument;
 
 use crate::{RingCons, RingProd, create_ringbuf_pair, speed_control};
@@ -19,9 +21,29 @@ pub trait Decoder: Send + Sync + 'static {
         track_id: TrackId,
         stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     ) -> ZakoResult<RingCons>;
+
+    fn pause_track(&self, track_id: TrackId);
+    fn resume_track(&self, track_id: TrackId);
+    fn stop_track(&self, track_id: TrackId);
 }
 
-pub struct PcmDecoder;
+pub struct PcmDecoder {
+    pause_txs: Arc<tokio::sync::Mutex<HashMap<TrackId, watch::Sender<bool>>>>,
+}
+
+impl PcmDecoder {
+    pub fn new() -> Self {
+        PcmDecoder {
+            pause_txs: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl Default for PcmDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait]
 impl Decoder for PcmDecoder {
@@ -33,14 +55,57 @@ impl Decoder for PcmDecoder {
     ) -> ZakoResult<RingCons> {
         let (prod, cons) = create_ringbuf_pair();
 
+        let (pause_tx, pause_rx) = watch::channel(false);
+
+        {
+            let mut pause_txs = self.pause_txs.lock().await;
+            pause_txs.insert(track_id, pause_tx);
+        }
+
+        let pause_txs = self.pause_txs.clone();
+
         tokio::spawn(async move {
-            let result = spawn_decode_task(track_id, stream, prod).await;
+            let result = spawn_decode_task(track_id, stream, prod, pause_rx).await;
             if let Err(e) = result {
                 tracing::error!(track_id = %track_id, error = %e, "Decoding task failed");
+            }
+
+            // Clean up pause_txs entry on task exit
+            {
+                let mut pause_txs_guard = pause_txs.lock().await;
+                pause_txs_guard.remove(&track_id);
             }
         });
 
         Ok(cons)
+    }
+
+    fn pause_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let map = pause_txs.lock().await;
+            if let Some(tx) = map.get(&track_id) {
+                let _ = tx.send(true);
+            }
+        });
+    }
+
+    fn resume_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let map = pause_txs.lock().await;
+            if let Some(tx) = map.get(&track_id) {
+                let _ = tx.send(false);
+            }
+        });
+    }
+
+    fn stop_track(&self, track_id: TrackId) {
+        let pause_txs = self.pause_txs.clone();
+        tokio::spawn(async move {
+            let mut pause_txs_guard = pause_txs.lock().await;
+            pause_txs_guard.remove(&track_id);
+        });
     }
 }
 
@@ -48,6 +113,7 @@ async fn spawn_decode_task(
     track_id: TrackId,
     mut stream: tokio::sync::mpsc::Receiver<Vec<f32>>,
     mut producer: RingProd,
+    mut pause_rx: watch::Receiver<bool>,
 ) -> ZakoResult<()> {
     tracing::debug!(track_id = %track_id, "Starting PCM decode task");
 
@@ -58,6 +124,18 @@ async fn spawn_decode_task(
     };
 
     while let Some(chunk) = stream.recv().await {
+        // Pause gate: wait until resume or stop_track
+        while *pause_rx.borrow() {
+            match pause_rx.changed().await {
+                Ok(_) => {}
+                Err(_) => {
+                    // Sender dropped (stop_track called), exit cleanly
+                    tracing::debug!(track_id = %track_id, "Pause sender dropped, ending decode task");
+                    return Ok(());
+                }
+            }
+        }
+
         let mut idx = 0;
         while idx < chunk.len() {
             if !producer.read_is_held() {

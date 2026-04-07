@@ -231,6 +231,20 @@ impl AudioEngineServer {
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
+                        AudioEngineRequest::Pause { track_id, .. } => {
+                            let session = session_manager.get_session(guild_id).unwrap();
+                            match session.pause(track_id).await {
+                                Ok(_) => AudioEngineResponse::SuccessBool(true),
+                                Err(e) => AudioEngineResponse::Error(e.to_string()),
+                            }
+                        }
+                        AudioEngineRequest::Resume { track_id, .. } => {
+                            let session = session_manager.get_session(guild_id).unwrap();
+                            match session.resume(track_id).await {
+                                Ok(_) => AudioEngineResponse::SuccessBool(true),
+                                Err(e) => AudioEngineResponse::Error(e.to_string()),
+                            }
+                        }
                         AudioEngineRequest::GetSessionState { .. } => {
                             let session = session_manager.get_session(guild_id).unwrap();
                             match session.session_state().await {

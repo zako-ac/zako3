@@ -90,6 +90,7 @@ impl SessionControl {
                 },
                 volume: effective_volume,
                 queue_name: queue_name.clone(),
+                paused: false,
             };
 
             upsert_track(&mut session.queues, queue_name.clone(), track);
@@ -117,6 +118,32 @@ impl SessionControl {
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn pause(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Pausing track");
+        self.decoder.pause_track(track_id);
+        modify_state_session(&self.state_service, self.guild_id, move |session| {
+            if let Some(track) = session.find_track_mut(track_id) {
+                track.paused = true;
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn resume(&self, track_id: TrackId) -> ZakoResult<()> {
+        tracing::info!(track_id = %track_id, "Resuming track");
+        modify_state_session(&self.state_service, self.guild_id, move |session| {
+            if let Some(track) = session.find_track_mut(track_id) {
+                track.paused = false;
+            }
+        })
+        .await?;
+        self.decoder.resume_track(track_id);
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn stop(&self, track_id: TrackId) -> ZakoResult<()> {
         tracing::info!(track_id = %track_id, "Stopping track");
 
@@ -127,6 +154,7 @@ impl SessionControl {
             .and_then(|s| s.find_track(track_id).map(|t| t.queue_name.clone()));
 
         self.mixer.remove_source(track_id);
+        self.decoder.stop_track(track_id);
         modify_state_session(&self.state_service, self.guild_id, move |session| {
             session.remove_track(track_id);
         })
@@ -161,6 +189,7 @@ impl SessionControl {
 
         for track_id in track_ids {
             self.mixer.remove_source(track_id);
+            self.decoder.stop_track(track_id);
 
             if let Some(session) = session.as_mut() {
                 if let Some(track) = session.find_track(track_id) {
@@ -235,6 +264,9 @@ impl SessionControl {
             let active_tracks = session.get_active_tracks();
 
             for track in active_tracks {
+                if track.paused {
+                    continue;
+                }
                 if !self.mixer.has_source(track.track_id).await {
                     self.play_now(track).await?;
                 }

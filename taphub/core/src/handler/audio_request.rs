@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use hex;
 use protofish2::Timestamp;
+use sha2::Digest;
 use tokio::sync::mpsc;
 use zako3_preload_cache::{AudioCache, NextFrame};
 use zako3_types::{AudioMetaResponse, CachedAudioRequest, hq::UserId};
@@ -130,15 +132,40 @@ pub(crate) async fn handle_request_audio_inner(
         let cache = Arc::clone(&tap_hub.audio_cache);
         let metadatas_clone = metadatas.clone();
         let cache_key = succ.cache.clone();
+        let item_clone = item.clone();
 
         tokio::spawn(async move {
             if let Err(e) = cache
-                .store(item.clone(), metadatas_clone, cache_key, rel_rx, done_rx)
+                .store(item_clone, metadatas_clone, cache_key, rel_rx, done_rx)
                 .await
             {
                 tracing::warn!(%e, "Failed to store audio in cache");
             }
         });
+
+        // If audio was cached under a CacheKey, also store metadata under ARHash
+        // so that metadata-only requests can find it regardless of cache policy.
+        if matches!(item.key, zako3_types::cache::AudioCacheItemKey::CacheKey(_)) {
+            let meta_hash = hex::encode(sha2::Sha256::digest(
+                request.audio_request.to_string().as_bytes()
+            ));
+            let meta_item = zako3_types::cache::AudioCacheItem {
+                key: zako3_types::cache::AudioCacheItemKey::ARHash(meta_hash),
+                tap_id: tap_id.clone(),
+                expire_at: item.expire_at,
+            };
+            let cache2 = Arc::clone(&tap_hub.audio_cache);
+            let metadatas2 = metadatas.clone();
+            let cache_key2 = succ.cache.clone();
+            tokio::spawn(async move {
+                if let Err(e) = cache2
+                    .store_metadata(meta_item, metadatas2, cache_key2)
+                    .await
+                {
+                    tracing::warn!(%e, "Failed to store ARHash metadata alias in cache");
+                }
+            });
+        }
     }
 
     let meta = AudioMetaResponse {

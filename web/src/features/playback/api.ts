@@ -3,7 +3,9 @@ import { apiClient } from '@/lib/api-client'
 import type {
     EditQueueDto,
     GuildPlaybackStateDto,
+    PauseTrackDto,
     PlaybackActionDto,
+    ResumeTrackDto,
     SkipDto,
     StopTrackDto,
 } from '@zako-ac/zako3-data'
@@ -17,6 +19,12 @@ export const playbackApi = {
 
     skipMusic: (body: SkipDto): Promise<PlaybackActionDto> =>
         apiCall(apiClient.post<PlaybackActionDto>('/playback/skip', body)),
+
+    pauseTrack: (body: PauseTrackDto): Promise<PlaybackActionDto> =>
+        apiCall(apiClient.post<PlaybackActionDto>('/playback/pause', body)),
+
+    resumeTrack: (body: ResumeTrackDto): Promise<PlaybackActionDto> =>
+        apiCall(apiClient.post<PlaybackActionDto>('/playback/resume', body)),
 
     editQueue: (body: EditQueueDto): Promise<PlaybackActionDto> =>
         apiCall(apiClient.patch<PlaybackActionDto>('/playback/queue', body)),

@@ -44,19 +44,40 @@ pub(crate) async fn handle_request_audio_meta_inner(
         });
     }
 
-    // Request metadata from connection
-    let (connection_id, _disconnect_rx) = tap_hub.select_connection(&tap_id).await?;
+    // Request metadata from connection, with fallback to cache if unavailable
+    let meta = 'fetch: {
+        let Ok((connection_id, _disconnect_rx)) = tap_hub.select_connection(&tap_id).await else {
+            // Connection unavailable — break and try cache fallback
+            break 'fetch None;
+        };
+        tap_hub
+            .zf_hub
+            .request_audio_metadata(
+                tap_id.clone(),
+                connection_id,
+                req.request.clone(),
+                Default::default(),
+            )
+            .await
+            .ok()
+    };
 
-    let meta = tap_hub
-        .zf_hub
-        .request_audio_metadata(
-            tap_id.clone(),
-            connection_id,
-            req.request.clone(),
-            Default::default(),
-        )
-        .await
-        .map_err(|e| format!("Failed to request audio metadata from tap: {}", e))?;
+    let meta = match meta {
+        Some(m) => m,
+        None => {
+            // Final cache fallback: metadata may have been populated concurrently
+            // or may exist from prior audio request.
+            if let Some(entry) = tap_hub.audio_cache.get_entry(&tap_id, &meta_key).await {
+                tracing::info!("Metadata cache fallback hit for tap_id={}", tap_id.0);
+                return Ok(AudioMetaResponse {
+                    metadatas: entry.metadatas,
+                    cache_key: entry.cache_key,
+                    base_volume: tap.base_volume,
+                });
+            }
+            return Err("Tap unavailable and no cached metadata found".to_string());
+        }
+    };
 
     // Write metadata back to cache
     let meta_item = AudioCacheItem {

@@ -20,6 +20,7 @@ pub struct TrackDto {
     pub audio_request_string: String,
     pub requested_by: String,
     pub volume: f32,
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -76,4 +77,20 @@ pub struct EditQueueDto {
     pub guild_id: String,
     pub channel_id: String,
     pub operations: Vec<QueueOperation>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseTrackDto {
+    pub guild_id: String,
+    pub channel_id: String,
+    pub track_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumeTrackDto {
+    pub guild_id: String,
+    pub channel_id: String,
+    pub track_id: String,
 }

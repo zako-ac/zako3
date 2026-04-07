@@ -163,6 +163,40 @@ impl AudioEngineRpcClient {
         }
     }
 
+    pub async fn pause(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+        track_id: TrackId,
+    ) -> anyhow::Result<bool> {
+        let subject = format!("audio_engine.session.{}.{}", guild_id, channel_id);
+        match self
+            .send_request(&subject, AudioEngineRequest::Pause { guild_id, track_id })
+            .await?
+        {
+            AudioEngineResponse::SuccessBool(b) => Ok(b),
+            AudioEngineResponse::Error(e) => Err(anyhow::anyhow!(e)),
+            _ => Err(anyhow::anyhow!("Invalid response type")),
+        }
+    }
+
+    pub async fn resume(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+        track_id: TrackId,
+    ) -> anyhow::Result<bool> {
+        let subject = format!("audio_engine.session.{}.{}", guild_id, channel_id);
+        match self
+            .send_request(&subject, AudioEngineRequest::Resume { guild_id, track_id })
+            .await?
+        {
+            AudioEngineResponse::SuccessBool(b) => Ok(b),
+            AudioEngineResponse::Error(e) => Err(anyhow::anyhow!(e)),
+            _ => Err(anyhow::anyhow!("Invalid response type")),
+        }
+    }
+
     pub async fn get_session_state(
         &self,
         guild_id: GuildId,

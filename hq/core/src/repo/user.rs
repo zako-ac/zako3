@@ -1,7 +1,7 @@
 use crate::CoreResult;
 use async_trait::async_trait;
 use hq_types::hq::{DiscordUserId, User, UserId, Username};
-use hq_types::hq::settings::UserSettings;
+use hq_types::hq::settings::PartialUserSettings;
 use sqlx::{PgPool, Row};
 
 #[async_trait]
@@ -12,8 +12,8 @@ pub trait UserRepository: Send + Sync {
     async fn list_all(&self, page: u32, per_page: u32) -> CoreResult<(Vec<User>, u64)>;
     async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User>;
     async fn set_banned_status(&self, id: UserId, banned: bool) -> CoreResult<User>;
-    async fn get_settings(&self, id: UserId) -> CoreResult<Option<UserSettings>>;
-    async fn save_settings(&self, id: UserId, settings: &UserSettings) -> CoreResult<UserSettings>;
+    async fn get_settings(&self, id: UserId) -> CoreResult<Option<PartialUserSettings>>;
+    async fn save_settings(&self, id: UserId, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings>;
 }
 
 pub struct PgUserRepository {
@@ -244,7 +244,7 @@ impl UserRepository for PgUserRepository {
         })
     }
 
-    async fn get_settings(&self, id: UserId) -> CoreResult<Option<UserSettings>> {
+    async fn get_settings(&self, id: UserId) -> CoreResult<Option<PartialUserSettings>> {
         let row = sqlx::query("SELECT settings FROM users WHERE id = $1")
             .bind(id.0)
             .fetch_optional(&self.pool)
@@ -257,7 +257,7 @@ impl UserRepository for PgUserRepository {
         Ok(Some(settings))
     }
 
-    async fn save_settings(&self, id: UserId, settings: &UserSettings) -> CoreResult<UserSettings> {
+    async fn save_settings(&self, id: UserId, settings: &PartialUserSettings) -> CoreResult<PartialUserSettings> {
         let json = serde_json::to_value(settings)?;
 
         let row = sqlx::query(

@@ -41,7 +41,7 @@ impl SessionManager {
         let (prod, cons) = create_opus_ringbuf_pair();
 
         let mixer = create_thread_mixer(prod);
-        let decoder = PcmDecoder;
+        let decoder = PcmDecoder::new();
 
         let control = create_session_control(
             guild_id,

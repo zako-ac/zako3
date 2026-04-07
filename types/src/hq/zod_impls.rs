@@ -1,5 +1,16 @@
 use zod_gen::ZodSchema;
 
+use super::settings::UserSettingsField;
+
+impl<T: ZodSchema> ZodSchema for UserSettingsField<T> {
+    fn zod_schema() -> String {
+        let t = T::zod_schema();
+        format!(
+            r#"z.discriminatedUnion("type", [z.object({{type: z.literal("none")}}), z.object({{type: z.literal("normal"), value: {t}}}), z.object({{type: z.literal("important"), value: {t}}})])"#,
+        )
+    }
+}
+
 macro_rules! impl_zod_schema_for_tuple_struct {
     ($type_name:ty, $inner_type:ty) => {
         impl ZodSchema for $type_name {

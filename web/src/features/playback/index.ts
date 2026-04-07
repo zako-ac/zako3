@@ -6,6 +6,8 @@ export {
     usePlaybackEvents,
     useStopTrack,
     useSkipMusic,
+    usePauseTrack,
+    useResumeTrack,
     useEditQueue,
     useUndoAction,
 } from './hooks'
@@ -16,6 +18,8 @@ export type {
     PlaybackActionDto,
     StopTrackDto,
     SkipDto,
+    PauseTrackDto,
+    ResumeTrackDto,
     EditQueueDto,
     QueueOperationDto,
 } from '@zako-ac/zako3-data'

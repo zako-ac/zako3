@@ -42,6 +42,14 @@ pub enum AudioEngineRequest {
     NextMusic {
         guild_id: GuildId,
     },
+    Pause {
+        guild_id: GuildId,
+        track_id: TrackId,
+    },
+    Resume {
+        guild_id: GuildId,
+        track_id: TrackId,
+    },
     GetSessionState {
         guild_id: GuildId,
     },

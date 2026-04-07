@@ -115,6 +115,7 @@ pub struct Track {
     pub request: CachedAudioRequest,
     pub volume: Volume,
     pub queue_name: QueueName,
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

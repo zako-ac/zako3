@@ -1,11 +1,13 @@
 import { useParams } from 'react-router-dom'
-import { SkipForward, Square, Undo2 } from 'lucide-react'
+import { SkipForward, Square, Undo2, Pause, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import {
     usePlaybackState,
     usePlaybackHistory,
     useStopTrack,
     useSkipMusic,
+    usePauseTrack,
+    useResumeTrack,
     useEditQueue,
     useUndoAction,
     usePlaybackEvents,
@@ -38,6 +40,8 @@ export const VoiceChannelPage = () => {
 
     const { mutate: stopTrack, isPending: isStopping } = useStopTrack()
     const { mutate: skipMusic, isPending: isSkipping } = useSkipMusic()
+    const { mutate: pauseTrack, isPending: isPausing } = usePauseTrack()
+    const { mutate: resumeTrack, isPending: isResuming } = useResumeTrack()
     const { mutate: editQueue } = useEditQueue()
     const { mutate: undoAction, isPending: isUndoing } = useUndoAction()
 
@@ -166,6 +170,34 @@ export const VoiceChannelPage = () => {
                                                         </span>
                                                     </div>
                                                 </div>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isPausing || isResuming}
+                                                    onClick={() =>
+                                                        track.paused
+                                                            ? resumeTrack(
+                                                                { guildId, channelId, trackId: track.trackId },
+                                                                {
+                                                                    onSuccess: () => toast.success('Resumed'),
+                                                                    onError: () => toast.error('Failed to resume'),
+                                                                }
+                                                            )
+                                                            : pauseTrack(
+                                                                { guildId, channelId, trackId: track.trackId },
+                                                                {
+                                                                    onSuccess: () => toast.success('Paused'),
+                                                                    onError: () => toast.error('Failed to pause'),
+                                                                }
+                                                            )
+                                                    }
+                                                >
+                                                    {track.paused ? (
+                                                        <Play className="h-4 w-4" />
+                                                    ) : (
+                                                        <Pause className="h-4 w-4" />
+                                                    )}
+                                                </Button>
                                                 <Button
                                                     size="sm"
                                                     variant="outline"

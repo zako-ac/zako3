@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { playbackApi } from './api'
-import type { EditQueueDto, SkipDto, StopTrackDto } from '@zako-ac/zako3-data'
+import type { EditQueueDto, PauseTrackDto, ResumeTrackDto, SkipDto, StopTrackDto } from '@zako-ac/zako3-data'
 import { AUTH_TOKEN_KEY, WS_BASE_URL } from '@/lib/constants'
 
 export const playbackKeys = {
@@ -53,6 +53,28 @@ export const useSkipMusic = () => {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (body: SkipDto) => playbackApi.skipMusic(body),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
+            queryClient.invalidateQueries({ queryKey: playbackKeys.history() })
+        },
+    })
+}
+
+export const usePauseTrack = () => {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (body: PauseTrackDto) => playbackApi.pauseTrack(body),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
+            queryClient.invalidateQueries({ queryKey: playbackKeys.history() })
+        },
+    })
+}
+
+export const useResumeTrack = () => {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (body: ResumeTrackDto) => playbackApi.resumeTrack(body),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
             queryClient.invalidateQueries({ queryKey: playbackKeys.history() })

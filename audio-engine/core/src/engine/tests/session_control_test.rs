@@ -31,6 +31,7 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
         },
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
+        paused: false,
     }
 }
 
@@ -236,13 +237,19 @@ async fn test_play_queued() {
 async fn test_stop_success() {
     let guild_id = GuildId::from(2);
     let mut mock_mixer = MockMixer::new();
-    let mock_decoder = MockDecoder::new();
+    let mut mock_decoder = MockDecoder::new();
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(100);
 
     mock_mixer
         .expect_remove_source()
+        .with(eq(track_id))
+        .times(1)
+        .return_const(());
+
+    mock_decoder
+        .expect_stop_track()
         .with(eq(track_id))
         .times(1)
         .return_const(());
@@ -310,7 +317,7 @@ async fn test_stop_success() {
 async fn test_stop_non_existent() {
     let guild_id = GuildId::from(2);
     let mut mock_mixer = MockMixer::new();
-    let mock_decoder = MockDecoder::new();
+    let mut mock_decoder = MockDecoder::new();
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(999);
@@ -318,6 +325,12 @@ async fn test_stop_non_existent() {
     mock_mixer
         .expect_remove_source()
         .with(eq(track_id))
+        .return_const(());
+
+    mock_decoder
+        .expect_stop_track()
+        .with(eq(track_id))
+        .times(1)
         .return_const(());
 
     // Get session for queue name (metrics) - empty, track doesn't exist
@@ -678,6 +691,12 @@ async fn test_end_of_track_handling_and_preload() {
     // Remove Track 1
     mock_mixer
         .expect_remove_source()
+        .with(eq(TrackId::from(1)))
+        .times(1)
+        .return_const(());
+
+    mock_decoder
+        .expect_stop_track()
         .with(eq(TrackId::from(1)))
         .times(1)
         .return_const(());

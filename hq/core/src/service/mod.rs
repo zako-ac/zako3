@@ -18,7 +18,7 @@ pub use user_settings::UserSettingsService;
 pub mod playback;
 pub use playback::PlaybackService;
 
-use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgPlaybackActionRepo, PgTapRepository, PgUserRepository};
+use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository, PgPlaybackActionRepo, PgTapRepository, PgUserGuildSettingsRepository, PgUserRepository};
 use crate::{AppConfig, CoreError, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -95,6 +95,10 @@ impl Service {
             name_resolver_slot.clone(),
         );
 
+        let guild_settings_repo = Arc::new(PgGuildSettingsRepository::new(pool.clone()));
+        let user_guild_settings_repo = Arc::new(PgUserGuildSettingsRepository::new(pool.clone()));
+        let global_settings_repo = Arc::new(PgGlobalSettingsRepository::new(pool.clone()));
+
         Ok(Self {
             config: config.clone(),
             auth: AuthService::new(config.clone(), user_repo.clone()),
@@ -104,7 +108,13 @@ impl Service {
             audit_log: audit_log_service,
             tap_metrics: tap_metrics_service,
             verification: verification_service,
-            user_settings: UserSettingsService::new(user_repo.clone(), user_settings_cache),
+            user_settings: UserSettingsService::new(
+                user_repo.clone(),
+                guild_settings_repo,
+                user_guild_settings_repo,
+                global_settings_repo,
+                user_settings_cache,
+            ),
             voice_state,
             playback,
             name_resolver_slot,

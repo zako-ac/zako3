@@ -103,6 +103,7 @@ impl PlaybackService {
                             audio_request_string: t.request.audio_request.to_string(),
                             requested_by: t.request.discord_user_id.0.clone(),
                             volume: t.volume.into(),
+                            paused: t.paused,
                         })
                         .collect();
                     (queue_name.to_string(), dtos)
@@ -361,6 +362,96 @@ impl PlaybackService {
         let actions = self.repo.find_by_guild_ids(&guild_ids, limit).await?;
 
         Ok(actions.iter().map(action_to_dto).collect())
+    }
+
+    pub async fn pause_track(
+        &self,
+        guild_id: u64,
+        channel_id: u64,
+        track_id: &str,
+        actor_discord_user_id: &str,
+    ) -> CoreResult<PlaybackActionDto> {
+        let tid: u64 = track_id
+            .parse()
+            .map_err(|_| CoreError::InvalidInput("invalid track_id".into()))?;
+        let g = GuildId::from(guild_id);
+        let c = ChannelId::from(channel_id);
+
+        let state = self
+            .audio_engine
+            .get_session_state(g, c)
+            .await
+            .map_err(|e| CoreError::Internal(e.to_string()))?;
+
+        let track = state
+            .find_track(TrackId::from(tid))
+            .ok_or_else(|| CoreError::NotFound(format!("track {}", tid)))?;
+
+        let snapshot = serde_json::to_value(track)?;
+
+        self.audio_engine
+            .pause(g, c, TrackId::from(tid))
+            .await
+            .map_err(|e| CoreError::Internal(e.to_string()))?;
+
+        let action = self
+            .repo
+            .create(&CreatePlaybackAction {
+                action_type: "pause".to_string(),
+                guild_id: guild_id.to_string(),
+                channel_id: channel_id.to_string(),
+                actor_discord_user_id: actor_discord_user_id.to_string(),
+                track_snapshot: snapshot,
+                queue_snapshot: None,
+            })
+            .await?;
+
+        Ok(action_to_dto(&action))
+    }
+
+    pub async fn resume_track(
+        &self,
+        guild_id: u64,
+        channel_id: u64,
+        track_id: &str,
+        actor_discord_user_id: &str,
+    ) -> CoreResult<PlaybackActionDto> {
+        let tid: u64 = track_id
+            .parse()
+            .map_err(|_| CoreError::InvalidInput("invalid track_id".into()))?;
+        let g = GuildId::from(guild_id);
+        let c = ChannelId::from(channel_id);
+
+        let state = self
+            .audio_engine
+            .get_session_state(g, c)
+            .await
+            .map_err(|e| CoreError::Internal(e.to_string()))?;
+
+        let track = state
+            .find_track(TrackId::from(tid))
+            .ok_or_else(|| CoreError::NotFound(format!("track {}", tid)))?;
+
+        let snapshot = serde_json::to_value(track)?;
+
+        self.audio_engine
+            .resume(g, c, TrackId::from(tid))
+            .await
+            .map_err(|e| CoreError::Internal(e.to_string()))?;
+
+        let action = self
+            .repo
+            .create(&CreatePlaybackAction {
+                action_type: "resume".to_string(),
+                guild_id: guild_id.to_string(),
+                channel_id: channel_id.to_string(),
+                actor_discord_user_id: actor_discord_user_id.to_string(),
+                track_snapshot: snapshot,
+                queue_snapshot: None,
+            })
+            .await?;
+
+        Ok(action_to_dto(&action))
     }
 }
 

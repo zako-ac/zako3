@@ -6,7 +6,7 @@ use axum::{
 };
 use hq_core::{Claims, CoreError, Service};
 use hq_types::hq::playback::{
-    EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, SkipDto, StopTrackDto,
+    EditQueueDto, GuildPlaybackStateDto, PauseTrackDto, PlaybackActionDto, ResumeTrackDto, SkipDto, StopTrackDto,
 };
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use std::{collections::HashMap, sync::Arc};
@@ -84,6 +84,68 @@ pub async fn stop_track(
     let action = service
         .playback
         .stop_track(guild_id, channel_id, &payload.track_id, &discord_id)
+        .await
+        .map_err(map_error)?;
+    Ok(Json(action))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/playback/pause",
+    request_body = PauseTrackDto,
+    responses(
+        (status = 200, description = "Track paused", body = PlaybackActionDto)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn pause_track(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Json(payload): Json<PauseTrackDto>,
+) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
+    let discord_id = get_discord_id(&service, &user_id).await?;
+    let guild_id: u64 = payload
+        .guild_id
+        .parse()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid guild_id".to_string()))?;
+    let channel_id: u64 = payload
+        .channel_id
+        .parse()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid channel_id".to_string()))?;
+    let action = service
+        .playback
+        .pause_track(guild_id, channel_id, &payload.track_id, &discord_id)
+        .await
+        .map_err(map_error)?;
+    Ok(Json(action))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/playback/resume",
+    request_body = ResumeTrackDto,
+    responses(
+        (status = 200, description = "Track resumed", body = PlaybackActionDto)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn resume_track(
+    State(service): State<Arc<Service>>,
+    AuthUser(user_id): AuthUser,
+    Json(payload): Json<ResumeTrackDto>,
+) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
+    let discord_id = get_discord_id(&service, &user_id).await?;
+    let guild_id: u64 = payload
+        .guild_id
+        .parse()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid guild_id".to_string()))?;
+    let channel_id: u64 = payload
+        .channel_id
+        .parse()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid channel_id".to_string()))?;
+    let action = service
+        .playback
+        .resume_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
     Ok(Json(action))

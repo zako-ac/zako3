@@ -32,6 +32,7 @@ refer hq todo
 - [x] Add base volume for tap
 - [x] Make TH connection ID (online count) tracking better
 - [x] AE re-join on boot
+- [x] Pause feature
 
 - [ ] otel and prometheus and logging(promtail)
 - [ ] Plan proper logging with context
@@ -40,10 +41,9 @@ refer hq todo
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 
-- [ ] Make cache removation command
-- [ ] AR PArameters
+- [ ] Cache management admin panel
 - [ ] emoji matching service
-- [ ] Pause feature
+- [ ] Emoji/Text mapping scope elevation request
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?
@@ -53,6 +53,7 @@ refer hq todo
 - [ ] implement ban
 
 ## Possible future features
+- [ ] AR PArameters
 - [ ] search API in tap
 
 ## Text Preprocessing

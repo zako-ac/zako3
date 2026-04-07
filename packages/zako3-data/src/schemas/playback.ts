@@ -13,6 +13,7 @@ export const trackSchema = z.object({
     audioRequestString: z.string(),
     requestedBy: z.string(),
     volume: z.number(),
+    paused: z.boolean(),
 });
 
 export const guildPlaybackStateSchema = z.object({
@@ -58,6 +59,18 @@ export const editQueueSchema = z.object({
     operations: z.array(queueOperationSchema),
 });
 
+export const pauseTrackSchema = z.object({
+    guildId: z.string(),
+    channelId: z.string(),
+    trackId: z.string(),
+});
+
+export const resumeTrackSchema = z.object({
+    guildId: z.string(),
+    channelId: z.string(),
+    trackId: z.string(),
+});
+
 export type AudioMetadataDto = z.infer<typeof audioMetadataSchema>;
 export type TrackDto = z.infer<typeof trackSchema>;
 export type GuildPlaybackStateDto = z.infer<typeof guildPlaybackStateSchema>;
@@ -66,3 +79,5 @@ export type StopTrackDto = z.infer<typeof stopTrackSchema>;
 export type SkipDto = z.infer<typeof skipSchema>;
 export type QueueOperationDto = z.infer<typeof queueOperationSchema>;
 export type EditQueueDto = z.infer<typeof editQueueSchema>;
+export type PauseTrackDto = z.infer<typeof pauseTrackSchema>;
+export type ResumeTrackDto = z.infer<typeof resumeTrackSchema>;

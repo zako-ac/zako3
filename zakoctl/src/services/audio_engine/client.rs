@@ -133,6 +133,18 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
             let success = client.next_music(gid, cid).await?;
             println!("NextMusic Success: {}", success);
         }
+        AudioEngineSubcommands::Pause { guild_id, channel_id, track_id } => {
+            let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
+            let success = client.pause(gid, cid, TrackId::from(track_id)).await?;
+            println!("Pause Success: {}", success);
+        }
+        AudioEngineSubcommands::Resume { guild_id, channel_id, track_id } => {
+            let gid = resolve_guild_id(guild_id)?;
+            let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
+            let success = client.resume(gid, cid, TrackId::from(track_id)).await?;
+            println!("Resume Success: {}", success);
+        }
         AudioEngineSubcommands::GetSessionState { guild_id, channel_id } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);

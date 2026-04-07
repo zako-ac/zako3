@@ -57,6 +57,8 @@ use handlers::users;
         handlers::playback::get_playback_state,
         handlers::playback::stop_track,
         handlers::playback::skip_music,
+        handlers::playback::pause_track,
+        handlers::playback::resume_track,
         handlers::playback::edit_queue,
         handlers::playback::undo_action,
         handlers::playback::get_history,
@@ -104,6 +106,8 @@ use handlers::users;
             hq_types::hq::playback::PlaybackActionDto,
             hq_types::hq::playback::StopTrackDto,
             hq_types::hq::playback::SkipDto,
+            hq_types::hq::playback::PauseTrackDto,
+            hq_types::hq::playback::ResumeTrackDto,
             hq_types::hq::playback::QueueOperation,
             hq_types::hq::playback::EditQueueDto,
         )
@@ -219,6 +223,8 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
         .route("/api/v1/playback/state", get(playback::get_playback_state))
         .route("/api/v1/playback/stop", post(playback::stop_track))
         .route("/api/v1/playback/skip", post(playback::skip_music))
+        .route("/api/v1/playback/pause", post(playback::pause_track))
+        .route("/api/v1/playback/resume", post(playback::resume_track))
         .route("/api/v1/playback/queue", axum::routing::patch(playback::edit_queue))
         .route("/api/v1/playback/undo/:action_id", post(playback::undo_action))
         .route("/api/v1/playback/history", get(playback::get_history))
