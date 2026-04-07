@@ -26,5 +26,7 @@ pub mod playback;
 pub use playback::*;
 pub mod guild;
 pub use guild::*;
+pub mod mapper;
+pub use mapper::*;
 pub mod rpc;
 pub mod zod_impls;

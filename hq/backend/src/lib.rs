@@ -18,6 +18,7 @@ use handlers::api_key;
 use handlers::audit_log;
 use handlers::auth;
 use handlers::guild;
+use handlers::mapper;
 use handlers::notification;
 use handlers::playback;
 use handlers::settings;
@@ -75,6 +76,16 @@ use handlers::users;
         handlers::playback::get_history,
 
         handlers::guild::get_my_guilds,
+
+        handlers::mapper::list_mappers,
+        handlers::mapper::get_mapper,
+        handlers::mapper::create_mapper,
+        handlers::mapper::update_mapper,
+        handlers::mapper::delete_mapper,
+        handlers::mapper::get_pipeline,
+        handlers::mapper::set_pipeline,
+        handlers::mapper::evaluate_pipeline,
+        handlers::mapper::evaluate_mapper,
     ),
     components(
         schemas(
@@ -134,6 +145,15 @@ use handlers::users;
             hq_types::hq::playback::EditQueueDto,
 
             hq_types::hq::guild::GuildSummaryDto,
+
+            hq_types::hq::mapper::WasmMapperDto,
+            hq_types::hq::mapper::UpdateMapperDto,
+            hq_types::hq::mapper::PipelineOrderDto,
+            hq_types::hq::mapper::MapperInputData,
+            hq_types::hq::mapper::EvaluateRequestDto,
+            hq_types::hq::mapper::EvaluateSingleRequestDto,
+            hq_types::hq::mapper::EvaluateResultDto,
+            hq_types::hq::mapper::MapperStepResultDto,
         )
     ),
     tags(
@@ -267,6 +287,17 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
             post(api_key::regenerate_key),
         )
         .route("/api/v1/guilds/me", get(guild::get_my_guilds))
+        .route("/api/v1/admin/mappers", get(mapper::list_mappers).post(mapper::create_mapper))
+        // static sub-routes BEFORE :id to avoid conflicts
+        .route("/api/v1/admin/mappers/pipeline", get(mapper::get_pipeline).put(mapper::set_pipeline))
+        .route("/api/v1/admin/mappers/evaluate", axum::routing::post(mapper::evaluate_pipeline))
+        .route(
+            "/api/v1/admin/mappers/:id",
+            get(mapper::get_mapper)
+                .put(mapper::update_mapper)
+                .delete(mapper::delete_mapper),
+        )
+        .route("/api/v1/admin/mappers/:id/evaluate", axum::routing::post(mapper::evaluate_mapper))
         .route("/api/v1/playback/state", get(playback::get_playback_state))
         .route("/api/v1/playback/stop", post(playback::stop_track))
         .route("/api/v1/playback/skip", post(playback::skip_music))

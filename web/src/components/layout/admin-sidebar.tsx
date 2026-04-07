@@ -12,6 +12,9 @@ import {
     ExternalLink,
     ArrowLeft,
     ShieldCheck,
+    Cpu,
+    LayoutList,
+    GitBranch,
 } from 'lucide-react'
 import { ROUTES } from '@/lib/constants'
 import { useLogout, useAuthStore } from '@/features/auth'
@@ -53,7 +56,7 @@ interface NavItem {
     url: string
     icon: React.ComponentType<{ className?: string }>
     external?: boolean
-    items?: { title: string; url: string }[]
+    items?: { title: string; url: string; icon?: React.ComponentType<{ className?: string }> }[]
     badge?: number
 }
 
@@ -97,6 +100,15 @@ export const AdminSidebar = () => {
             title: t('nav.notifications'),
             url: ROUTES.ADMIN_NOTIFICATIONS,
             icon: Bell,
+        },
+        {
+            title: t('nav.mappers'),
+            url: ROUTES.ADMIN_MAPPERS,
+            icon: Cpu,
+            items: [
+                { title: t('nav.mappersManage'), url: ROUTES.ADMIN_MAPPERS, icon: LayoutList },
+                { title: t('nav.mappersPipeline'), url: ROUTES.ADMIN_MAPPERS_PIPELINE, icon: GitBranch },
+            ],
         },
         {
             title: 'Grafana',
@@ -169,7 +181,10 @@ export const AdminSidebar = () => {
                                             asChild
                                             isActive={isActive(subItem.url)}
                                         >
-                                            <Link to={subItem.url}>{subItem.title}</Link>
+                                            <Link to={subItem.url} className="flex items-center gap-2">
+                                                {subItem.icon && <subItem.icon className="h-4 w-4" />}
+                                                <span>{subItem.title}</span>
+                                            </Link>
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
                                 ))}

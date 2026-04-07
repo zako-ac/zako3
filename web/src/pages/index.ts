@@ -21,4 +21,6 @@ export {
   AdminNotificationsPage,
   AdminVerificationsPage,
   AdminGlobalSettingsPage,
+  AdminMappersPage,
+  AdminMappersPipelinePage,
 } from './admin'

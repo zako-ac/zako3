@@ -32,6 +32,8 @@ export const ROUTES = {
   ADMIN_NOTIFICATIONS: '/admin/notifications',
   ADMIN_VERIFICATIONS: '/admin/verifications',
   ADMIN_SETTINGS: '/admin/settings',
+  ADMIN_MAPPERS: '/admin/mappers',
+  ADMIN_MAPPERS_PIPELINE: '/admin/mappers/pipeline',
   VOICE_CHANNEL: (guildId: string, channelId: string) => `/voice/${guildId}/${channelId}`,
   GUILD_SETTINGS: (guildId: string) => `/guilds/${guildId}/settings`,
   GUILD_SETTINGS_ME: (guildId: string) => `/guilds/${guildId}/settings/me`,

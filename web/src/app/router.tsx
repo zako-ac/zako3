@@ -21,6 +21,8 @@ import {
   AdminNotificationsPage,
   AdminVerificationsPage,
   AdminGlobalSettingsPage,
+  AdminMappersPage,
+  AdminMappersPipelinePage,
   VoiceChannelPage,
   GuildSettingsPage,
   GuildMySettingsPage,
@@ -106,6 +108,11 @@ export const AppRouter = () => {
           <Route
             path={ROUTES.ADMIN_SETTINGS}
             element={<AdminGlobalSettingsPage />}
+          />
+          <Route path={ROUTES.ADMIN_MAPPERS} element={<AdminMappersPage />} />
+          <Route
+            path={ROUTES.ADMIN_MAPPERS_PIPELINE}
+            element={<AdminMappersPipelinePage />}
           />
         </Route>
 

@@ -84,3 +84,22 @@ pub struct MapperSummary {
     /// Whether this mapper executed successfully
     pub success: bool,
 }
+
+/// Detailed result of a single mapper step in a traced pipeline run.
+///
+/// Captures the text before and after the mapper executed, along with success status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MapperStepResult {
+    /// Mapper ID
+    pub mapper_id: String,
+    /// Mapper name
+    pub mapper_name: String,
+    /// Text fed into this mapper
+    pub input_text: String,
+    /// Text produced by this mapper (same as input_text if output was empty)
+    pub output_text: String,
+    /// Whether the mapper executed successfully
+    pub success: bool,
+    /// Mapper-reported error message, if any
+    pub error: Option<String>,
+}

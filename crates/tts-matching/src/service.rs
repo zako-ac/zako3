@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use zako3_types::{hq::settings::{EmojiMappingRule, TextMappingRule}, hq::user::DiscordUserId, ChannelId, GuildId};
 
 use crate::{
-    db::Db, model::ChannelInfo, model::UserInfo, pipeline, repo::{MapperRepository, PipelineRepository, SqliteMapperRepository, SqlitePipelineRepository}, wasm::EngineState, Result,
+    db::Db, model::{ChannelInfo, MapperStepResult, UserInfo}, pipeline, repo::{MapperRepository, PipelineRepository, SqliteMapperRepository, SqlitePipelineRepository}, wasm::EngineState, Result,
 };
 
 /// Provides Discord channel and user information to WASM mappers.
@@ -154,6 +154,26 @@ impl TtsMatchingService {
         let ordered_ids = self.pipeline_repo.get_ordered().await?;
         pipeline::execute_pipeline(
             ordered_ids,
+            ctx,
+            self.wasm_dir.as_path(),
+            self.mapper_repo.as_ref(),
+            Arc::clone(&self.engine_state),
+        )
+        .await
+    }
+
+    /// Process text through a specific list of mapper IDs, returning per-step trace results.
+    ///
+    /// Unlike [`process`], this ignores the configured pipeline order and runs exactly the
+    /// provided `mapper_ids` in order. Useful for evaluating an unsaved pipeline or testing
+    /// a single mapper in isolation.
+    pub async fn process_with_ids(
+        &self,
+        ctx: ProcessContext,
+        mapper_ids: &[String],
+    ) -> Result<(String, Vec<MapperStepResult>)> {
+        pipeline::execute_pipeline_traced(
+            mapper_ids.to_vec(),
             ctx,
             self.wasm_dir.as_path(),
             self.mapper_repo.as_ref(),

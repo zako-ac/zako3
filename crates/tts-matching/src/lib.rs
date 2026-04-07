@@ -71,6 +71,6 @@ pub mod service;
 pub mod wasm;
 
 pub use error::{Error, Result};
-pub use model::{ChannelInfo, MapperInputData, MapperSummary, UserInfo, WasmMapper};
+pub use model::{ChannelInfo, MapperInputData, MapperStepResult, MapperSummary, UserInfo, WasmMapper};
 pub use repo::{MapperRepository, PipelineRepository};
 pub use service::{DiscordInfoProvider, ProcessContext, TtsMatchingService};

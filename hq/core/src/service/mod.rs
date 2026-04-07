@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod mapping;
 pub mod tap;
 pub mod validation;
 pub mod discord_resolver;
@@ -17,6 +18,7 @@ pub mod user_settings;
 pub use user_settings::UserSettingsService;
 pub mod playback;
 pub use playback::PlaybackService;
+pub use mapping::MappingService;
 
 use crate::repo::{PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository, PgPlaybackActionRepo, PgTapRepository, PgUserGuildSettingsRepository, PgUserRepository};
 use crate::{AppConfig, CoreError, CoreResult};
@@ -38,6 +40,7 @@ pub struct Service {
     pub user_settings: UserSettingsService,
     pub voice_state: VoiceStateService,
     pub playback: PlaybackService,
+    pub mapping: MappingService,
     pub name_resolver_slot: DiscordNameResolverSlot,
 }
 
@@ -96,6 +99,13 @@ impl Service {
             name_resolver_slot.clone(),
         );
 
+        let mapping = MappingService::new(
+            config.mapper_wasm_dir.clone(),
+            config.mapper_db_path.clone(),
+            name_resolver_slot.clone(),
+        )
+        .await?;
+
         let guild_settings_repo = Arc::new(PgGuildSettingsRepository::new(pool.clone()));
         let user_guild_settings_repo = Arc::new(PgUserGuildSettingsRepository::new(pool.clone()));
         let global_settings_repo = Arc::new(PgGlobalSettingsRepository::new(pool.clone()));
@@ -118,6 +128,7 @@ impl Service {
             ),
             voice_state,
             playback,
+            mapping,
             name_resolver_slot,
         })
     }

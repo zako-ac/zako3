@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wasmtime::{Engine, Linker, Store, TypedFunc};
+use wasmtime::{Linker, Store, TypedFunc};
 
 use crate::{
     service::DiscordInfoProvider,
@@ -11,14 +11,16 @@ use crate::{
 use super::host::StoreData;
 
 pub(crate) fn run_mapper_sync(
-    engine: &Engine,
-    wasm_bytes: &[u8],
+    module: &wasmtime::Module,
     stdin_json: Vec<u8>,
     needs_discord_info: bool,
     rt_handle: tokio::runtime::Handle,
     discord_info: Arc<dyn DiscordInfoProvider>,
     guild_id: zako3_types::GuildId,
 ) -> Result<WasmOutput> {
+    // Get engine from the module
+    let engine = module.engine();
+
     // Build store with data
     let mut store = Store::new(
         engine,
@@ -38,11 +40,8 @@ pub(crate) fn run_mapper_sync(
         host::add_discord_host_funcs(&mut linker, rt_handle)?;
     }
 
-    // Compile WASM module
-    let module = wasmtime::Module::new(engine, wasm_bytes)?;
-
-    // Instantiate
-    let instance = linker.instantiate(&mut store, &module)?;
+    // Instantiate (module is already compiled)
+    let instance = linker.instantiate(&mut store, module)?;
 
     // Get typed functions — fail fast if missing
     let alloc_fn: TypedFunc<(i32,), (i32,)> = instance

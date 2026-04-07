@@ -2,6 +2,7 @@ use crate::CoreResult;
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -17,6 +18,8 @@ pub struct AppConfig {
     pub rpc_admin_token: String,
     pub zako_website_url: String,
     pub nats_url: String,
+    pub mapper_wasm_dir: PathBuf,
+    pub mapper_db_path: PathBuf,
 }
 
 impl AppConfig {
@@ -38,8 +41,9 @@ impl AppConfig {
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
             zako_website_url: env::var("ZAKO_WEBSITE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-            nats_url: env::var("NATS_URL")
-                .unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string()),
+            nats_url: env::var("NATS_URL").unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string()),
+            mapper_wasm_dir: env::var("MAPPER_WASM_DIR").map(PathBuf::from)?,
+            mapper_db_path: env::var("MAPPER_DB_PATH").map(PathBuf::from)?,
         })
     }
 }

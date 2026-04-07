@@ -1,6 +1,6 @@
 use zako3_tts_matching_sdk::prelude::*;
 
-fn process(input: Input) -> Output {
+pub fn process(input: Input) -> Output {
     Output::text(input.text.to_lowercase())
 }
 
