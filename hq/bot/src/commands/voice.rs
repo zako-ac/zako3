@@ -1,6 +1,55 @@
+use std::time::Duration;
+
 use crate::{ui, util, Context, Error};
-use hq_types::{AudioRequestString, ChannelId, GuildId, QueueName, hq::{DiscordUserId, TapName}};
+use hq_core::{CoreResult, Service};
+use hq_types::{
+    hq::{DiscordUserId, TapName},
+    AudioRequestString, ChannelId, GuildId, QueueName,
+};
 use poise::serenity_prelude as serenity;
+
+/// Join a voice channel and play a bot-join announcement.
+pub(crate) async fn bot_join_and_announce(
+    service: &Service,
+    serenity_ctx: &serenity::Context,
+    guild_id: GuildId,
+    serenity_guild_id: serenity::GuildId,
+    channel_id: ChannelId,
+) -> CoreResult<()> {
+    let bot_user_id = serenity_ctx.cache.current_user().id;
+    let bot_name = serenity_ctx
+        .cache
+        .guild(serenity_guild_id)
+        .and_then(|g| {
+            g.members
+                .get(&bot_user_id)
+                .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+        })
+        .unwrap_or_else(|| serenity_ctx.cache.current_user().name.clone());
+
+    service.audio_engine.join(guild_id, channel_id).await?;
+
+    let queue_name: QueueName = format!("temp-alert-{}", uuid::Uuid::new_v4()).into();
+
+    let service_clone = service.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let _ = service_clone
+            .audio_engine
+            .play(
+                guild_id,
+                channel_id,
+                queue_name,
+                TapName::from("google".to_string()),
+                AudioRequestString::from(format!("{bot_name} 등장")),
+                1.0.into(),
+                DiscordUserId::from(bot_user_id.get().to_string()),
+            )
+            .await;
+    });
+
+    Ok(())
+}
 
 /// Join a voice channel.
 #[poise::command(
@@ -15,25 +64,15 @@ pub async fn join(
     #[description_localized("ko", "참가할 음성 채널 (기본값: 현재 채널)")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
-    // Extract all guild data before the first await.
-    let (guild_id, channel_id, channel_name, bot_name, bot_discord_id) = {
-        let bot_user_id = ctx.cache().current_user().id;
+    // Extract guild/channel data before any await.
+    let (serenity_guild_id, guild_id, channel_id, channel_name) = {
         match channel {
-            Some(c) => {
-                let guild = ctx.guild();
-                let bot_name = guild
-                    .as_ref()
-                    .and_then(|g| g.members.get(&bot_user_id))
-                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
-                    .unwrap_or_else(|| ctx.cache().current_user().name.clone());
-                (
-                    GuildId::from(c.guild_id.get()),
-                    ChannelId::from(c.id.get()),
-                    c.name.clone(),
-                    bot_name,
-                    DiscordUserId::from(bot_user_id.get().to_string()),
-                )
-            }
+            Some(c) => (
+                c.guild_id,
+                GuildId::from(c.guild_id.get()),
+                ChannelId::from(c.id.get()),
+                c.name.clone(),
+            ),
             None => {
                 let guild = ctx.guild().ok_or_else(|| {
                     Error::Other("This command must be used in a server.".to_string())
@@ -48,43 +87,29 @@ pub async fn join(
                     .get(&serenity_cid)
                     .map(|c| c.name.clone())
                     .unwrap_or_else(|| serenity_cid.to_string());
-                let bot_name = guild
-                    .members
-                    .get(&bot_user_id)
-                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
-                    .unwrap_or_else(|| ctx.cache().current_user().name.clone());
                 (
+                    guild.id,
                     GuildId::from(guild.id.get()),
                     ChannelId::from(serenity_cid.get()),
                     name,
-                    bot_name,
-                    DiscordUserId::from(bot_user_id.get().to_string()),
                 )
             }
         }
     };
 
-    ctx.data()
-        .service
-        .audio_engine
-        .join(guild_id, channel_id)
+    let service = &ctx.data().service;
+    bot_join_and_announce(
+        service,
+        ctx.serenity_context(),
+        guild_id,
+        serenity_guild_id,
+        channel_id,
+    )
+    .await?;
+    service
+        .intended_vc
+        .add(u64::from(guild_id), u64::from(channel_id))
         .await?;
-
-    let queue_name: QueueName = format!("temp-alert-{}", uuid::Uuid::new_v4()).into();
-    let _ = ctx
-        .data()
-        .service
-        .audio_engine
-        .play(
-            guild_id,
-            channel_id,
-            queue_name,
-            TapName::from("google".to_string()),
-            AudioRequestString::from(format!("{bot_name} 등장")),
-            1.0.into(),
-            bot_discord_id,
-        )
-        .await;
 
     ctx.say(ui::messages::bot_joined(&channel_name)).await?;
     Ok(())
@@ -104,9 +129,14 @@ pub async fn leave(
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, channel).await?;
+    let service = &ctx.data().service;
 
-    ctx.data()
-        .service
+    // Remove from intended_vc before leaving so a racing voice_state_update won't auto-rejoin.
+    service
+        .intended_vc
+        .remove(u64::from(session.guild_id), u64::from(session.channel_id))
+        .await?;
+    service
         .audio_engine
         .leave(session.guild_id, session.channel_id)
         .await?;
@@ -129,12 +159,33 @@ pub async fn move_to(
     channel: serenity::GuildChannel,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, None).await?;
+    let new_serenity_guild_id = channel.guild_id;
     let new_channel_id = ChannelId::from(channel.id.get());
     let channel_name = channel.name.clone();
 
-    let ae = &ctx.data().service.audio_engine;
-    ae.leave(session.guild_id, session.channel_id).await?;
-    ae.join(session.guild_id, new_channel_id).await?;
+    let service = &ctx.data().service;
+
+    // Remove old channel from intended_vc, leave it, then join+announce new channel.
+    service
+        .intended_vc
+        .remove(u64::from(session.guild_id), u64::from(session.channel_id))
+        .await?;
+    service
+        .audio_engine
+        .leave(session.guild_id, session.channel_id)
+        .await?;
+    bot_join_and_announce(
+        service,
+        ctx.serenity_context(),
+        session.guild_id,
+        new_serenity_guild_id,
+        new_channel_id,
+    )
+    .await?;
+    service
+        .intended_vc
+        .add(u64::from(session.guild_id), u64::from(new_channel_id))
+        .await?;
 
     ctx.say(ui::messages::bot_moved(&channel_name)).await?;
     Ok(())

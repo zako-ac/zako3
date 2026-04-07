@@ -36,7 +36,8 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use zako3_audio_engine_client::client::AudioEngineRpcClient;
 use zako3_states::{
-    TapHubStateService, TapMetricsStateService, UserSettingsStateService, VoiceStateService,
+    IntendedVoiceChannelService, TapHubStateService, TapMetricsStateService,
+    UserSettingsStateService, VoiceStateService,
 };
 
 #[derive(Clone)]
@@ -51,6 +52,7 @@ pub struct Service {
     pub verification: VerificationService,
     pub user_settings: UserSettingsService,
     pub voice_state: VoiceStateService,
+    pub intended_vc: IntendedVoiceChannelService,
     pub playback: PlaybackService,
     pub mapping: MappingService,
     pub name_resolver_slot: DiscordNameResolverSlot,
@@ -107,6 +109,7 @@ impl Service {
         let audio_engine_service = AudioEngineService::new(audio_engine.clone());
 
         let voice_state = VoiceStateService::new(redis_repo.clone());
+        let intended_vc = IntendedVoiceChannelService::new(redis_repo.clone());
         let playback_action_repo = Arc::new(PgPlaybackActionRepo::new(pool.clone()));
         let name_resolver_slot = make_resolver_slot();
         let playback = PlaybackService::new(
@@ -144,6 +147,7 @@ impl Service {
                 user_settings_cache,
             ),
             voice_state,
+            intended_vc,
             playback,
             mapping,
             name_resolver_slot,

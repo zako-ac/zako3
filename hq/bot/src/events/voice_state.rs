@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    AudioRequestString, ChannelId, GuildId, QueueName,
     hq::{DiscordUserId, Tap, TapName, UserJoinLeaveAlert, UserSettings},
+    AudioRequestString, ChannelId, GuildId, QueueName,
 };
 use poise::serenity_prelude as serenity;
-use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
+use serenity::{async_trait, model::voice::VoiceState, Context, EventHandler};
 use zako3_states::VoiceStateService;
+
+use crate::commands::voice::bot_join_and_announce;
 
 pub struct VoiceStateHandler {
     pub voice_state_service: VoiceStateService,
@@ -99,8 +101,13 @@ impl EventHandler for VoiceStateHandler {
         }
 
         // Skip announcements for the bot itself
-        if new.user_id == ctx.cache.current_user().id {
-            return;
+        {
+            let new_user = ctx.cache.user(new.user_id);
+            if let Some(u) = new_user {
+                if u.bot {
+                    return;
+                }
+            }
         }
 
         // Collect join/leave events: (channel_id, is_join)
@@ -122,30 +129,150 @@ impl EventHandler for VoiceStateHandler {
             _ => {}
         }
 
-        if events.is_empty() {
+        if !events.is_empty() {
+            // Extract display name from cache before any .await
+            let display_name = {
+                let guild = ctx.cache.guild(guild_id_typed);
+                guild
+                    .as_ref()
+                    .and_then(|g| g.members.get(&new.user_id))
+                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+                    .unwrap_or_else(|| discord_user_id.clone())
+            };
+
+            if let Err(e) = announce_join_leave(
+                &self.service,
+                GuildId::from(guild_id),
+                DiscordUserId::from(discord_user_id.clone()),
+                display_name,
+                events,
+            )
+            .await
+            {
+                tracing::warn!("Failed to play join/leave announcement for {discord_user_id}: {e}");
+            }
+        }
+
+        // Auto-leave/rejoin: check channels affected by this voice state change.
+        let old_channel = old.as_ref().and_then(|o| o.channel_id);
+        let new_channel = new.channel_id;
+
+        // Deduplicated set of channels to check.
+        let mut channels_to_check: Vec<serenity::ChannelId> = Vec::new();
+        if let Some(ch) = old_channel {
+            channels_to_check.push(ch);
+        }
+        if let Some(ch) = new_channel {
+            if !channels_to_check.contains(&ch) {
+                channels_to_check.push(ch);
+            }
+        }
+
+        let sessions = match self
+            .service
+            .audio_engine
+            .get_sessions_in_guild(GuildId::from(guild_id))
+            .await
+        {
+            Ok(s) => s.into_iter().map(|s| s.channel_id).collect::<Vec<_>>(),
+            Err(e) => {
+                tracing::warn!("Failed to fetch audio sessions for guild {}: {e}", guild_id);
+                return;
+            }
+        };
+
+        if channels_to_check.is_empty() {
             return;
         }
 
-        // Extract display name from cache before any .await
-        let display_name = {
+        // Pre-extract channel snapshots from guild cache before any .await.
+        struct ChannelSnapshot {
+            serenity_channel_id: serenity::ChannelId,
+            serenity_guild_id: serenity::GuildId,
+            channel_id: ChannelId,
+            guild_id: GuildId,
+            real_user_count: usize,
+        }
+
+        let snapshots: Vec<ChannelSnapshot> = {
             let guild = ctx.cache.guild(guild_id_typed);
-            guild
-                .as_ref()
-                .and_then(|g| g.members.get(&new.user_id))
-                .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
-                .unwrap_or_else(|| discord_user_id.clone())
+            match guild {
+                None => vec![],
+                Some(g) => channels_to_check
+                    .into_iter()
+                    .map(|serenity_ch| {
+                        let real_user_count = g
+                            .voice_states
+                            .values()
+                            .filter(|vs| vs.channel_id == Some(serenity_ch))
+                            .filter(|vs| !vs.deaf && !vs.self_deaf)
+                            .filter(|vs| {
+                                g.members
+                                    .get(&vs.user_id)
+                                    .map(|m| !m.user.bot)
+                                    .unwrap_or(true)
+                            })
+                            .count();
+
+                        let channel_id = ChannelId::from(serenity_ch.get());
+
+                        tracing::info!(
+                            "Channel {} has {} real users (guild {}, channel {})",
+                            serenity_ch,
+                            real_user_count,
+                            guild_id,
+                            channel_id
+                        );
+
+                        ChannelSnapshot {
+                            serenity_channel_id: serenity_ch,
+                            serenity_guild_id: guild_id_typed,
+                            channel_id,
+                            guild_id: GuildId::from(guild_id),
+                            real_user_count,
+                        }
+                    })
+                    .collect(),
+            }
         };
 
-        if let Err(e) = announce_join_leave(
-            &self.service,
-            GuildId::from(guild_id),
-            DiscordUserId::from(discord_user_id.clone()),
-            display_name,
-            events,
-        )
-        .await
-        {
-            tracing::warn!("Failed to play join/leave announcement for {discord_user_id}: {e}");
+        for snap in snapshots {
+            let is_intended = self
+                .service
+                .intended_vc
+                .contains(u64::from(snap.guild_id), u64::from(snap.channel_id))
+                .await
+                .unwrap_or(false);
+
+            if !is_intended {
+                continue;
+            }
+
+            let bot_is_present = sessions.contains(&snap.channel_id);
+
+            if snap.real_user_count == 0 && bot_is_present {
+                let _ = self
+                    .service
+                    .audio_engine
+                    .leave(snap.guild_id, snap.channel_id)
+                    .await;
+                // Keep in intended_vc — will rejoin when someone comes back.
+            } else if snap.real_user_count > 0 && !bot_is_present {
+                if let Err(e) = bot_join_and_announce(
+                    &self.service,
+                    &ctx,
+                    snap.guild_id,
+                    snap.serenity_guild_id,
+                    snap.channel_id,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to auto-rejoin channel {}: {e}",
+                        snap.serenity_channel_id
+                    );
+                }
+            }
         }
     }
 }
@@ -222,7 +349,10 @@ fn build_message(alert: &UserJoinLeaveAlert, display_name: &str, is_join: bool) 
             let suffix = if is_join { "등장" } else { "퇴장" };
             Some(format!("{name} {suffix}"))
         }
-        UserJoinLeaveAlert::Custom { join_message, leave_message } => {
+        UserJoinLeaveAlert::Custom {
+            join_message,
+            leave_message,
+        } => {
             if is_join {
                 Some(join_message.clone())
             } else {
@@ -236,7 +366,9 @@ async fn resolve_tap_name(service: &Service, settings: &UserSettings) -> CoreRes
     match &settings.tts_voice {
         Some(tap_id) => {
             let tap: Option<Tap> = service.tap.get_tap_internal(tap_id.clone()).await?;
-            Ok(tap.map(|t| t.name).unwrap_or_else(|| TapName::from("google".to_string())))
+            Ok(tap
+                .map(|t| t.name)
+                .unwrap_or_else(|| TapName::from("google".to_string())))
         }
         None => Ok(TapName::from("google".to_string())),
     }
