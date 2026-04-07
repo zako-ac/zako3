@@ -44,6 +44,7 @@ refer hq todo
 - [x] Add base volume for tap
 - [ ] AR PArameters
 - [ ] emoji matching service
+- [ ] Pause feature
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

@@ -3,6 +3,10 @@ name = "zako3-cache-gc"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "zako3_cache_gc"
+path = "src/lib.rs"
+
 [[bin]]
 name = "cache-gc"
 path = "src/main.rs"
@@ -24,3 +28,6 @@ clap = { version = "4", features = ["derive", "env"] }
 
 # Opus packet validation (system libopus via pkg-config, or set OPUS_STATIC=1 for static link)
 opus = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
