@@ -23,6 +23,8 @@ pub use user_settings::UserSettingsService;
 pub mod playback;
 pub use mapping::MappingService;
 pub use playback::PlaybackService;
+pub mod audio_engine;
+pub use audio_engine::AudioEngineService;
 
 use crate::repo::{
     PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
@@ -53,6 +55,7 @@ pub struct Service {
     pub mapping: MappingService,
     pub name_resolver_slot: DiscordNameResolverSlot,
     pub tts_channel: TTSChannelService,
+    pub audio_engine: AudioEngineService,
 }
 
 impl Service {
@@ -101,11 +104,13 @@ impl Service {
                 .map_err(|e| CoreError::Internal(e.to_string()))?,
         );
 
+        let audio_engine_service = AudioEngineService::new(audio_engine.clone());
+
         let voice_state = VoiceStateService::new(redis_repo.clone());
         let playback_action_repo = Arc::new(PgPlaybackActionRepo::new(pool.clone()));
         let name_resolver_slot = make_resolver_slot();
         let playback = PlaybackService::new(
-            audio_engine,
+            audio_engine_service.clone(),
             voice_state.clone(),
             playback_action_repo,
             name_resolver_slot.clone(),
@@ -143,6 +148,7 @@ impl Service {
             mapping,
             name_resolver_slot,
             tts_channel: TTSChannelService::new(tts_channel_repo),
+            audio_engine: audio_engine_service,
         })
     }
 }

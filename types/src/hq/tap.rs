@@ -19,8 +19,7 @@ use utoipa::ToSchema;
 )]
 pub struct TapId(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, PartialEq, Eq, ToSchema)]
-pub struct TapName(pub String);
+pub use crate::TapName;
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq,

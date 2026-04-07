@@ -74,4 +74,12 @@ impl StateService for RedisStateService {
 
         Ok(sessions)
     }
+
+    async fn list_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
+        if let Some(session) = self.get_session(guild_id).await? {
+            Ok(vec![session])
+        } else {
+            Ok(vec![])
+        }
+    }
 }

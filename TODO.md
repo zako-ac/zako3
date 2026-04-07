@@ -44,6 +44,7 @@ refer hq todo
 - [ ] Cache management admin panel
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
+- [ ] Add VC-Message channel linking
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

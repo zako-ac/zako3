@@ -225,3 +225,9 @@ pub struct UserSettings {
     pub enable_tts_queue: bool,
     pub tts_voice: Option<TapId>,
 }
+
+impl Default for UserSettings {
+    fn default() -> Self {
+        PartialUserSettings::empty().resolve()
+    }
+}

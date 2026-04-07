@@ -11,7 +11,7 @@ use crate::services::audio_engine::formatter;
 
 pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result<()> {
     let config = Config::load().unwrap_or_default();
-    
+
     let endpoint = if ae_addr.starts_with("nats") {
         ae_addr
     } else if let Some(ctx) = config.get_active_context() {
@@ -25,7 +25,9 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
     };
 
     println!("Connecting to Audio Engine at {}...", endpoint);
-    let client = AudioEngineRpcClient::new(&endpoint).await.context("Failed to connect to NATS")?;
+    let client = AudioEngineRpcClient::new(&endpoint)
+        .await
+        .context("Failed to connect to NATS")?;
 
     // Helper closure to resolve guild_id from option or context
     let resolve_guild_id = |gid: Option<String>| -> Result<GuildId> {
@@ -53,7 +55,10 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
             let success = client.join(gid, cid).await?;
             println!("Join Success: {}", success);
         }
-        AudioEngineSubcommands::Leave { guild_id, channel_id } => {
+        AudioEngineSubcommands::Leave {
+            guild_id,
+            channel_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let success = client.leave(gid, cid).await?;
@@ -95,7 +100,11 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
                 .await?;
             println!("SetVolume Success: {}", success);
         }
-        AudioEngineSubcommands::Stop { guild_id, channel_id, track_id } => {
+        AudioEngineSubcommands::Stop {
+            guild_id,
+            channel_id,
+            track_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let tid = track_id.parse::<u64>().context("Invalid track ID")?;
@@ -127,29 +136,48 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
             let success = client.stop_many(gid, cid, filter_type).await?;
             println!("StopMany Success: {}", success);
         }
-        AudioEngineSubcommands::NextMusic { guild_id, channel_id } => {
+        AudioEngineSubcommands::NextMusic {
+            guild_id,
+            channel_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let success = client.next_music(gid, cid).await?;
             println!("NextMusic Success: {}", success);
         }
-        AudioEngineSubcommands::Pause { guild_id, channel_id, track_id } => {
+        AudioEngineSubcommands::Pause {
+            guild_id,
+            channel_id,
+            track_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let success = client.pause(gid, cid, TrackId::from(track_id)).await?;
             println!("Pause Success: {}", success);
         }
-        AudioEngineSubcommands::Resume { guild_id, channel_id, track_id } => {
+        AudioEngineSubcommands::Resume {
+            guild_id,
+            channel_id,
+            track_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let success = client.resume(gid, cid, TrackId::from(track_id)).await?;
             println!("Resume Success: {}", success);
         }
-        AudioEngineSubcommands::GetSessionState { guild_id, channel_id } => {
+        AudioEngineSubcommands::GetSessionState {
+            guild_id,
+            channel_id,
+        } => {
             let gid = resolve_guild_id(guild_id)?;
             let cid = ChannelId::from(config.resolve_alias(&channel_id).parse::<u64>()?);
             let state = client.get_session_state(gid, cid).await?;
             formatter::print_session_state_native(state);
+        }
+        AudioEngineSubcommands::GetSessionsInGuild { guild_id } => {
+            let gid = resolve_guild_id(guild_id)?;
+            let sessions = client.get_sessions_in_guild(gid).await?;
+            formatter::print_sessions_list(sessions);
         }
     }
 

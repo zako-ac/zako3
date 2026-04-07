@@ -1,6 +1,7 @@
+use ::serenity::all::GatewayIntents;
 use hq_core::{
-    Service,
     service::{DiscordNameResolver, DiscordNameResolverSlot},
+    Service,
 };
 use poise::serenity_prelude as serenity;
 use std::sync::Arc;
@@ -21,11 +22,19 @@ pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();
-    let intents =
-        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::GUILD_VOICE_STATES;
+    let intents = GatewayIntents::non_privileged()
+        | GatewayIntents::GUILD_VOICE_STATES
+        | GatewayIntents::GUILD_MEMBERS
+        | GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT
+        | GatewayIntents::GUILDS;
 
     let voice_handler = events::VoiceStateHandler {
         voice_state_service: service.voice_state.clone(),
+    };
+
+    let message_handler = events::MessageCreateHandler {
+        service: service.clone().into(),
     };
 
     let framework = poise::Framework::builder()
@@ -50,6 +59,7 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
 
     let mut client = serenity::ClientBuilder::new(token, intents)
         .event_handler(voice_handler)
+        .event_handler(message_handler)
         .framework(framework)
         .await?;
 

@@ -53,6 +53,9 @@ pub enum AudioEngineRequest {
     GetSessionState {
         guild_id: GuildId,
     },
+    GetSessionsInGuild {
+        guild_id: GuildId,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,5 +64,6 @@ pub enum AudioEngineResponse {
     SuccessBool(bool),
     SuccessTrackId(TrackId),
     SuccessSessionState(SessionState),
+    SuccessSessions(Vec<SessionState>),
     Error(String),
 }

@@ -99,6 +99,10 @@ impl SessionManager {
         self.state_service.list_sessions().await
     }
 
+    pub async fn get_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
+        self.state_service.list_sessions_in_guild(guild_id).await
+    }
+
     #[instrument(skip(self), fields(guild_id = %guild_id))]
     pub async fn leave(&self, guild_id: GuildId) -> ZakoResult<()> {
         tracing::info!("Leaving voice channel");

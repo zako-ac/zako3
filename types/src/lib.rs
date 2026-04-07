@@ -12,6 +12,7 @@ pub use session_state::*;
 
 pub mod cache;
 pub use cache::*;
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Into, From, Display, Serialize, Deserialize)]
 #[display("{_0}")]
@@ -38,7 +39,18 @@ pub struct TrackId(u64);
 pub struct UserId(pub String);
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Into,
+    From,
+    FromStr,
+    Display,
+    Serialize,
+    Deserialize,
+    ToSchema,
 )]
 #[display("{_0}")]
 pub struct TapName(pub String);

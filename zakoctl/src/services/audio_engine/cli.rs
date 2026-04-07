@@ -106,4 +106,10 @@ pub enum AudioEngineSubcommands {
         #[arg(short = 'c', long, help = "The Channel ID")]
         channel_id: String,
     },
+    /// Get all sessions in a specific guild
+    #[command(name = "get-sessions-in-guild", alias = "gsig")]
+    GetSessionsInGuild {
+        #[arg(short = 'g', long, help = "The Guild ID")]
+        guild_id: Option<String>,
+    },
 }

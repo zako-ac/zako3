@@ -7,13 +7,12 @@ use hq_types::{
         AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto,
     },
 };
-use zako3_audio_engine_client::client::AudioEngineRpcClient;
 use zako3_states::VoiceStateService;
 
 use crate::{
     CoreError, CoreResult,
     repo::{CreatePlaybackAction, PlaybackAction, PlaybackActionRepo},
-    service::DiscordNameResolverSlot,
+    service::{AudioEngineService, DiscordNameResolverSlot},
 };
 
 fn metadata_to_dto(m: &AudioMetadata) -> AudioMetadataDto {
@@ -45,7 +44,7 @@ fn action_to_dto(a: &PlaybackAction) -> PlaybackActionDto {
 
 #[derive(Clone)]
 pub struct PlaybackService {
-    audio_engine: Arc<AudioEngineRpcClient>,
+    audio_engine: AudioEngineService,
     voice_state: VoiceStateService,
     repo: Arc<dyn PlaybackActionRepo>,
     name_resolver_slot: DiscordNameResolverSlot,
@@ -53,7 +52,7 @@ pub struct PlaybackService {
 
 impl PlaybackService {
     pub fn new(
-        audio_engine: Arc<AudioEngineRpcClient>,
+        audio_engine: AudioEngineService,
         voice_state: VoiceStateService,
         repo: Arc<dyn PlaybackActionRepo>,
         name_resolver_slot: DiscordNameResolverSlot,
@@ -88,7 +87,7 @@ impl PlaybackService {
             {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::debug!(%e, guild_id = %loc.guild_id, channel_id = %loc.channel_id, "No audio session for channel, skipping");
+                    tracing::debug!(guild_id = %loc.guild_id, channel_id = %loc.channel_id, "No audio session for channel, skipping: {}", e);
                     continue;
                 }
             };
@@ -153,7 +152,7 @@ impl PlaybackService {
             .audio_engine
             .get_session_state(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -164,7 +163,7 @@ impl PlaybackService {
         self.audio_engine
             .stop(g, c, TrackId::from(tid))
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let action = self
             .repo
@@ -194,7 +193,7 @@ impl PlaybackService {
             .audio_engine
             .get_session_state(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let music_queue = QueueName::from("music".to_string());
         let head_track = state
@@ -208,7 +207,7 @@ impl PlaybackService {
         self.audio_engine
             .next_music(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let action = self
             .repo
@@ -246,7 +245,7 @@ impl PlaybackService {
             .audio_engine
             .get_session_state(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let queue_snapshot = serde_json::to_value(&state.queues)?;
 
@@ -261,7 +260,7 @@ impl PlaybackService {
                     self.audio_engine
                         .stop(g, c, track_id)
                         .await
-                        .map_err(|e| CoreError::Internal(e.to_string()))?;
+                        ?;
                 }
                 "set_volume" => {
                     let vol = op.volume.ok_or_else(|| {
@@ -270,7 +269,7 @@ impl PlaybackService {
                     self.audio_engine
                         .set_volume(g, c, track_id, Volume::from(vol))
                         .await
-                        .map_err(|e| CoreError::Internal(e.to_string()))?;
+                        ?;
                 }
                 other => {
                     return Err(CoreError::InvalidInput(format!("unknown op: {}", other)));
@@ -339,7 +338,7 @@ impl PlaybackService {
                         track.request.discord_user_id.clone(),
                     )
                     .await
-                    .map_err(|e| CoreError::Internal(e.to_string()))?;
+                    ?;
             }
             "edit_queue" => {
                 return Err(CoreError::InvalidInput(
@@ -400,7 +399,7 @@ impl PlaybackService {
             .audio_engine
             .get_session_state(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -411,7 +410,7 @@ impl PlaybackService {
         self.audio_engine
             .pause(g, c, TrackId::from(tid))
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let action = self
             .repo
@@ -445,7 +444,7 @@ impl PlaybackService {
             .audio_engine
             .get_session_state(g, c)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -456,7 +455,7 @@ impl PlaybackService {
         self.audio_engine
             .resume(g, c, TrackId::from(tid))
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
+            ?;
 
         let action = self
             .repo

@@ -57,21 +57,31 @@ impl AudioEngineServer {
             let client = client.clone();
             tokio::spawn(async move {
                 let response = match &payload {
-                    AudioEngineRequest::Join { guild_id, channel_id } => {
+                    AudioEngineRequest::Join {
+                        guild_id,
+                        channel_id,
+                    } => {
                         if this.session_manager.get_session(*guild_id).is_some() {
                             AudioEngineResponse::Error("Session already exists".to_string())
                         } else {
                             match this.session_manager.join(*guild_id, *channel_id).await {
                                 Ok(_) => {
-                                    this.spawn_session_consumer(client.clone(), *guild_id, *channel_id)
-                                        .await;
+                                    this.spawn_session_consumer(
+                                        client.clone(),
+                                        *guild_id,
+                                        *channel_id,
+                                    )
+                                    .await;
                                     AudioEngineResponse::SuccessBool(true)
                                 }
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                     }
-                    AudioEngineRequest::Leave { guild_id, channel_id } => {
+                    AudioEngineRequest::Leave {
+                        guild_id,
+                        channel_id,
+                    } => {
                         if let Some(session) = this.session_manager.get_session(*guild_id) {
                             let state = session.session_state().await;
                             if let Ok(Some(s)) = state {
@@ -95,6 +105,12 @@ impl AudioEngineServer {
                             }
                         } else {
                             AudioEngineResponse::Error("No session found".to_string())
+                        }
+                    }
+                    AudioEngineRequest::GetSessionsInGuild { guild_id } => {
+                        match this.session_manager.get_sessions_in_guild(*guild_id).await {
+                            Ok(sessions) => AudioEngineResponse::SuccessSessions(sessions),
+                            Err(e) => AudioEngineResponse::Error(e.to_string()),
                         }
                     }
                     _ => AudioEngineResponse::Error(
@@ -152,7 +168,10 @@ impl AudioEngineServer {
             let mut sub = match client.subscribe(subject.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
-                    error!("Failed to subscribe to session subject {}: {:?}", subject, e);
+                    error!(
+                        "Failed to subscribe to session subject {}: {:?}",
+                        subject, e
+                    );
                     return;
                 }
             };
@@ -179,7 +198,9 @@ impl AudioEngineServer {
                             "Session {} no longer managed by this AE. Aborting consumer.",
                             guild_id
                         );
-                        let resp = AudioEngineResponse::Error("Session not found (Self-Healed)".to_string());
+                        let resp = AudioEngineResponse::Error(
+                            "Session not found (Self-Healed)".to_string(),
+                        );
                         let data = serde_json::to_vec(&resp).unwrap_or_default();
                         let _ = client.publish(reply, data.into()).await;
                         return;
@@ -196,14 +217,22 @@ impl AudioEngineServer {
                         } => {
                             let session = session_manager.get_session(guild_id).unwrap();
                             match session
-                                .play(queue_name, tap_name, audio_request_string, volume, discord_user_id)
+                                .play(
+                                    queue_name,
+                                    tap_name,
+                                    audio_request_string,
+                                    volume,
+                                    discord_user_id,
+                                )
                                 .await
                             {
                                 Ok(tid) => AudioEngineResponse::SuccessTrackId(tid),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
-                        AudioEngineRequest::SetVolume { track_id, volume, .. } => {
+                        AudioEngineRequest::SetVolume {
+                            track_id, volume, ..
+                        } => {
                             let session = session_manager.get_session(guild_id).unwrap();
                             match session.set_volume(track_id, volume).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -249,11 +278,15 @@ impl AudioEngineServer {
                             let session = session_manager.get_session(guild_id).unwrap();
                             match session.session_state().await {
                                 Ok(Some(state)) => AudioEngineResponse::SuccessSessionState(state),
-                                Ok(None) => AudioEngineResponse::Error("State not found".to_string()),
+                                Ok(None) => {
+                                    AudioEngineResponse::Error("State not found".to_string())
+                                }
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
-                        _ => AudioEngineResponse::Error("Invalid request for session subject".to_string()),
+                        _ => AudioEngineResponse::Error(
+                            "Invalid request for session subject".to_string(),
+                        ),
                     };
 
                     let data = serde_json::to_vec(&response).unwrap_or_default();
@@ -262,7 +295,8 @@ impl AudioEngineServer {
                     // Publish state-changed event for mutating operations that succeeded
                     let is_mutation = matches!(
                         response,
-                        AudioEngineResponse::SuccessBool(true) | AudioEngineResponse::SuccessTrackId(_)
+                        AudioEngineResponse::SuccessBool(true)
+                            | AudioEngineResponse::SuccessTrackId(_)
                     );
                     if is_mutation {
                         let event = serde_json::json!({

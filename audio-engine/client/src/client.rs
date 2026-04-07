@@ -37,7 +37,10 @@ impl AudioEngineRpcClient {
         match self
             .send_request(
                 "audio_engine.control",
-                AudioEngineRequest::Join { guild_id, channel_id },
+                AudioEngineRequest::Join {
+                    guild_id,
+                    channel_id,
+                },
             )
             .await?
         {
@@ -51,7 +54,10 @@ impl AudioEngineRpcClient {
         match self
             .send_request(
                 "audio_engine.control",
-                AudioEngineRequest::Leave { guild_id, channel_id },
+                AudioEngineRequest::Leave {
+                    guild_id,
+                    channel_id,
+                },
             )
             .await?
         {
@@ -103,7 +109,11 @@ impl AudioEngineRpcClient {
         match self
             .send_request(
                 &subject,
-                AudioEngineRequest::SetVolume { guild_id, track_id, volume },
+                AudioEngineRequest::SetVolume {
+                    guild_id,
+                    track_id,
+                    volume,
+                },
             )
             .await?
         {
@@ -208,6 +218,23 @@ impl AudioEngineRpcClient {
             .await?
         {
             AudioEngineResponse::SuccessSessionState(s) => Ok(s),
+            AudioEngineResponse::Error(e) => Err(anyhow::anyhow!(e)),
+            _ => Err(anyhow::anyhow!("Invalid response type")),
+        }
+    }
+
+    pub async fn get_sessions_in_guild(
+        &self,
+        guild_id: GuildId,
+    ) -> anyhow::Result<Vec<SessionState>> {
+        match self
+            .send_request(
+                "audio_engine.control",
+                AudioEngineRequest::GetSessionsInGuild { guild_id },
+            )
+            .await?
+        {
+            AudioEngineResponse::SuccessSessions(s) => Ok(s),
             AudioEngineResponse::Error(e) => Err(anyhow::anyhow!(e)),
             _ => Err(anyhow::anyhow!("Invalid response type")),
         }
