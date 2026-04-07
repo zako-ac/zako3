@@ -16,6 +16,18 @@ pub struct VoiceStateHandler {
     pub service: Arc<Service>,
 }
 
+struct ChannelSnapshot {
+    serenity_channel_id: serenity::ChannelId,
+    serenity_guild_id: serenity::GuildId,
+    channel_id: ChannelId,
+    guild_id: GuildId,
+    real_user_count: usize,
+}
+
+// ---------------------------------------------------------------------------
+// EventHandler impl
+// ---------------------------------------------------------------------------
+
 #[async_trait]
 impl EventHandler for VoiceStateHandler {
     async fn cache_ready(&self, ctx: Context, guilds: Vec<serenity::GuildId>) {
@@ -56,90 +68,26 @@ impl EventHandler for VoiceStateHandler {
     }
 
     async fn voice_state_update(&self, ctx: Context, old: Option<VoiceState>, new: VoiceState) {
-        let discord_user_id = new.user_id.to_string();
-
         let guild_id_typed = match new.guild_id {
             Some(g) => g,
             None => return,
         };
         let guild_id = guild_id_typed.get();
+        let discord_user_id = new.user_id.to_string();
 
-        // Update voice state tracking (existing logic)
-        match new.channel_id {
-            Some(ch) => {
-                // Extract names while holding cache refs, then drop before .await
-                let (guild_name, channel_name) = {
-                    let guild = ctx.cache.guild(guild_id_typed);
-                    let gn = guild
-                        .as_ref()
-                        .map(|g| g.name.clone())
-                        .unwrap_or_else(|| guild_id.to_string());
-                    let cn = guild
-                        .as_ref()
-                        .and_then(|g| g.channels.get(&ch))
-                        .map(|c| c.name.clone())
-                        .unwrap_or_else(|| ch.get().to_string());
-                    (gn, cn)
-                };
-                let _ = self
-                    .voice_state_service
-                    .set_user_channel(
-                        &discord_user_id,
-                        guild_id,
-                        ch.get(),
-                        guild_name,
-                        channel_name,
-                    )
-                    .await;
-            }
-            None => {
-                let _ = self
-                    .voice_state_service
-                    .remove_user_from_guild(&discord_user_id, guild_id)
-                    .await;
-            }
+        update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
+
+        if is_bot(&ctx, new.user_id) {
+            return;
         }
 
-        // Skip announcements for the bot itself
-        {
-            let new_user = ctx.cache.user(new.user_id);
-            if let Some(u) = new_user {
-                if u.bot {
-                    return;
-                }
-            }
-        }
+        let old_ch = old.as_ref().and_then(|o| o.channel_id);
+        let new_ch = new.channel_id;
 
-        // Collect join/leave events: (channel_id, is_join)
-        let old_channel = old.as_ref().and_then(|o| o.channel_id);
-        let new_channel = new.channel_id;
-
-        let mut events: Vec<(serenity::ChannelId, bool)> = Vec::new();
-        match (old_channel, new_channel) {
-            (None, Some(ch)) => {
-                events.push((ch, true));
-            }
-            (Some(ch), None) => {
-                events.push((ch, false));
-            }
-            (Some(old_ch), Some(new_ch)) if old_ch != new_ch => {
-                events.push((old_ch, false));
-                events.push((new_ch, true));
-            }
-            _ => {}
-        }
-
+        let events = join_leave_events(old_ch, new_ch);
         if !events.is_empty() {
-            // Extract display name from cache before any .await
-            let display_name = {
-                let guild = ctx.cache.guild(guild_id_typed);
-                guild
-                    .as_ref()
-                    .and_then(|g| g.members.get(&new.user_id))
-                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
-                    .unwrap_or_else(|| discord_user_id.clone())
-            };
-
+            let display_name =
+                get_display_name(&ctx, guild_id_typed, new.user_id, &discord_user_id);
             if let Err(e) = announce_join_leave(
                 &self.service,
                 GuildId::from(guild_id),
@@ -153,129 +101,231 @@ impl EventHandler for VoiceStateHandler {
             }
         }
 
-        // Auto-leave/rejoin: check channels affected by this voice state change.
-        let old_channel = old.as_ref().and_then(|o| o.channel_id);
-        let new_channel = new.channel_id;
-
-        // Deduplicated set of channels to check.
-        let mut channels_to_check: Vec<serenity::ChannelId> = Vec::new();
-        if let Some(ch) = old_channel {
-            channels_to_check.push(ch);
-        }
-        if let Some(ch) = new_channel {
-            if !channels_to_check.contains(&ch) {
-                channels_to_check.push(ch);
-            }
-        }
-
-        let sessions = match self
-            .service
-            .audio_engine
-            .get_sessions_in_guild(GuildId::from(guild_id))
-            .await
+        if let Err(e) = handle_auto_leave_rejoin(
+            &self.service,
+            &ctx,
+            guild_id_typed,
+            guild_id,
+            affected_channels(old_ch, new_ch),
+        )
+        .await
         {
-            Ok(s) => s.into_iter().map(|s| s.channel_id).collect::<Vec<_>>(),
-            Err(e) => {
-                tracing::warn!("Failed to fetch audio sessions for guild {}: {e}", guild_id);
-                return;
-            }
-        };
-
-        if channels_to_check.is_empty() {
-            return;
-        }
-
-        // Pre-extract channel snapshots from guild cache before any .await.
-        struct ChannelSnapshot {
-            serenity_channel_id: serenity::ChannelId,
-            serenity_guild_id: serenity::GuildId,
-            channel_id: ChannelId,
-            guild_id: GuildId,
-            real_user_count: usize,
-        }
-
-        let snapshots: Vec<ChannelSnapshot> = {
-            let guild = ctx.cache.guild(guild_id_typed);
-            match guild {
-                None => vec![],
-                Some(g) => channels_to_check
-                    .into_iter()
-                    .map(|serenity_ch| {
-                        let real_user_count = g
-                            .voice_states
-                            .values()
-                            .filter(|vs| vs.channel_id == Some(serenity_ch))
-                            .filter(|vs| !vs.deaf && !vs.self_deaf)
-                            .filter(|vs| {
-                                g.members
-                                    .get(&vs.user_id)
-                                    .map(|m| !m.user.bot)
-                                    .unwrap_or(true)
-                            })
-                            .count();
-
-                        let channel_id = ChannelId::from(serenity_ch.get());
-
-                        tracing::info!(
-                            "Channel {} has {} real users (guild {}, channel {})",
-                            serenity_ch,
-                            real_user_count,
-                            guild_id,
-                            channel_id
-                        );
-
-                        ChannelSnapshot {
-                            serenity_channel_id: serenity_ch,
-                            serenity_guild_id: guild_id_typed,
-                            channel_id,
-                            guild_id: GuildId::from(guild_id),
-                            real_user_count,
-                        }
-                    })
-                    .collect(),
-            }
-        };
-
-        for snap in snapshots {
-            let is_intended = self
-                .service
-                .intended_vc
-                .contains(u64::from(snap.guild_id), u64::from(snap.channel_id))
-                .await
-                .unwrap_or(false);
-
-            if !is_intended {
-                continue;
-            }
-
-            let bot_is_present = sessions.contains(&snap.channel_id);
-
-            if snap.real_user_count == 0 && bot_is_present {
-                let _ = self
-                    .service
-                    .audio_engine
-                    .leave(snap.guild_id, snap.channel_id)
-                    .await;
-                // Keep in intended_vc — will rejoin when someone comes back.
-            } else if snap.real_user_count > 0 && !bot_is_present {
-                if let Err(e) = bot_join_and_announce(
-                    &self.service,
-                    &ctx,
-                    snap.guild_id,
-                    snap.serenity_guild_id,
-                    snap.channel_id,
-                )
-                .await
-                {
-                    tracing::warn!(
-                        "Failed to auto-rejoin channel {}: {e}",
-                        snap.serenity_channel_id
-                    );
-                }
-            }
+            tracing::warn!("Auto-leave/rejoin error for guild {guild_id}: {e}");
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Voice state tracking
+// ---------------------------------------------------------------------------
+
+async fn update_tracking(
+    voice_state_service: &VoiceStateService,
+    ctx: &Context,
+    guild_id_typed: serenity::GuildId,
+    new: &VoiceState,
+) {
+    let discord_user_id = new.user_id.to_string();
+    let guild_id = guild_id_typed.get();
+
+    match new.channel_id {
+        Some(ch) => {
+            let (guild_name, channel_name) = {
+                let guild = ctx.cache.guild(guild_id_typed);
+                let gn = guild
+                    .as_ref()
+                    .map(|g| g.name.clone())
+                    .unwrap_or_else(|| guild_id.to_string());
+                let cn = guild
+                    .as_ref()
+                    .and_then(|g| g.channels.get(&ch))
+                    .map(|c| c.name.clone())
+                    .unwrap_or_else(|| ch.get().to_string());
+                (gn, cn)
+            };
+            let _ = voice_state_service
+                .set_user_channel(&discord_user_id, guild_id, ch.get(), guild_name, channel_name)
+                .await;
+        }
+        None => {
+            let _ = voice_state_service
+                .remove_user_from_guild(&discord_user_id, guild_id)
+                .await;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pure sync helpers
+// ---------------------------------------------------------------------------
+
+fn is_bot(ctx: &Context, user_id: serenity::UserId) -> bool {
+    ctx.cache.user(user_id).map(|u| u.bot).unwrap_or(false)
+}
+
+fn get_display_name(
+    ctx: &Context,
+    guild_id: serenity::GuildId,
+    user_id: serenity::UserId,
+    fallback: &str,
+) -> String {
+    ctx.cache
+        .guild(guild_id)
+        .as_ref()
+        .and_then(|g| g.members.get(&user_id))
+        .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Returns join/leave events derived from the channel transition.
+/// Each entry is `(channel_id, is_join)`.
+fn join_leave_events(
+    old_ch: Option<serenity::ChannelId>,
+    new_ch: Option<serenity::ChannelId>,
+) -> Vec<(serenity::ChannelId, bool)> {
+    match (old_ch, new_ch) {
+        (None, Some(ch)) => vec![(ch, true)],
+        (Some(ch), None) => vec![(ch, false)],
+        (Some(old), Some(new)) if old != new => vec![(old, false), (new, true)],
+        _ => vec![],
+    }
+}
+
+/// Returns the deduplicated set of channels affected by this voice state change.
+/// Includes both old and new channel (handles deafen/mute in same channel).
+fn affected_channels(
+    old_ch: Option<serenity::ChannelId>,
+    new_ch: Option<serenity::ChannelId>,
+) -> Vec<serenity::ChannelId> {
+    let mut channels = Vec::new();
+    if let Some(ch) = old_ch {
+        channels.push(ch);
+    }
+    if let Some(ch) = new_ch {
+        if !channels.contains(&ch) {
+            channels.push(ch);
+        }
+    }
+    channels
+}
+
+/// Counts non-bot, non-deafened users in `channel_id` from the guild cache.
+fn count_real_users(guild: &serenity::Guild, channel_id: serenity::ChannelId) -> usize {
+    guild
+        .voice_states
+        .values()
+        .filter(|vs| vs.channel_id == Some(channel_id))
+        .filter(|vs| !vs.deaf && !vs.self_deaf)
+        .filter(|vs| {
+            guild
+                .members
+                .get(&vs.user_id)
+                .map(|m| !m.user.bot)
+                .unwrap_or(true)
+        })
+        .count()
+}
+
+// ---------------------------------------------------------------------------
+// Auto-leave / rejoin
+// ---------------------------------------------------------------------------
+
+async fn handle_auto_leave_rejoin(
+    service: &Service,
+    ctx: &Context,
+    guild_id_typed: serenity::GuildId,
+    guild_id: u64,
+    channels: Vec<serenity::ChannelId>,
+) -> CoreResult<()> {
+    if channels.is_empty() {
+        return Ok(());
+    }
+
+    let sessions = service
+        .audio_engine
+        .get_sessions_in_guild(GuildId::from(guild_id))
+        .await
+        .map(|s| s.into_iter().map(|s| s.channel_id).collect::<Vec<_>>())
+        .map_err(|e| {
+            tracing::warn!("Failed to fetch audio sessions for guild {guild_id}: {e}");
+            e
+        })?;
+
+    let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels);
+
+    for snap in snapshots {
+        act_on_snapshot(service, ctx, &sessions, snap).await;
+    }
+
+    Ok(())
+}
+
+fn extract_snapshots(
+    ctx: &Context,
+    guild_id_typed: serenity::GuildId,
+    guild_id: u64,
+    channels: &[serenity::ChannelId],
+) -> Vec<ChannelSnapshot> {
+    let guild = ctx.cache.guild(guild_id_typed);
+    match guild {
+        None => vec![],
+        Some(g) => channels
+            .iter()
+            .map(|&serenity_ch| {
+                let real_user_count = count_real_users(&g, serenity_ch);
+                let channel_id = ChannelId::from(serenity_ch.get());
+                tracing::info!(
+                    "Channel {serenity_ch} has {real_user_count} real users (guild {guild_id})"
+                );
+                ChannelSnapshot {
+                    serenity_channel_id: serenity_ch,
+                    serenity_guild_id: guild_id_typed,
+                    channel_id,
+                    guild_id: GuildId::from(guild_id),
+                    real_user_count,
+                }
+            })
+            .collect(),
+    }
+}
+
+async fn act_on_snapshot(
+    service: &Service,
+    ctx: &Context,
+    sessions: &[ChannelId],
+    snap: ChannelSnapshot,
+) {
+    let is_intended = service
+        .intended_vc
+        .contains(u64::from(snap.guild_id), u64::from(snap.channel_id))
+        .await
+        .unwrap_or(false);
+
+    if !is_intended {
+        return;
+    }
+
+    let bot_is_present = sessions.contains(&snap.channel_id);
+
+    if snap.real_user_count == 0 && bot_is_present {
+        let _ = service
+            .audio_engine
+            .leave(snap.guild_id, snap.channel_id)
+            .await;
+        // Keep in intended_vc — will rejoin when someone comes back.
+    } else if snap.real_user_count > 0 && !bot_is_present {
+        if let Err(e) =
+            bot_join_and_announce(service, ctx, snap.guild_id, snap.serenity_guild_id, snap.channel_id)
+                .await
+        {
+            tracing::warn!("Failed to auto-rejoin channel {}: {e}", snap.serenity_channel_id);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Join/leave announcement
+// ---------------------------------------------------------------------------
 
 async fn announce_join_leave(
     service: &Service,
@@ -284,7 +334,6 @@ async fn announce_join_leave(
     display_name: String,
     events: Vec<(serenity::ChannelId, bool)>,
 ) -> CoreResult<()> {
-    // Fetch user's settings once
     let hq_user = service
         .tap
         .get_user_by_discord_id(&discord_user_id.to_string())
@@ -299,28 +348,22 @@ async fn announce_join_leave(
         UserSettings::default()
     };
 
-    // Resolve tap name from user's TTS voice setting
     let tap_name = resolve_tap_name(service, &settings).await?;
-
-    // Fetch active bot sessions once
     let sessions = service.audio_engine.get_sessions_in_guild(guild_id).await?;
 
     for (serenity_ch, is_join) in events {
         let channel_id = ChannelId::from(serenity_ch.get());
 
-        // Only announce if bot is in that channel
         if !sessions.iter().any(|s| s.channel_id == channel_id) {
             continue;
         }
 
-        let message = build_message(&settings.user_join_leave_alert, &display_name, is_join);
-        let message = match message {
-            Some(m) => m,
-            None => continue, // UserJoinLeaveAlert::Off
+        let Some(message) = build_message(&settings.user_join_leave_alert, &display_name, is_join)
+        else {
+            continue;
         };
 
         let queue_name: QueueName = format!("temp-alert-{}", uuid::Uuid::new_v4()).into();
-
         service
             .audio_engine
             .play(
@@ -339,25 +382,15 @@ async fn announce_join_leave(
 }
 
 fn build_message(alert: &UserJoinLeaveAlert, display_name: &str, is_join: bool) -> Option<String> {
+    let suffix = |join| if join { "등장" } else { "퇴장" };
     match alert {
         UserJoinLeaveAlert::Off => None,
-        UserJoinLeaveAlert::Auto => {
-            let suffix = if is_join { "등장" } else { "퇴장" };
-            Some(format!("{display_name} {suffix}"))
-        }
+        UserJoinLeaveAlert::Auto => Some(format!("{display_name} {}", suffix(is_join))),
         UserJoinLeaveAlert::WithDifferentUsername(name) => {
-            let suffix = if is_join { "등장" } else { "퇴장" };
-            Some(format!("{name} {suffix}"))
+            Some(format!("{name} {}", suffix(is_join)))
         }
-        UserJoinLeaveAlert::Custom {
-            join_message,
-            leave_message,
-        } => {
-            if is_join {
-                Some(join_message.clone())
-            } else {
-                Some(leave_message.clone())
-            }
+        UserJoinLeaveAlert::Custom { join_message, leave_message } => {
+            Some(if is_join { join_message } else { leave_message }.clone())
         }
     }
 }
