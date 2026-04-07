@@ -24,7 +24,10 @@ pub async fn decode_and_stream(
 
     // Spawn ffmpeg: pipe:0 (input) → ogg/opus (codec copy) → pipe:1 (output)
     let mut ffmpeg = Command::new("ffmpeg")
-        .args(["-v", "quiet", "-i", "pipe:0", "-vn", "-c:a", "copy", "-f", "ogg", "pipe:1"])
+        //.args(["-v", "quiet", "-i", "pipe:0", "-vn", "-c:a", "copy", "-f", "ogg", "pipe:1"])
+        .args([
+            "-v", "quiet", "-i", "pipe:0", "-vn", "-c:a", "libopus", "-f", "ogg", "pipe:1",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
