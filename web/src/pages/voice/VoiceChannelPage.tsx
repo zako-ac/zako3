@@ -75,7 +75,13 @@ export const VoiceChannelPage = () => {
                         No active session in this channel.
                     </p>
                 ) : (
-                    Object.entries(channelState.queues as Record<string, TrackDto[]>).map(
+                    Object.entries(channelState.queues as Record<string, TrackDto[]>)
+                        .sort(([nameA], [nameB]) => {
+                            if (nameA === 'music') return -1
+                            if (nameB === 'music') return 1
+                            return nameA.localeCompare(nameB)
+                        })
+                        .map(
                         ([queueName, tracks]) => (
                             <Card key={queueName}>
                                 <CardHeader className="flex flex-row items-center justify-between pb-3">

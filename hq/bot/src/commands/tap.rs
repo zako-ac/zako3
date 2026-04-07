@@ -1,4 +1,4 @@
-use crate::{Context, Error};
+use crate::{ui, Context, Error};
 
 #[poise::command(slash_command, subcommands("list"))]
 pub async fn tap(_: Context<'_>) -> Result<(), Error> {
@@ -17,14 +17,8 @@ pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
         .await?;
     let taps = service.tap.list_by_user(user.id).await?;
 
-    let mut response = String::from("Your Taps:\n");
-    for tap_item in taps.data {
-        response.push_str(&format!(
-            "- {} (ID: {})\n",
-            tap_item.tap.name, tap_item.tap.id
-        ));
-    }
+    let embed = ui::embeds::tap_list_embed(&taps.data);
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
 
-    ctx.say(response).await?;
     Ok(())
 }

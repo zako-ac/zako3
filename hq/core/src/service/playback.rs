@@ -3,8 +3,10 @@ use std::sync::Arc;
 use chrono::Utc;
 use hq_types::{
     AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
-    hq::playback::{
-        AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto,
+    hq::{
+        UserSettings,
+        playback::{AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto},
+        settings::TextReadingRule,
     },
 };
 use zako3_states::VoiceStateService;
@@ -14,6 +16,15 @@ use crate::{
     repo::{CreatePlaybackAction, PlaybackAction, PlaybackActionRepo},
     service::{AudioEngineService, DiscordNameResolverSlot},
 };
+
+/// Minimal voice state info extracted from a Discord gateway event or cache,
+/// used to determine TTS routing without taking a dependency on serenity types.
+#[derive(Debug, Clone)]
+pub struct UserVoiceInfo {
+    pub channel_id: Option<ChannelId>,
+    pub mute: bool,
+    pub self_mute: bool,
+}
 
 fn metadata_to_dto(m: &AudioMetadata) -> AudioMetadataDto {
     let (type_str, value) = match m {
@@ -470,5 +481,57 @@ impl PlaybackService {
             .await?;
 
         Ok(action_to_dto(&action))
+    }
+
+    /// Determines which voice channels should receive TTS audio given the user's
+    /// voice state and their `TextReadingRule` setting.
+    ///
+    /// Mirrors the routing logic previously in `hq-bot`'s `message_create` handler,
+    /// now centralised here so slash commands can reuse it.
+    pub async fn resolve_tts_channels(
+        &self,
+        guild_id: GuildId,
+        message_channel_id: ChannelId,
+        user_voice_info: Option<UserVoiceInfo>,
+        settings: &UserSettings,
+    ) -> CoreResult<Vec<ChannelId>> {
+        let bot_channel_ids = self
+            .audio_engine
+            .get_sessions_in_guild(guild_id)
+            .await?
+            .into_iter()
+            .map(|s| s.channel_id)
+            .collect::<Vec<_>>();
+
+        if bot_channel_ids.contains(&message_channel_id) {
+            return Ok(vec![message_channel_id]);
+        }
+
+        match settings.text_reading_rule {
+            TextReadingRule::Always => {
+                if let Some(info) = user_voice_info {
+                    if let Some(channel_id) = info.channel_id {
+                        return Ok(vec![channel_id]);
+                    }
+                }
+                Ok(bot_channel_ids)
+            }
+            TextReadingRule::InVoiceChannel | TextReadingRule::OnMicMute => {
+                if let Some(info) = user_voice_info {
+                    if let Some(channel_id) = info.channel_id {
+                        match settings.text_reading_rule {
+                            TextReadingRule::InVoiceChannel => return Ok(vec![channel_id]),
+                            TextReadingRule::OnMicMute => {
+                                if info.mute || info.self_mute {
+                                    return Ok(vec![channel_id]);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(vec![])
+            }
+        }
     }
 }

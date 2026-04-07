@@ -2,14 +2,13 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    hq::{DiscordUserId, Tap, TapName, TextReadingRule, UserSettings},
     AudioRequestString, ChannelId, GuildId, QueueName,
+    hq::{DiscordUserId, Tap, TapName, UserSettings},
 };
-use serenity::{
-    all::{Context, EventHandler, VoiceState},
-    async_trait,
-};
+use serenity::{async_trait, all::{Context, EventHandler}};
 use tracing::instrument;
+
+use crate::util::VoiceStateExt;
 
 pub struct MessageCreateHandler {
     pub service: Arc<Service>,
@@ -40,12 +39,16 @@ async fn handle_message_create(
 ) -> CoreResult<()> {
     let guild_id = match msg.guild_id {
         Some(gid) => GuildId::from(gid.get()),
-        None => return Ok(()), // Ignore DMs
+        None => return Ok(()),
     };
 
-    let voice_state = msg
+    if msg.author.bot {
+        return Ok(());
+    }
+
+    let user_voice_info = msg
         .guild(&ctx.cache)
-        .and_then(|guild| guild.voice_states.get(&msg.author.id).cloned());
+        .and_then(|guild| guild.voice_states.get(&msg.author.id).map(|vs| vs.to_user_voice_info()));
 
     let message_channel_id = ChannelId::from(msg.channel_id.get());
     let author_id = DiscordUserId::from(msg.author.id.get().to_string());
@@ -73,14 +76,10 @@ async fn handle_message_create(
             }
         };
 
-        let channel_ids = resolve_channels(
-            &service,
-            guild_id,
-            message_channel_id,
-            voice_state,
-            &settings,
-        )
-        .await?;
+        let channel_ids = service
+            .playback
+            .resolve_tts_channels(guild_id, message_channel_id, user_voice_info, &settings)
+            .await?;
 
         if !channel_ids.is_empty() {
             let mapped: AudioRequestString = service
@@ -122,81 +121,11 @@ async fn handle_message_create(
     Ok(())
 }
 
-async fn resolve_channels(
-    service: &Service,
-    guild_id: GuildId,
-    message_channel_id: ChannelId,
-    user_voice_state: Option<VoiceState>,
-    settings: &UserSettings,
-) -> CoreResult<Vec<ChannelId>> {
-    let bot_channel_ids = service
-        .audio_engine
-        .get_sessions_in_guild(guild_id)
-        .await?
-        .into_iter()
-        .map(|s| s.channel_id)
-        .collect::<Vec<_>>();
-
-    if bot_channel_ids.contains(&message_channel_id) {
-        // Voice channel message channel
-        Ok(vec![message_channel_id])
-    } else {
-        match settings.text_reading_rule {
-            TextReadingRule::Always => {
-                if let Some(user_voice_state) = user_voice_state {
-                    // User is in a voice channel, use that channel
-                    let user_channel_id = user_voice_state
-                        .channel_id
-                        .map(|cid| ChannelId::from(cid.get()))
-                        .ok_or_else(|| {
-                            hq_core::CoreError::Internal(
-                                "User voice state missing channel_id".to_string(),
-                            )
-                        })?;
-
-                    Ok(vec![user_channel_id])
-                } else {
-                    // broadcast
-                    Ok(bot_channel_ids)
-                }
-            }
-            TextReadingRule::InVoiceChannel | TextReadingRule::OnMicMute => {
-                if let Some(user_voice_state) = user_voice_state {
-                    let user_channel_id = user_voice_state
-                        .channel_id
-                        .map(|cid| ChannelId::from(cid.get()))
-                        .ok_or_else(|| {
-                            hq_core::CoreError::Internal(
-                                "User voice state missing channel_id".to_string(),
-                            )
-                        })?;
-
-                    match settings.text_reading_rule {
-                        TextReadingRule::InVoiceChannel => Ok(vec![user_channel_id]),
-                        TextReadingRule::OnMicMute => {
-                            let mic_muted = user_voice_state.mute || user_voice_state.self_mute;
-
-                            if mic_muted {
-                                Ok(vec![user_channel_id])
-                            } else {
-                                Ok(vec![])
-                            }
-                        }
-                        _ => Ok(vec![]), // Unreachable due to outer match
-                    }
-                } else {
-                    Ok(vec![]) // User not in voice channel
-                }
-            }
-        }
-    }
-}
-
 fn queue_name(user_id: &DiscordUserId, queue_tts: bool) -> QueueName {
     if queue_tts {
-        format!("tts-{}", user_id.to_string()).into()
+        format!("tts-{}", user_id).into()
     } else {
-        format!("temp-{}-{}", user_id.to_string(), uuid::Uuid::new_v4()).into()
+        format!("temp-{}-{}", user_id, uuid::Uuid::new_v4()).into()
     }
 }
 
@@ -207,7 +136,6 @@ async fn resolve_tap_name_for_user(
     let tap_name = match &settings.tts_voice {
         Some(tap_id) => {
             let tap: Option<Tap> = service.tap.get_tap_internal(tap_id.clone()).await?;
-
             if let Some(t) = tap {
                 t.name
             } else {
@@ -216,6 +144,5 @@ async fn resolve_tap_name_for_user(
         }
         None => fallback_tap_name(),
     };
-
     Ok(tap_name)
 }

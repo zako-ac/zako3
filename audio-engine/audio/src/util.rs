@@ -24,11 +24,8 @@ where
             match tokio::io::AsyncReadExt::read(&mut async_read, &mut buffer).await {
                 Ok(0) => break, // EOF
                 Ok(n) => {
-                    match std::io::Write::write_all(&mut writer, &buffer[..n]).is_err() {
-                        true => {
-                            break; // Pipe closed
-                        }
-                        false => (),
+                    if std::io::Write::write_all(&mut writer, &buffer[..n]).is_err() {
+                        break; // pipe closed
                     }
                 }
                 Err(_) => break, // Read error

@@ -8,17 +8,40 @@ use std::sync::Arc;
 
 pub mod commands;
 pub mod discord_resolver;
+pub mod error;
 pub mod events;
+pub mod ui;
 pub mod util;
 
 use discord_resolver::SerenityNameResolver;
+pub use error::BotError;
 
 pub struct Data {
     pub service: Service,
 }
 
-pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Error = BotError;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
+
+async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
+    match err {
+        poise::FrameworkError::Command { error, ctx, .. } => {
+            if error.is_internal() {
+                tracing::error!("Internal bot error in command '{}': {:?}", ctx.command().name, error);
+            }
+            let embed = ui::embeds::error_embed(error.to_user_message());
+            let reply = poise::CreateReply::default().embed(embed).ephemeral(true);
+            if let Err(e) = ctx.send(reply).await {
+                tracing::error!("Failed to send error reply: {e:?}");
+            }
+        }
+        other => {
+            if let Err(e) = poise::builtins::on_error(other).await {
+                tracing::error!("Unhandled framework error: {e:?}");
+            }
+        }
+    }
+}
 
 pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();
@@ -44,7 +67,20 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
                 commands::tap::tap(),
                 commands::settings::settings(),
                 commands::channel::channel(),
+                commands::voice::join(),
+                commands::voice::leave(),
+                commands::voice::move_to(),
+                commands::music::play(),
+                commands::music::stop(),
+                commands::music::skip(),
+                commands::music::volume(),
+                commands::queue::queue(),
+                commands::queue::clear(),
+                commands::tts::tts(),
+                commands::tts::voice(),
+                commands::help::help(),
             ],
+            on_error: |err| Box::pin(on_error(err)),
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {

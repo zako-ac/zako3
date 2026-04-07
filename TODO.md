@@ -45,6 +45,7 @@ refer hq todo
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
 - [ ] Add VC-Message channel linking
+- [ ] Make tap-sdk
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

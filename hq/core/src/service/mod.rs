@@ -22,7 +22,7 @@ pub mod user_settings;
 pub use user_settings::UserSettingsService;
 pub mod playback;
 pub use mapping::MappingService;
-pub use playback::PlaybackService;
+pub use playback::{PlaybackService, UserVoiceInfo};
 pub mod audio_engine;
 pub use audio_engine::AudioEngineService;
 
