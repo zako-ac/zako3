@@ -3,6 +3,7 @@ use hq_types::{
     hq::DiscordUserId, AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName,
     Volume,
 };
+use poise::serenity_prelude as serenity;
 
 const MUSIC_QUEUE: &str = "music";
 
@@ -153,8 +154,11 @@ pub async fn stop(
     #[description = "What to stop: current track (default) or entire queue"]
     #[description_localized("ko", "정지할 범위: 현재 트랙 (기본값) 또는 전체 대기열")]
     scope: Option<StopScope>,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
-    let session = util::get_bot_session(ctx).await?;
+    let session = util::resolve_session(ctx, channel).await?;
     let ae = &ctx.data().service.audio_engine;
 
     match scope.unwrap_or(StopScope::Current) {
@@ -193,11 +197,14 @@ pub async fn skip(
     #[description = "Number of tracks to skip (default: 1)"]
     #[description_localized("ko", "건너뛸 트랙 수 (기본값: 1)")]
     count: Option<u32>,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     ctx.defer().await?; // In case skipping takes a moment, especially for multiple tracks.
 
     let count = count.unwrap_or(1).max(1);
-    let session = util::get_bot_session(ctx).await?;
+    let session = util::resolve_session(ctx, channel).await?;
     let actor_id = ctx.author().id.get().to_string();
 
     for _ in 0..count {
@@ -228,12 +235,15 @@ pub async fn volume(
     #[description = "Volume level from 0 to 150"]
     #[description_localized("ko", "볼륨 수준 (0에서 150까지)")]
     level: u8,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     if level > 150 {
         return Err(Error::InvalidVolume);
     }
 
-    let session = util::get_bot_session(ctx).await?;
+    let session = util::resolve_session(ctx, channel).await?;
     let ae = &ctx.data().service.audio_engine;
 
     let state = ae

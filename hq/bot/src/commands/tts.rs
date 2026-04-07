@@ -1,8 +1,8 @@
 use crate::{ui, util::VoiceStateExt, Context, Error};
-use hq_core::{CoreError, service::UserVoiceInfo};
+use hq_core::{service::UserVoiceInfo, CoreError};
 use hq_types::{
-    AudioRequestString, ChannelId, GuildId, QueueName, TapName, Volume,
     hq::{DiscordUserId, TapId},
+    AudioRequestString, ChannelId, GuildId, QueueName, TapName, Volume,
 };
 use poise::serenity_prelude as serenity;
 
@@ -248,7 +248,8 @@ async fn require_mute_members(ctx: Context<'_>) -> Result<(), Error> {
         .author_member()
         .await
         .and_then(|m| {
-            ctx.guild().map(|g| g.member_permissions(&*m).mute_members())
+            ctx.guild()
+                .map(|g| g.member_permissions(&*m).mute_members())
         })
         .unwrap_or(false);
 

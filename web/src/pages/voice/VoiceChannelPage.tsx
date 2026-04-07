@@ -76,6 +76,7 @@ export const VoiceChannelPage = () => {
                     </p>
                 ) : (
                     Object.entries(channelState.queues as Record<string, TrackDto[]>)
+                        .filter(([, tracks]) => tracks.length > 0)
                         .sort(([nameA], [nameB]) => {
                             if (nameA === 'music') return -1
                             if (nameB === 'music') return 1

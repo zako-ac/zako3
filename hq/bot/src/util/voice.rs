@@ -22,16 +22,49 @@ impl VoiceStateExt for serenity::VoiceState {
     }
 }
 
-/// Returns the bot's first active session in this guild.
-pub async fn get_bot_session(ctx: Context<'_>) -> Result<SessionState, Error> {
+/// Resolves the bot session to act on.
+///
+/// If `channel` is specified, returns the session for that channel (errors if the
+/// bot isn't active there). Otherwise, finds the session whose channel the invoking
+/// user is currently in. Errors with `UserNotInSession` if no match is found.
+pub async fn resolve_session(
+    ctx: Context<'_>,
+    channel: Option<serenity::GuildChannel>,
+) -> Result<SessionState, Error> {
     let guild_id = require_guild_id(ctx)?;
+
+    // Extract user's voice channel before any await (GuildRef is not Send).
+    let user_channel_id = ctx
+        .guild()
+        .and_then(|g| {
+            g.voice_states
+                .get(&ctx.author().id)
+                .and_then(|vs| vs.channel_id)
+        })
+        .map(|cid| ChannelId::from(cid.get()));
+
     let sessions = ctx
         .data()
         .service
         .audio_engine
         .get_sessions_in_guild(guild_id)
         .await?;
-    sessions.into_iter().next().ok_or(Error::BotNotInVoiceChannel)
+
+    if let Some(ch) = channel {
+        let channel_id = ChannelId::from(ch.id.get());
+        return sessions
+            .into_iter()
+            .find(|s| s.channel_id == channel_id)
+            .ok_or(Error::BotNotInVoiceChannel);
+    }
+
+    if let Some(user_cid) = user_channel_id {
+        if let Some(session) = sessions.into_iter().find(|s| s.channel_id == user_cid) {
+            return Ok(session);
+        }
+    }
+
+    Err(Error::UserNotInSession)
 }
 
 /// Returns the invoking user's current voice channel ID from the serenity guild cache.

@@ -67,7 +67,7 @@ pub async fn decode_and_stream(
         }
     }
 
-    ffmpeg.wait().await.ok();
+    //ffmpeg.wait().await.ok();
     Ok(())
 }
 

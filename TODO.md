@@ -11,7 +11,7 @@ refer hq todo
 - [x] refactor TH
 - [x] implement cache: max cache size, score-based cache eviction worker
 
-- [ ] Implement text preprocessing
+- [x] Implement text preprocessing
 
 - [ ] Make bot leave when VC is empty
 
@@ -47,7 +47,8 @@ refer hq todo
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
 - [ ] Add VC-Message channel linking
-- [ ] Make tap-sdk
+- [x] Make tap-sdk
+- [ ] tts commands TODO resolve
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

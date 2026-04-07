@@ -164,6 +164,11 @@ async fn handle_incoming_stream(
 
                     // Stream chunks
                     while let Some((timestamp, bytes)) = chunk_receiver.recv().await {
+                        tracing::debug!(
+                            "Sending chunk with timestamp {:?} and size {}",
+                            timestamp,
+                            bytes.len()
+                        );
                         send_stream.send(timestamp, bytes).await?;
                     }
 

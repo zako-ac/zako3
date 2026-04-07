@@ -52,7 +52,10 @@ pub(crate) async fn handle_request_audio_inner(
         if let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await {
             if entry.has_audio() && !entry.is_downloading() {
                 tracing::info!("Cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
-                if let Some(reader) = tap_hub.audio_cache.open_reader(&item.tap_id, &item.key).await
+                if let Some(reader) = tap_hub
+                    .audio_cache
+                    .open_reader(&item.tap_id, &item.key)
+                    .await
                 {
                     tap_hub
                         .metrics_service
@@ -147,7 +150,7 @@ pub(crate) async fn handle_request_audio_inner(
         // so that metadata-only requests can find it regardless of cache policy.
         if matches!(item.key, zako3_types::cache::AudioCacheItemKey::CacheKey(_)) {
             let meta_hash = hex::encode(sha2::Sha256::digest(
-                request.audio_request.to_string().as_bytes()
+                request.audio_request.to_string().as_bytes(),
             ));
             let meta_item = zako3_types::cache::AudioCacheItem {
                 key: zako3_types::cache::AudioCacheItemKey::ARHash(meta_hash),

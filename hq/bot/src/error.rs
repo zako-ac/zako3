@@ -10,6 +10,8 @@ pub enum BotError {
     NotInVoiceChannel,
     #[error("I'm not currently in a voice channel.")]
     BotNotInVoiceChannel,
+    #[error("You're not in a voice channel where I'm active.")]
+    UserNotInSession,
     #[error("Volume must be between 0 and 150.")]
     InvalidVolume,
     #[error("You don't have permission to do that.")]
@@ -37,6 +39,7 @@ impl BotError {
         match self {
             BotError::NotInVoiceChannel => "You need to be in a voice channel to use this command.",
             BotError::BotNotInVoiceChannel => "I'm not currently in a voice channel.",
+            BotError::UserNotInSession => "You're not in a voice channel where I'm active.",
             BotError::InvalidVolume => "Volume must be between 0 and 150.",
             BotError::Forbidden => "You don't have permission to do that.",
             BotError::Unauthorized => {

@@ -33,8 +33,13 @@ pub async fn queue(_ctx: Context<'_>) -> Result<(), Error> {
     description_localized("en-US", "Show the music queue"),
     description_localized("ko", "음악 대기열 표시")
 )]
-pub async fn music(ctx: Context<'_>) -> Result<(), Error> {
-    let session = util::get_bot_session(ctx).await?;
+pub async fn music(
+    ctx: Context<'_>,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let session = util::resolve_session(ctx, channel).await?;
     let state = ctx
         .data()
         .service
@@ -57,8 +62,13 @@ pub async fn music(ctx: Context<'_>) -> Result<(), Error> {
     description_localized("en-US", "Show the TTS queue"),
     description_localized("ko", "TTS 대기열 표시")
 )]
-pub async fn tts(ctx: Context<'_>) -> Result<(), Error> {
-    let session = util::get_bot_session(ctx).await?;
+pub async fn tts(
+    ctx: Context<'_>,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let session = util::resolve_session(ctx, channel).await?;
     let state = ctx
         .data()
         .service
@@ -115,9 +125,12 @@ pub async fn clear(
     #[description = "Which queue to clear (default: music)"]
     #[description_localized("ko", "지울 대기열 (기본값: 음악)")]
     target: Option<ClearTarget>,
+    #[description = "Voice channel to use (defaults to your current channel)"]
+    #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let target = target.unwrap_or(ClearTarget::Music);
-    let session = util::get_bot_session(ctx).await?;
+    let session = util::resolve_session(ctx, channel).await?;
 
     let filter = match target {
         ClearTarget::Music => AudioStopFilter::Music,

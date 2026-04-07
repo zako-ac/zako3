@@ -63,8 +63,13 @@ pub async fn join(
     description_localized("en-US", "Leave the voice channel"),
     description_localized("ko", "음성 채널에서 나가기")
 )]
-pub async fn leave(ctx: Context<'_>) -> Result<(), Error> {
-    let session = util::get_bot_session(ctx).await?;
+pub async fn leave(
+    ctx: Context<'_>,
+    #[description = "Voice channel to leave (defaults to your current channel)"]
+    #[description_localized("ko", "나갈 음성 채널 (기본값: 현재 채널)")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let session = util::resolve_session(ctx, channel).await?;
 
     ctx.data()
         .service
@@ -89,7 +94,7 @@ pub async fn move_to(
     #[description_localized("ko", "이동할 음성 채널")]
     channel: serenity::GuildChannel,
 ) -> Result<(), Error> {
-    let session = util::get_bot_session(ctx).await?;
+    let session = util::resolve_session(ctx, None).await?;
     let new_channel_id = ChannelId::from(channel.id.get());
     let channel_name = channel.name.clone();
 

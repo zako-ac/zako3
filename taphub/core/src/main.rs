@@ -1,6 +1,5 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
-use tracing::Level;
 use zako3_states::{RedisCacheRepository, TapHubStateService, TapMetricsStateService};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
@@ -30,7 +29,7 @@ fn load_certs(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    tracing_subscriber::fmt::init();
 
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
@@ -53,8 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Clear stale tap connection states left over from the previous run.
     // Taps that are still online will reconnect and re-register immediately.
-    let known_taps = app.tap_metrics_service.get_known_taps().await.unwrap_or_default();
-    if let Err(e) = app.tap_state_service.clear_all_tap_states(&known_taps).await {
+    let known_taps = app
+        .tap_metrics_service
+        .get_known_taps()
+        .await
+        .unwrap_or_default();
+    if let Err(e) = app
+        .tap_state_service
+        .clear_all_tap_states(&known_taps)
+        .await
+    {
         tracing::warn!(%e, "Failed to clear stale tap states on startup");
     }
     tracing::info!("Cleared online state for {} known taps", known_taps.len());
