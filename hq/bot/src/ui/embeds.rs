@@ -180,6 +180,15 @@ pub fn help_embed(category: HelpCategory) -> serenity::CreateEmbed {
         .colour(THEME)
 }
 
+/// Generic embed for commands that open a web page.
+/// Pair with a link button using [`serenity::CreateButton::new_link`].
+pub fn web_link_embed(title: &str, description: &str) -> serenity::CreateEmbed {
+    serenity::CreateEmbed::new()
+        .title(title)
+        .description(description)
+        .colour(THEME)
+}
+
 pub fn error_embed(message: &str) -> serenity::CreateEmbed {
     serenity::CreateEmbed::new()
         .title("Error")

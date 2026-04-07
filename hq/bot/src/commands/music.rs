@@ -69,6 +69,46 @@ pub async fn play(
         .send(poise::CreateReply::default().content("Loading…"))
         .await?;
 
+    // Run the engine call and state fetch. Any error edits the existing reply rather
+    // than letting it propagate to on_error (which would leave "Loading…" stuck).
+    let result = do_play(
+        ctx,
+        guild_id,
+        channel_id,
+        queue_name,
+        tap_name,
+        audio_request,
+        discord_user_id,
+        &query,
+    )
+    .await;
+
+    match result {
+        Ok(reply) => reply_handle.edit(ctx, reply).await?,
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("play command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn do_play<'a>(
+    ctx: Context<'a>,
+    guild_id: GuildId,
+    channel_id: ChannelId,
+    queue_name: QueueName,
+    tap_name: TapName,
+    audio_request: AudioRequestString,
+    discord_user_id: hq_types::hq::DiscordUserId,
+    query: &str,
+) -> Result<poise::CreateReply, Error> {
     let ae = &ctx.data().service.audio_engine;
 
     let track_id = ae
@@ -87,20 +127,18 @@ pub async fn play(
     let state = ae.get_session_state(guild_id, channel_id).await?;
     let music_q = QueueName::from(MUSIC_QUEUE.to_string());
 
-    let reply = if let Some(tracks) = state.queues.get(&music_q) {
-        let position = tracks.iter().position(|t| t.track_id == track_id).map(|i| i + 1);
-        if let Some(pos) = position {
+    if let Some(tracks) = state.queues.get(&music_q) {
+        if let Some(pos) = tracks
+            .iter()
+            .position(|t| t.track_id == track_id)
+            .map(|i| i + 1)
+        {
             let embed = ui::embeds::track_queued_embed(&tracks[pos - 1], pos);
-            poise::CreateReply::default().content("").embed(embed)
-        } else {
-            poise::CreateReply::default().content(format!("Added to queue: *{query}*"))
+            return Ok(poise::CreateReply::default().content("").embed(embed));
         }
-    } else {
-        poise::CreateReply::default().content(format!("Added to queue: *{query}*"))
-    };
+    }
 
-    reply_handle.edit(ctx, reply).await?;
-    Ok(())
+    Ok(poise::CreateReply::default().content(format!("Added to queue: *{query}*")))
 }
 
 /// Stop playback.
@@ -156,6 +194,8 @@ pub async fn skip(
     #[description_localized("ko", "건너뛸 트랙 수 (기본값: 1)")]
     count: Option<u32>,
 ) -> Result<(), Error> {
+    ctx.defer().await?; // In case skipping takes a moment, especially for multiple tracks.
+
     let count = count.unwrap_or(1).max(1);
     let session = util::get_bot_session(ctx).await?;
     let actor_id = ctx.author().id.get().to_string();

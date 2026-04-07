@@ -13,6 +13,8 @@ refer hq todo
 
 - [ ] Implement text preprocessing
 
+- [ ] Make bot leave when VC is empty
+
 # Other
 - [x] AE Track proto handling (todo!)
 - [x] migrate AE-TH comms to jsonrpsee

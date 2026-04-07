@@ -533,7 +533,7 @@
       "tapId": "탭 ID",
       "totalUses": "총 사용량",
       "updatedAt": "업데이트됨",
-      "uses": "{{uses}}번 사용됨",
+      "uses": "{{value}}번 사용됨",
       "verification": {
         "description": "",
         "descriptionHelp": "",

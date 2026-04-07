@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/telemetry", "audio-engine/client", "worker/emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish", "worker/metrics-sync", "crates/states", "crates/preload-cache", "worker/cache-gc", "crates/tts-matching"]
+members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/telemetry", "audio-engine/client", "worker/emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish", "tap-sdk", "worker/metrics-sync", "crates/states", "crates/preload-cache", "worker/cache-gc", "crates/tts-matching"]
 
 [workspace.dependencies]
 zako3-audio-engine-controller = { path = "audio-engine/controller" }
@@ -15,6 +15,7 @@ zako3-taphub-transport-client = { path = "taphub/transport/client" }
 zako3-types = { path = "types" }
 
 zakofish = { path = "zakofish" }
+zako3-tap-sdk = { path = "tap-sdk" }
 
 # HQ Dependencies
 hq-types = { path = "types", package = "zako3-types" }

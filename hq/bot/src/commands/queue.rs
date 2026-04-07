@@ -1,4 +1,5 @@
 use crate::{ui, util, Context, Error};
+use poise::serenity_prelude as serenity;
 use hq_types::{AudioStopFilter, QueueName, Track, UserId};
 
 const MUSIC_QUEUE_PREFIX: &str = "music";
@@ -85,8 +86,20 @@ pub async fn tts(ctx: Context<'_>) -> Result<(), Error> {
     description_localized("ko", "웹 대기열 인터페이스 링크")
 )]
 pub async fn web(ctx: Context<'_>) -> Result<(), Error> {
-    let url = ui::messages::queue_web_url(&ctx.data().service.config.zako_website_url);
-    ctx.say(url).await?;
+    let service = &ctx.data().service;
+    let url = ui::messages::queue_web_url(&service.config.zako_website_url);
+    let login_url = service.auth.get_login_url(Some("/queue"));
+
+    let embed = ui::embeds::web_link_embed("Web Queue", "View and manage the queue in your browser.");
+    let open_button = serenity::CreateButton::new_link(&url).label("Open");
+    let login_button = serenity::CreateButton::new_link(&login_url).label("Login");
+    let row = serenity::CreateActionRow::Buttons(vec![open_button, login_button]);
+    ctx.send(
+        poise::CreateReply::default()
+            .embed(embed)
+            .components(vec![row]),
+    )
+    .await?;
     Ok(())
 }
 
