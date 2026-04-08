@@ -70,6 +70,7 @@ impl SessionControl {
             tap_name: tap_name.clone(),
             request: request.clone(),
             discord_user_id: discord_user_id.clone(),
+            headers: Default::default(),
         };
 
         let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
@@ -87,6 +88,7 @@ impl SessionControl {
                     audio_request: request,
                     cache_key: meta.cache_key,
                     discord_user_id,
+                    headers: Default::default(),
                 },
                 volume: effective_volume,
                 queue_name: queue_name.clone(),

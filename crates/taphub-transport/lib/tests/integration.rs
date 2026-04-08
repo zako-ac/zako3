@@ -6,6 +6,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+use std::collections::HashMap;
+
 use zako3_taphub_transport_client::TransportClient;
 use zako3_taphub_transport_server::{TapHubBridgeHandler, TransportServer};
 use zako3_types::{
@@ -20,6 +22,7 @@ impl TapHubBridgeHandler for MockHandler {
     async fn handle_request_audio(
         &self,
         req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), String> {
         let (tx, rx) = mpsc::channel(10);
 
@@ -42,6 +45,7 @@ impl TapHubBridgeHandler for MockHandler {
     async fn handle_preload_audio(
         &self,
         req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String> {
         Ok(AudioMetaResponse {
             cache_key: req.cache_key.clone(),
@@ -56,6 +60,7 @@ impl TapHubBridgeHandler for MockHandler {
     async fn handle_request_audio_meta(
         &self,
         _req: AudioRequest,
+        _headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String> {
         Ok(AudioMetaResponse {
             cache_key: AudioCachePolicy {
@@ -119,6 +124,7 @@ async fn test_transport_integration() {
             ttl_seconds: None,
         },
         discord_user_id: "123".to_string().into(),
+        headers: HashMap::new(),
     };
 
     let resp = client
@@ -145,6 +151,7 @@ async fn test_transport_integration() {
         tap_name: "test_tap".to_string().into(),
         request: "yt:meta".to_string().into(),
         discord_user_id: "123".to_string().into(),
+        headers: HashMap::new(),
     };
     let meta_resp = client
         .request_audio_meta(meta_req)

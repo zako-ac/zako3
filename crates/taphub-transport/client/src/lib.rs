@@ -73,7 +73,10 @@ impl TransportClient {
         Ok(())
     }
 
-    async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, String> {
+    async fn execute_request(
+        &self,
+        req: TapHubRequest,
+    ) -> Result<TapHubResponse, String> {
         let mut lock = self.conn.lock().await;
         let conn = lock.as_mut().ok_or("Not connected".to_string())?;
 
@@ -92,7 +95,10 @@ impl TransportClient {
         Ok(resp)
     }
 
-    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, String> {
+    pub async fn request_audio(
+        &self,
+        req: CachedAudioRequest,
+    ) -> Result<AudioResponse, String> {
         let mut lock = self.conn.lock().await;
         let conn = lock.as_mut().ok_or("Not connected".to_string())?;
 
@@ -168,7 +174,10 @@ impl TransportClient {
         }
     }
 
-    pub async fn request_audio_meta(&self, req: AudioRequest) -> Result<AudioMetaResponse, String> {
+    pub async fn request_audio_meta(
+        &self,
+        req: AudioRequest,
+    ) -> Result<AudioMetaResponse, String> {
         match self
             .execute_request(TapHubRequest::RequestAudioMeta(req))
             .await?

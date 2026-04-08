@@ -78,7 +78,7 @@ refer hq todo
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
 
-- [ ] Test Korean and refine i18n
+- [x] Test Korean and refine i18n
 - [ ] Add "load failed" 
 - [x] Remove empty queue
 

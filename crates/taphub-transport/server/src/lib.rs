@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use protofish2::compression::CompressionType;
 use protofish2::config::ProtofishConfig;
 use protofish2::connection::{ProtofishConnection, ProtofishServer, ServerConfig};
@@ -19,16 +21,19 @@ pub trait TapHubBridgeHandler: Send + Sync + 'static {
     async fn handle_request_audio(
         &self,
         req: CachedAudioRequest,
+        headers: HashMap<String, String>,
     ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), String>;
 
     async fn handle_preload_audio(
         &self,
         req: CachedAudioRequest,
+        headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String>;
 
     async fn handle_request_audio_meta(
         &self,
         req: AudioRequest,
+        headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String>;
 }
 
@@ -116,7 +121,8 @@ async fn handle_stream(
 
     match req {
         TapHubRequest::RequestAudio(req) => {
-            match handler.handle_request_audio(req).await {
+            let headers = req.headers.clone();
+            match handler.handle_request_audio(req, headers).await {
                 Ok((meta, mut receiver)) => {
                     let resp = TapHubResponse::AudioReady(meta);
                     stream
@@ -148,7 +154,8 @@ async fn handle_stream(
             }
         }
         TapHubRequest::PreloadAudio(req) => {
-            let resp = match handler.handle_preload_audio(req).await {
+            let headers = req.headers.clone();
+            let resp = match handler.handle_preload_audio(req, headers).await {
                 Ok(meta) => TapHubResponse::MetaReady(meta),
                 Err(e) => TapHubResponse::Error(e),
             };
@@ -157,7 +164,8 @@ async fn handle_stream(
                 .await?;
         }
         TapHubRequest::RequestAudioMeta(req) => {
-            let resp = match handler.handle_request_audio_meta(req).await {
+            let headers = req.headers.clone();
+            let resp = match handler.handle_request_audio_meta(req, headers).await {
                 Ok(meta) => TapHubResponse::MetaReady(meta),
                 Err(e) => TapHubResponse::Error(e),
             };

@@ -1,5 +1,6 @@
 use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub mod taphub;
 pub use taphub::*;
@@ -83,6 +84,8 @@ pub struct AudioRequest {
     pub tap_name: TapName,
     pub request: AudioRequestString,
     pub discord_user_id: hq::DiscordUserId,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +94,8 @@ pub struct CachedAudioRequest {
     pub audio_request: AudioRequestString,
     pub cache_key: AudioCachePolicy,
     pub discord_user_id: hq::DiscordUserId,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -28,6 +28,7 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
                 ttl_seconds: None,
             },
             discord_user_id: DiscordUserId::from("123".to_string()),
+            headers: Default::default(),
         },
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
