@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use zako3_audio_engine_core::types::{
@@ -6,6 +8,14 @@ use zako3_audio_engine_core::types::{
 };
 
 pub mod client;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TracedAudioEngineRequest {
+    #[serde(flatten)]
+    pub inner: AudioEngineRequest,
+    #[serde(default)]
+    pub trace_headers: HashMap<String, String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params")]

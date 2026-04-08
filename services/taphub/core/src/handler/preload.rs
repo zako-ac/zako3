@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use opentelemetry::global;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::{AudioCache, NextFrame, PreloadId, PreloadReadEndAction};
 use zako3_types::AudioMetaResponse;
 use zako3_types::CachedAudioRequest;
@@ -13,6 +15,11 @@ pub(crate) async fn handle_preload_audio_inner(
     tap_hub: &TapHub,
     req: CachedAudioRequest,
 ) -> Result<AudioMetaResponse, String> {
+    let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
+    let span = tracing::info_span!("audio.preload_request", tap_name = %req.tap_name);
+    let _ = span.set_parent(parent_cx);
+    let _enter = span.enter();
+
     // Get tap ID from name
     let tap_id = tap_hub
         .state_service
@@ -56,7 +63,7 @@ pub(crate) async fn handle_preload_audio_inner(
             tap_id.clone(),
             connection_id,
             req.audio_request.clone(),
-            Default::default(),
+            req.headers.clone(),
         )
         .await
         .map_err(|e| format!("Failed to request audio from tap: {}", e))?;

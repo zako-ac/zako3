@@ -1,5 +1,6 @@
 use opentelemetry::{global, trace::TracerProvider as _};
-use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+use tonic::metadata::{Ascii, MetadataKey, MetadataMap, MetadataValue};
 use opentelemetry_sdk::{
     Resource,
     propagation::TraceContextPropagator,
@@ -15,9 +16,24 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
     let registry = Registry::default().with(env_filter).with(fmt_layer);
 
     if let Some(endpoint) = otlp_endpoint {
+        let mut metadata = MetadataMap::new();
+        if let Ok(headers_str) = std::env::var("OTEL_EXPORTER_OTLP_HEADERS") {
+            for pair in headers_str.split(',') {
+                if let Some((k, v)) = pair.split_once('=') {
+                    if let (Ok(key), Ok(val)) = (
+                        k.trim().to_lowercase().parse::<MetadataKey<Ascii>>(),
+                        v.trim().parse::<MetadataValue<Ascii>>(),
+                    ) {
+                        metadata.insert(key, val);
+                    }
+                }
+            }
+        }
+
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_tonic()
             .with_endpoint(endpoint)
+            .with_metadata(metadata)
             .build()?;
 
         let resource = Resource::builder()

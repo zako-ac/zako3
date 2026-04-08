@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use chrono::Utc;
+use opentelemetry::global;
 use sha2::Digest;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::AudioCache;
 use zako3_types::{
     AudioMetaResponse, AudioRequest,
@@ -14,6 +16,11 @@ pub(crate) async fn handle_request_audio_meta_inner(
     tap_hub: &TapHub,
     req: AudioRequest,
 ) -> Result<AudioMetaResponse, String> {
+    let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
+    let span = tracing::info_span!("audio.meta_request", tap_name = %req.tap_name);
+    let _ = span.set_parent(parent_cx);
+    let _enter = span.enter();
+
     let tap_id = tap_hub
         .state_service
         .get_tap_id_by_name(&req.tap_name)
@@ -55,7 +62,7 @@ pub(crate) async fn handle_request_audio_meta_inner(
                 tap_id.clone(),
                 connection_id,
                 req.request.clone(),
-                Default::default(),
+                req.headers.clone(),
             )
             .await
             .ok()

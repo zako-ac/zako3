@@ -24,3 +24,5 @@ serde_json.workspace = true
 dashmap = "6.1.0"
 anyhow.workspace = true
 sha2 = "0.10"
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"

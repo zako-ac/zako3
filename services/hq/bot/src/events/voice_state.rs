@@ -144,7 +144,13 @@ async fn update_tracking(
                 (gn, cn)
             };
             let _ = voice_state_service
-                .set_user_channel(&discord_user_id, guild_id, ch.get(), guild_name, channel_name)
+                .set_user_channel(
+                    &discord_user_id,
+                    guild_id,
+                    ch.get(),
+                    guild_name,
+                    channel_name,
+                )
                 .await;
         }
         None => {
@@ -314,11 +320,19 @@ async fn act_on_snapshot(
             .await;
         // Keep in intended_vc — will rejoin when someone comes back.
     } else if snap.real_user_count > 0 && !bot_is_present {
-        if let Err(e) =
-            bot_join_and_announce(service, ctx, snap.guild_id, snap.serenity_guild_id, snap.channel_id)
-                .await
+        if let Err(e) = bot_join_and_announce(
+            service,
+            ctx,
+            snap.guild_id,
+            snap.serenity_guild_id,
+            snap.channel_id,
+        )
+        .await
         {
-            tracing::warn!("Failed to auto-rejoin channel {}: {e}", snap.serenity_channel_id);
+            tracing::warn!(
+                "Failed to auto-rejoin channel {}: {e}",
+                snap.serenity_channel_id
+            );
         }
     }
 }
@@ -389,16 +403,17 @@ fn build_message(alert: &UserJoinLeaveAlert, display_name: &str, is_join: bool) 
         UserJoinLeaveAlert::WithDifferentUsername(name) => {
             Some(format!("{name} {}", suffix(is_join)))
         }
-        UserJoinLeaveAlert::Custom { join_message, leave_message } => {
-            Some(if is_join { join_message } else { leave_message }.clone())
-        }
+        UserJoinLeaveAlert::Custom {
+            join_message,
+            leave_message,
+        } => Some(if is_join { join_message } else { leave_message }.clone()),
     }
 }
 
 async fn resolve_tap_name(service: &Service, settings: &UserSettings) -> CoreResult<TapName> {
     match &settings.tts_voice {
         Some(tap_id) => {
-            let tap: Option<Tap> = service.tap.get_tap_internal(tap_id.clone()).await?;
+            let tap: Option<Tap> = service.tap.get_tap(tap_id.clone()).await?;
             Ok(tap
                 .map(|t| t.name)
                 .unwrap_or_else(|| TapName::from("google".to_string())))

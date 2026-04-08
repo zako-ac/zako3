@@ -39,8 +39,8 @@ impl TransportClient {
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(30),
             protofish_config,
         };
-        let client = ProtofishClient::bind(config)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        let client =
+            ProtofishClient::bind(config).map_err(|e| std::io::Error::other(e.to_string()))?;
 
         Ok(Self {
             client: Arc::new(client),
@@ -53,7 +53,7 @@ impl TransportClient {
     pub async fn connect(&self) -> Result<(), String> {
         let config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
-            max_backoff: Duration::from_secs(15),
+            max_backoff: Duration::from_secs(5),
             backoff_multiplier: 2.0,
             max_retries: None,
         };
@@ -73,10 +73,7 @@ impl TransportClient {
         Ok(())
     }
 
-    async fn execute_request(
-        &self,
-        req: TapHubRequest,
-    ) -> Result<TapHubResponse, String> {
+    async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, String> {
         let mut lock = self.conn.lock().await;
         let conn = lock.as_mut().ok_or("Not connected".to_string())?;
 
@@ -95,10 +92,7 @@ impl TransportClient {
         Ok(resp)
     }
 
-    pub async fn request_audio(
-        &self,
-        req: CachedAudioRequest,
-    ) -> Result<AudioResponse, String> {
+    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, String> {
         let mut lock = self.conn.lock().await;
         let conn = lock.as_mut().ok_or("Not connected".to_string())?;
 
@@ -174,10 +168,7 @@ impl TransportClient {
         }
     }
 
-    pub async fn request_audio_meta(
-        &self,
-        req: AudioRequest,
-    ) -> Result<AudioMetaResponse, String> {
+    pub async fn request_audio_meta(&self, req: AudioRequest) -> Result<AudioMetaResponse, String> {
         match self
             .execute_request(TapHubRequest::RequestAudioMeta(req))
             .await?

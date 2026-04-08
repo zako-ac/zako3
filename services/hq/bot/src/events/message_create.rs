@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    AudioRequestString, ChannelId, GuildId, QueueName,
     hq::{DiscordUserId, Tap, TapName, UserSettings},
+    AudioRequestString, ChannelId, GuildId, QueueName,
 };
-use serenity::{async_trait, all::{Context, EventHandler}};
+use serenity::{
+    all::{Context, EventHandler},
+    async_trait,
+};
 use tracing::instrument;
 
 use crate::util::VoiceStateExt;
@@ -46,9 +49,12 @@ async fn handle_message_create(
         return Ok(());
     }
 
-    let user_voice_info = msg
-        .guild(&ctx.cache)
-        .and_then(|guild| guild.voice_states.get(&msg.author.id).map(|vs| vs.to_user_voice_info()));
+    let user_voice_info = msg.guild(&ctx.cache).and_then(|guild| {
+        guild
+            .voice_states
+            .get(&msg.author.id)
+            .map(|vs| vs.to_user_voice_info())
+    });
 
     let message_channel_id = ChannelId::from(msg.channel_id.get());
     let author_id = DiscordUserId::from(msg.author.id.get().to_string());
@@ -135,7 +141,7 @@ async fn resolve_tap_name_for_user(
 ) -> CoreResult<TapName> {
     let tap_name = match &settings.tts_voice {
         Some(tap_id) => {
-            let tap: Option<Tap> = service.tap.get_tap_internal(tap_id.clone()).await?;
+            let tap: Option<Tap> = service.tap.get_tap(tap_id.clone()).await?;
             if let Some(t) = tap {
                 t.name
             } else {

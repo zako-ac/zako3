@@ -1,6 +1,6 @@
 use axum::{
-    Extension, Router,
     routing::{get, post},
+    Extension, Router,
 };
 use hq_core::Service;
 use std::sync::Arc;
@@ -168,29 +168,6 @@ pub struct ApiDoc;
 pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
     let state = Arc::new(service.clone());
 
-    let rpc_impl = rpc::HqRpcImpl::new(
-        service.api_key.clone(),
-        service.tap.clone(),
-        service.auth.clone(),
-    );
-    use hq_types::hq::rpc::HqRpcServer;
-    let methods = rpc_impl.into_rpc();
-
-    let admin_token = service.config.rpc_admin_token.clone();
-
-    tokio::spawn(async move {
-        let middleware =
-            tower::ServiceBuilder::new().layer(rpc::AuthLayer::new(admin_token.clone()));
-
-        let server = jsonrpsee::server::ServerBuilder::default()
-            .set_http_middleware(middleware)
-            .build("127.0.0.1:3001")
-            .await
-            .unwrap();
-        let handle = server.start(methods);
-        handle.stopped().await;
-    });
-
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/api/v1/auth/login", get(auth::login_handler))
@@ -287,24 +264,42 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
             post(api_key::regenerate_key),
         )
         .route("/api/v1/guilds/me", get(guild::get_my_guilds))
-        .route("/api/v1/admin/mappers", get(mapper::list_mappers).post(mapper::create_mapper))
+        .route(
+            "/api/v1/admin/mappers",
+            get(mapper::list_mappers).post(mapper::create_mapper),
+        )
         // static sub-routes BEFORE :id to avoid conflicts
-        .route("/api/v1/admin/mappers/pipeline", get(mapper::get_pipeline).put(mapper::set_pipeline))
-        .route("/api/v1/admin/mappers/evaluate", axum::routing::post(mapper::evaluate_pipeline))
+        .route(
+            "/api/v1/admin/mappers/pipeline",
+            get(mapper::get_pipeline).put(mapper::set_pipeline),
+        )
+        .route(
+            "/api/v1/admin/mappers/evaluate",
+            axum::routing::post(mapper::evaluate_pipeline),
+        )
         .route(
             "/api/v1/admin/mappers/:id",
             get(mapper::get_mapper)
                 .put(mapper::update_mapper)
                 .delete(mapper::delete_mapper),
         )
-        .route("/api/v1/admin/mappers/:id/evaluate", axum::routing::post(mapper::evaluate_mapper))
+        .route(
+            "/api/v1/admin/mappers/:id/evaluate",
+            axum::routing::post(mapper::evaluate_mapper),
+        )
         .route("/api/v1/playback/state", get(playback::get_playback_state))
         .route("/api/v1/playback/stop", post(playback::stop_track))
         .route("/api/v1/playback/skip", post(playback::skip_music))
         .route("/api/v1/playback/pause", post(playback::pause_track))
         .route("/api/v1/playback/resume", post(playback::resume_track))
-        .route("/api/v1/playback/queue", axum::routing::patch(playback::edit_queue))
-        .route("/api/v1/playback/undo/:action_id", post(playback::undo_action))
+        .route(
+            "/api/v1/playback/queue",
+            axum::routing::patch(playback::edit_queue),
+        )
+        .route(
+            "/api/v1/playback/undo/:action_id",
+            post(playback::undo_action),
+        )
         .route("/api/v1/playback/history", get(playback::get_history))
         .route("/api/v1/playback/ws", get(playback::playback_ws))
         .layer(Extension(event_tx))

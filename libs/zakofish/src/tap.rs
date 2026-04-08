@@ -63,7 +63,7 @@ impl ZakofishTap {
     ) -> Result<()> {
         let recon_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
-            max_backoff: Duration::from_secs(15),
+            max_backoff: Duration::from_secs(8),
             backoff_multiplier: 2.0,
             max_retries: None, // Keep trying indefinitely
         };

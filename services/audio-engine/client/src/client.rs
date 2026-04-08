@@ -1,12 +1,14 @@
 use async_nats::Client;
+use opentelemetry::global;
 use std::time::Duration;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use zako3_audio_engine_core::types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
     TrackId, Volume, hq::DiscordUserId,
 };
 
-use crate::{AudioEngineRequest, AudioEngineResponse};
+use crate::{AudioEngineRequest, AudioEngineResponse, TracedAudioEngineRequest};
 
 pub struct AudioEngineRpcClient {
     client: Client,
@@ -23,7 +25,13 @@ impl AudioEngineRpcClient {
         subject: &str,
         request: AudioEngineRequest,
     ) -> anyhow::Result<AudioEngineResponse> {
-        let payload = serde_json::to_vec(&request)?;
+        let mut trace_headers = std::collections::HashMap::new();
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut trace_headers));
+
+        let traced = TracedAudioEngineRequest { inner: request, trace_headers };
+        let payload = serde_json::to_vec(&traced)?;
+
         let msg = tokio::time::timeout(
             Duration::from_secs(10),
             self.client.request(subject.to_string(), payload.into()),

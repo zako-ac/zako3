@@ -48,7 +48,8 @@ refer hq todo
 - [ ] Emoji/Text mapping scope elevation request
 - [x] Make tap-sdk
 - [ ] tts commands TODO resolve
-- [ ] Remove dependencies of Zakofish
+- [x] Remove dependencies of Zakofish
+- [ ] Standardize service folder structure to "boot"
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

@@ -3,12 +3,14 @@ use std::sync::Arc;
 use async_nats::Client;
 use dashmap::DashMap;
 use futures_util::StreamExt;
+use opentelemetry::global;
 use tracing::{error, info, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_core::types::{ChannelId, GuildId};
 
-use zako3_audio_engine_client::{AudioEngineRequest, AudioEngineResponse};
+use zako3_audio_engine_client::{AudioEngineRequest, AudioEngineResponse, TracedAudioEngineRequest};
 
 pub struct AudioEngineServer {
     pub session_manager: Arc<SessionManager>,
@@ -37,7 +39,7 @@ impl AudioEngineServer {
         info!("Audio Engine listening for control messages on audio_engine.control");
 
         while let Some(msg) = sub.next().await {
-            let payload = match serde_json::from_slice::<AudioEngineRequest>(&msg.payload) {
+            let traced = match serde_json::from_slice::<TracedAudioEngineRequest>(&msg.payload) {
                 Ok(p) => p,
                 Err(e) => {
                     error!("Failed to deserialize request: {:?}", e);
@@ -56,6 +58,12 @@ impl AudioEngineServer {
             let this = Arc::clone(&self);
             let client = client.clone();
             tokio::spawn(async move {
+                let parent_cx = global::get_text_map_propagator(|p| p.extract(&traced.trace_headers));
+                let span = tracing::info_span!("ae.control");
+                let _ = span.set_parent(parent_cx);
+                let _enter = span.enter();
+
+                let payload = traced.inner;
                 let response = match &payload {
                     AudioEngineRequest::Join {
                         guild_id,
@@ -179,7 +187,7 @@ impl AudioEngineServer {
             info!("Started session consumer for {}", subject);
 
             while let Some(msg) = sub.next().await {
-                let payload = match serde_json::from_slice::<AudioEngineRequest>(&msg.payload) {
+                let traced = match serde_json::from_slice::<TracedAudioEngineRequest>(&msg.payload) {
                     Ok(p) => p,
                     Err(_) => continue,
                 };
@@ -192,6 +200,13 @@ impl AudioEngineServer {
                 let session_manager = session_manager.clone();
                 let client = client.clone();
                 tokio::spawn(async move {
+                    let parent_cx = global::get_text_map_propagator(|p| p.extract(&traced.trace_headers));
+                    let span = tracing::info_span!("ae.session", guild_id = ?guild_id);
+                    let _ = span.set_parent(parent_cx);
+                    let _enter = span.enter();
+
+                    let payload = traced.inner;
+
                     // Self-healing check
                     if session_manager.get_session(guild_id).is_none() {
                         warn!(

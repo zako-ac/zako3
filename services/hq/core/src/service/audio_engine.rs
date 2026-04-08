@@ -4,6 +4,7 @@ use hq_types::{
     hq::DiscordUserId, AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName,
     SessionState, TapName, TrackId, Volume,
 };
+use tracing::instrument;
 use zako3_audio_engine_client::client::AudioEngineRpcClient;
 
 use crate::{CoreError, CoreResult};
@@ -33,6 +34,7 @@ impl AudioEngineService {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip(self, audio_request_string), fields(guild_id = ?guild_id, tap_name = %tap_name))]
     pub async fn play(
         &self,
         guild_id: GuildId,
@@ -70,6 +72,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn stop(
         &self,
         guild_id: GuildId,
@@ -82,6 +85,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn stop_many(
         &self,
         guild_id: GuildId,
@@ -94,6 +98,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn next_music(&self, guild_id: GuildId, channel_id: ChannelId) -> CoreResult<bool> {
         self.client
             .next_music(guild_id, channel_id)
@@ -101,6 +106,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn pause(
         &self,
         guild_id: GuildId,
@@ -113,6 +119,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn resume(
         &self,
         guild_id: GuildId,

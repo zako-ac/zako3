@@ -1,6 +1,6 @@
 # OTLP Integration Guide
 
-This document explains how to connect Zako3 services to an OpenTelemetry collector and visualize traces in Grafana Tempo (or any OTLP-compatible backend).
+This document explains how to connect Zako3 services to an OpenTelemetry collector and visualize traces in OpenObserve (or any OTLP-compatible backend).
 
 ---
 
@@ -10,7 +10,7 @@ Every Zako3 service now exports:
 
 | Signal | Backend |
 |---|---|
-| Distributed traces (spans) | OTLP gRPC → Tempo / Jaeger |
+| Distributed traces (spans) | OTLP gRPC → OpenObserve |
 | Prometheus metrics | `/metrics` HTTP endpoint per service |
 | Health check | `/health` HTTP endpoint per service |
 | Structured logs | stdout (`RUST_LOG` controlled) |
@@ -36,7 +36,7 @@ All services read these variables. Names are prefixed per service for TapHub; HQ
 
 | Variable | Default | Description |
 |---|---|---|
-| `OTLP_ENDPOINT` | _(none)_ | gRPC endpoint for the OTLP collector, e.g. `http://localhost:4317`. Tracing is disabled if unset. |
+| `OTLP_ENDPOINT` | _(none)_ | gRPC endpoint for the OTLP collector, e.g. `http://localhost:5081`. Tracing is disabled if unset. |
 | `METRICS_PORT` | `9091` | Port for `/health` and `/metrics`. |
 | `RUST_LOG` | `info` | Log filter (e.g. `info,hq_core=debug`). |
 
@@ -65,127 +65,21 @@ All services read these variables. Names are prefixed per service for TapHub; HQ
 
 ---
 
-## Local stack: Tempo + Grafana
+## Local stack: OpenObserve
 
-The following `docker-compose.yml` snippet starts a complete local observability stack.
+OpenObserve is a single-binary observability backend that receives traces, metrics, and logs, with a built-in UI. No separate Grafana instance is needed.
 
-```yaml
-services:
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-collector.yaml"]
-    volumes:
-      - ./infra/otel-collector.yaml:/etc/otel-collector.yaml
-    ports:
-      - "4317:4317"   # gRPC OTLP receiver (traces)
-      - "4318:4318"   # HTTP OTLP receiver
-
-  tempo:
-    image: grafana/tempo:latest
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./infra/tempo.yaml:/etc/tempo.yaml
-      - tempo-data:/var/tempo
-    ports:
-      - "3200:3200"   # Tempo query API
-
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./infra/prometheus.yaml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-
-  grafana:
-    image: grafana/grafana:latest
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    volumes:
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "3000:3000"
-
-volumes:
-  tempo-data:
-  grafana-data:
-```
-
-### `infra/otel-collector.yaml`
-
-```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
-
-exporters:
-  otlp/tempo:
-    endpoint: tempo:4317
-    tls:
-      insecure: true
-  debug:
-    verbosity: basic
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [otlp/tempo, debug]
-```
-
-### `infra/tempo.yaml`
-
-```yaml
-server:
-  http_listen_port: 3200
-
-distributor:
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: 0.0.0.0:4317
-
-storage:
-  trace:
-    backend: local
-    local:
-      path: /var/tempo
-    wal:
-      path: /var/tempo/wal
-```
-
-### `infra/prometheus.yaml`
-
-```yaml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: hq
-    static_configs:
-      - targets: ["host.docker.internal:9091"]
-
-  - job_name: taphub
-    static_configs:
-      - targets: ["host.docker.internal:9092"]
-
-  - job_name: audio-engine
-    static_configs:
-      - targets: ["host.docker.internal:9090"]
-```
-
-Start everything:
+Start the dev stack:
 
 ```sh
-docker compose up -d
+./scripts/dev-telemetry.sh
 ```
 
-Open Grafana at `http://localhost:3000`.
+This starts OpenObserve via podman:
+- Port `5080`: web UI + HTTP API
+- Port `5081`: OTLP gRPC receiver
+
+Open the UI at `http://localhost:5080` (login: `admin@localhost` / `admin123`).
 
 ---
 
@@ -195,25 +89,16 @@ Set the OTLP endpoint in each service's `.env` (or shell environment) before sta
 
 ```sh
 # hq-boot
-OTLP_ENDPOINT=http://localhost:4317
+OTLP_ENDPOINT=http://localhost:5081
 
 # taphub-core
-ZK_TH_OTLP_ENDPOINT=http://localhost:4317
+ZK_TH_OTLP_ENDPOINT=http://localhost:5081
 
 # audio-engine-controller
-OTLP_ENDPOINT=http://localhost:4317
+OTLP_ENDPOINT=http://localhost:5081
 ```
 
 ---
-
-## Adding Tempo as a datasource in Grafana
-
-1. Go to **Connections → Add new connection → Tempo**.
-2. Set URL to `http://tempo:3200`.
-3. Under **Trace to logs**, configure your Loki datasource if you have one.
-4. Save & test.
-
-Add Prometheus similarly (`http://prometheus:9090`).
 
 ---
 
@@ -298,15 +183,11 @@ curl http://localhost:9092/health   # taphub → 200 OK
 curl http://localhost:9091/metrics | grep hq_http
 curl http://localhost:9092/metrics | grep taphub_connected_taps
 
-# 3. Traces reaching the collector
-# Watch otel-collector logs:
-docker compose logs -f otel-collector
-
-# 4. Trace in Grafana Tempo
-# Explore → Tempo → search by service.name = "hq" or "taphub"
+# 3. Traces reaching OpenObserve
+# Open http://localhost:5080 → Traces → search by service.name = "hq" or "taphub"
 ```
 
 If traces are not appearing:
-- Confirm `OTLP_ENDPOINT` points to the gRPC port (`4317`), not the HTTP port (`4318`).
-- Check that the collector is reachable from the host (use `http://host.docker.internal:4317` if services run on the host and collector runs in Docker).
+- Confirm `OTLP_ENDPOINT` points to the gRPC port (`5081`).
+- Check that OpenObserve is running: `podman ps | grep openobserve`.
 - Look for `"Telemetry server listening on"` in the service stdout to confirm the metrics port is up.

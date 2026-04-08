@@ -16,3 +16,5 @@ songbird.workspace = true
 zako3-audio-engine-audio.path = "../audio"
 zako3-audio-engine-core.path = "../core"
 zako3-types.workspace = true
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"

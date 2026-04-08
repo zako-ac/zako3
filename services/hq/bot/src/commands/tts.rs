@@ -131,7 +131,7 @@ async fn resolve_tap_name(
     }
 
     if let Some(tap_id) = settings_voice {
-        if let Some(tap) = service.tap.get_tap_internal(tap_id.clone()).await? {
+        if let Some(tap) = service.tap.get_tap(tap_id.clone()).await? {
             return Ok(tap.name);
         }
     }
@@ -247,10 +247,7 @@ async fn require_mute_members(ctx: Context<'_>) -> Result<(), Error> {
     let has_perm = ctx
         .author_member()
         .await
-        .and_then(|m| {
-            ctx.guild()
-                .map(|g| g.member_permissions(&m).mute_members())
-        })
+        .and_then(|m| ctx.guild().map(|g| g.member_permissions(&m).mute_members()))
         .unwrap_or(false);
 
     if !has_perm {

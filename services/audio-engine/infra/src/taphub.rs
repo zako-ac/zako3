@@ -1,5 +1,7 @@
 use async_trait::async_trait;
+use opentelemetry::global;
 use tracing::instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_audio_engine_audio::metrics;
 use zako3_audio_engine_core::{
     error::ZakoResult,
@@ -25,7 +27,10 @@ impl RealTapHubService {
 #[async_trait]
 impl TapHubService for RealTapHubService {
     #[instrument(skip_all, fields(tap_name = %request.tap_name))]
-    async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
+    async fn request_audio(&self, mut request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
+
         let start = std::time::Instant::now();
 
         let result = self
@@ -46,7 +51,10 @@ impl TapHubService for RealTapHubService {
     }
 
     #[instrument(skip(self), fields(tap_name = %request.tap_name))]
-    async fn preload_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
+    async fn preload_audio(&self, mut request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
+
         let start = std::time::Instant::now();
 
         let result = self
@@ -67,7 +75,10 @@ impl TapHubService for RealTapHubService {
     }
 
     #[instrument(skip(self), fields(tap_name = %request.tap_name))]
-    async fn request_audio_meta(&self, request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
+    async fn request_audio_meta(&self, mut request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
+
         let start = std::time::Instant::now();
 
         let result = self

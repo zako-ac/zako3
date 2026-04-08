@@ -2,11 +2,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
-use opentelemetry::KeyValue;
+use opentelemetry::{KeyValue, global};
 use protofish2::Timestamp;
 use sha2::Digest;
 use tokio::sync::mpsc;
 use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::{AudioCache, NextFrame};
 use zako3_types::{AudioMetaResponse, CachedAudioRequest, hq::UserId};
 
@@ -19,6 +20,7 @@ pub(crate) async fn handle_request_audio_inner(
     tap_hub: &TapHub,
     request: CachedAudioRequest,
 ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+    let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
     let span = tracing::info_span!(
         "audio.request",
         tap_name = %request.tap_name.0,
@@ -28,6 +30,7 @@ pub(crate) async fn handle_request_audio_inner(
         cache_hit = tracing::field::Empty,
         connection_id = tracing::field::Empty,
     );
+    let _ = span.set_parent(parent_cx);
     let _enter = span.enter();
 
     let start = Instant::now();
@@ -141,7 +144,7 @@ pub(crate) async fn handle_request_audio_inner(
                 tap_id.clone(),
                 connection_id,
                 request.audio_request.clone(),
-                Default::default(),
+                request.headers.clone(),
             )
             .instrument(zakofish_span)
             .await
