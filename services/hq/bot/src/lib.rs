@@ -80,7 +80,10 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
                 commands::tts::tts(),
                 commands::tts::voice(),
                 commands::help::help(),
-            ],
+            ]
+            .into_iter()
+            .map(commands::tracing::with_tracing)
+            .collect(),
             on_error: |err| Box::pin(on_error(err)),
             ..Default::default()
         })

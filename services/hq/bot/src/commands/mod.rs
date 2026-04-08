@@ -4,6 +4,7 @@ pub mod music;
 pub mod queue;
 pub mod settings;
 pub mod tap;
+pub mod tracing;
 pub mod tts;
 pub mod voice;
 

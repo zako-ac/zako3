@@ -63,16 +63,24 @@ impl AudioEngineServer {
             let client = client.clone();
             tokio::spawn(async move {
                 let parent_cx = global::get_text_map_propagator(|p| p.extract(&traced.trace_headers));
-                let span = tracing::info_span!("ae.control");
+                let payload = traced.inner;
+                let span = tracing::info_span!(
+                    "ae.control",
+                    command = tracing::field::Empty,
+                    guild_id = tracing::field::Empty,
+                    channel_id = tracing::field::Empty,
+                );
                 let _ = span.set_parent(parent_cx);
                 let _enter = span.enter();
 
-                let payload = traced.inner;
                 let response = match &payload {
                     AudioEngineRequest::Join {
                         guild_id,
                         channel_id,
                     } => {
+                        tracing::Span::current().record("command", "Join");
+                        tracing::Span::current().record("guild_id", tracing::field::debug(guild_id));
+                        tracing::Span::current().record("channel_id", tracing::field::debug(channel_id));
                         if this.session_manager.get_session(*guild_id, *channel_id).is_some() {
                             AudioEngineResponse::Error("Session already exists".to_string())
                         } else {
@@ -94,6 +102,9 @@ impl AudioEngineServer {
                         guild_id,
                         channel_id,
                     } => {
+                        tracing::Span::current().record("command", "Leave");
+                        tracing::Span::current().record("guild_id", tracing::field::debug(guild_id));
+                        tracing::Span::current().record("channel_id", tracing::field::debug(channel_id));
                         if let Some(session) = this.session_manager.get_session(*guild_id, *channel_id) {
                             let state = session.session_state().await;
                             if let Ok(Some(s)) = state {
@@ -120,6 +131,8 @@ impl AudioEngineServer {
                         }
                     }
                     AudioEngineRequest::GetSessionsInGuild { guild_id } => {
+                        tracing::Span::current().record("command", "GetSessionsInGuild");
+                        tracing::Span::current().record("guild_id", tracing::field::debug(guild_id));
                         match this.session_manager.get_sessions_in_guild(*guild_id).await {
                             Ok(sessions) => AudioEngineResponse::SuccessSessions(sessions),
                             Err(e) => AudioEngineResponse::Error(e.to_string()),
@@ -205,7 +218,12 @@ impl AudioEngineServer {
                 let client = client.clone();
                 tokio::spawn(async move {
                     let parent_cx = global::get_text_map_propagator(|p| p.extract(&traced.trace_headers));
-                    let span = tracing::info_span!("ae.session", guild_id = ?guild_id);
+                    let span = tracing::info_span!(
+                        "ae.session",
+                        command = tracing::field::Empty,
+                        guild_id = ?guild_id,
+                        channel_id = ?channel_id,
+                    );
                     let _ = span.set_parent(parent_cx);
                     let _enter = span.enter();
 
@@ -234,6 +252,7 @@ impl AudioEngineServer {
                             discord_user_id,
                             ..
                         } => {
+                            tracing::Span::current().record("command", "Play");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session
                                 .play(
@@ -252,6 +271,7 @@ impl AudioEngineServer {
                         AudioEngineRequest::SetVolume {
                             track_id, volume, ..
                         } => {
+                            tracing::Span::current().record("command", "SetVolume");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.set_volume(track_id, volume).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -259,6 +279,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::Stop { track_id, .. } => {
+                            tracing::Span::current().record("command", "Stop");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.stop(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -266,6 +287,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::StopMany { filter, .. } => {
+                            tracing::Span::current().record("command", "StopMany");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.stop_many(filter).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -273,6 +295,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::NextMusic { .. } => {
+                            tracing::Span::current().record("command", "NextMusic");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.next_music().await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -280,6 +303,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::Pause { track_id, .. } => {
+                            tracing::Span::current().record("command", "Pause");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.pause(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -287,6 +311,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::Resume { track_id, .. } => {
+                            tracing::Span::current().record("command", "Resume");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.resume(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
@@ -294,6 +319,7 @@ impl AudioEngineServer {
                             }
                         }
                         AudioEngineRequest::GetSessionState { .. } => {
+                            tracing::Span::current().record("command", "GetSessionState");
                             let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.session_state().await {
                                 Ok(Some(state)) => AudioEngineResponse::SuccessSessionState(state),

@@ -2,19 +2,21 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use hq_types::{
-    AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
     hq::{
-        UserSettings,
-        playback::{AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto},
+        playback::{
+            AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto,
+        },
         settings::TextReadingRule,
+        UserSettings,
     },
+    AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
 };
 use zako3_states::VoiceStateService;
 
 use crate::{
-    CoreError, CoreResult,
     repo::{CreatePlaybackAction, PlaybackAction, PlaybackActionRepo},
     service::{AudioEngineService, DiscordNameResolverSlot},
+    CoreError, CoreResult,
 };
 
 /// Minimal voice state info extracted from a Discord gateway event or cache,
@@ -159,11 +161,7 @@ impl PlaybackService {
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
-        let state = self
-            .audio_engine
-            .get_session_state(g, c)
-            .await
-            ?;
+        let state = self.audio_engine.get_session_state(g, c).await?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -171,10 +169,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine
-            .stop(g, c, TrackId::from(tid))
-            .await
-            ?;
+        self.audio_engine.stop(g, c, TrackId::from(tid)).await?;
 
         let action = self
             .repo
@@ -200,11 +195,7 @@ impl PlaybackService {
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
-        let state = self
-            .audio_engine
-            .get_session_state(g, c)
-            .await
-            ?;
+        let state = self.audio_engine.get_session_state(g, c).await?;
 
         let music_queue = QueueName::from("music".to_string());
         let head_track = state
@@ -215,10 +206,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(head_track)?;
 
-        self.audio_engine
-            .next_music(g, c)
-            .await
-            ?;
+        self.audio_engine.next_music(g, c).await?;
 
         let action = self
             .repo
@@ -252,11 +240,7 @@ impl PlaybackService {
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
-        let state = self
-            .audio_engine
-            .get_session_state(g, c)
-            .await
-            ?;
+        let state = self.audio_engine.get_session_state(g, c).await?;
 
         let queue_snapshot = serde_json::to_value(&state.queues)?;
 
@@ -268,10 +252,7 @@ impl PlaybackService {
             let track_id = TrackId::from(tid);
             match op.op.as_str() {
                 "remove" => {
-                    self.audio_engine
-                        .stop(g, c, track_id)
-                        .await
-                        ?;
+                    self.audio_engine.stop(g, c, track_id).await?;
                 }
                 "set_volume" => {
                     let vol = op.volume.ok_or_else(|| {
@@ -279,8 +260,7 @@ impl PlaybackService {
                     })?;
                     self.audio_engine
                         .set_volume(g, c, track_id, Volume::from(vol))
-                        .await
-                        ?;
+                        .await?;
                 }
                 other => {
                     return Err(CoreError::InvalidInput(format!("unknown op: {}", other)));
@@ -348,8 +328,7 @@ impl PlaybackService {
                         track.volume,
                         track.request.discord_user_id.clone(),
                     )
-                    .await
-                    ?;
+                    .await?;
             }
             "edit_queue" => {
                 return Err(CoreError::InvalidInput(
@@ -406,11 +385,7 @@ impl PlaybackService {
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
-        let state = self
-            .audio_engine
-            .get_session_state(g, c)
-            .await
-            ?;
+        let state = self.audio_engine.get_session_state(g, c).await?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -418,10 +393,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine
-            .pause(g, c, TrackId::from(tid))
-            .await
-            ?;
+        self.audio_engine.pause(g, c, TrackId::from(tid)).await?;
 
         let action = self
             .repo
@@ -451,11 +423,7 @@ impl PlaybackService {
         let g = GuildId::from(guild_id);
         let c = ChannelId::from(channel_id);
 
-        let state = self
-            .audio_engine
-            .get_session_state(g, c)
-            .await
-            ?;
+        let state = self.audio_engine.get_session_state(g, c).await?;
 
         let track = state
             .find_track(TrackId::from(tid))
@@ -463,10 +431,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine
-            .resume(g, c, TrackId::from(tid))
-            .await
-            ?;
+        self.audio_engine.resume(g, c, TrackId::from(tid)).await?;
 
         let action = self
             .repo
