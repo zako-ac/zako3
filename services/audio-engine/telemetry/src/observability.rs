@@ -1,12 +1,10 @@
 use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
 use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
-use tonic::metadata::{Ascii, MetadataKey, MetadataMap, MetadataValue};
 use opentelemetry_sdk::{
-    Resource,
-    metrics::SdkMeterProvider,
-    propagation::TraceContextPropagator,
+    Resource, metrics::SdkMeterProvider, propagation::TraceContextPropagator,
     trace::SdkTracerProvider,
 };
+use tonic::metadata::{Ascii, MetadataKey, MetadataMap, MetadataValue};
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
@@ -18,7 +16,7 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
         .with_level(true)
         .compact();
 
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let registry = Registry::default().with(env_filter).with(fmt_layer);
 

@@ -75,9 +75,9 @@ impl SessionManager {
             queues: Default::default(),
         };
 
-        self.state_service.save_session(&session).await?;
-
         self.initiate_session(guild_id).await?;
+
+        self.state_service.save_session(&session).await?;
 
         Ok(())
     }
@@ -91,6 +91,7 @@ impl SessionManager {
             .await?;
 
         self.initiate_session(session.guild_id).await?;
+        self.state_service.save_session(session).await?;
 
         Ok(())
     }

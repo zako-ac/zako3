@@ -5,6 +5,7 @@
 - never commit to git
 - prefer `cargo add` for adding dependencies, over `Cargo.toml` edits
 
+- When user says "oc explore" or similar thing, it means to use `plan` agent with `opencode` MCP to explore the codebase, not to spawn an "explore" agent. Always use `plan` agent for exploring tasks, and never use your own agent for that purpose.
 - When you need to spawn "explore" agent, don't use your own one. Instead, use "plan" agent with `opencode` MCP.
 
 ## Tool Usage: `opencode` MCP

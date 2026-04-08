@@ -19,6 +19,7 @@ impl AudioEngineService {
         Self { client }
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id, channel_id = ?channel_id))]
     pub async fn join(&self, guild_id: GuildId, channel_id: ChannelId) -> CoreResult<bool> {
         self.client
             .join(guild_id, channel_id)
@@ -26,6 +27,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[instrument(skip(self), fields(guild_id = ?guild_id, channel_id = ?channel_id))]
     pub async fn leave(&self, guild_id: GuildId, channel_id: ChannelId) -> CoreResult<bool> {
         self.client
             .leave(guild_id, channel_id)
@@ -34,7 +36,7 @@ impl AudioEngineService {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, audio_request_string), fields(guild_id = ?guild_id, tap_name = %tap_name))]
+    #[instrument(skip(self, audio_request_string), fields(guild_id = ?guild_id, channel_id = ?channel_id, tap_name = %tap_name))]
     pub async fn play(
         &self,
         guild_id: GuildId,
