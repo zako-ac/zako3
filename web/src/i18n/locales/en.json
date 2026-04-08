@@ -10,8 +10,8 @@
       "dashboard": "Dashboard",
       "dashboardSubtitle": "Here's an overview of the system.",
       "globalSettings": {
-        "description": "",
-        "title": ""
+        "description": "Manage global settings that affect the entire system, such as TTS defaults and system-wide configurations.",
+        "title": "Global Settings"
       },
       "mappers": {
         "cancel": "Cancel",
@@ -141,7 +141,7 @@
         "subtitle": "Manage all taps in the system",
         "tapDetails": "Tap Details",
         "title": "Taps",
-        "updateSuccess": ""
+        "updateSuccess": "Tap updated successfully!"
       },
       "users": {
         "actions": {
@@ -166,11 +166,11 @@
           "description": "Are you sure you want to grant admin role to user {{username}}? They will have full access to the admin panel.",
           "title": "Confirm Make Admin"
         },
-        "manageUser": "",
-        "noTaps": "",
+        "manageUser": "Manage User",
+        "noTaps": "No taps owned.",
         "noUsers": "No users found.",
-        "ownedTaps": "",
-        "profile": "",
+        "ownedTaps": "Owned Taps",
+        "profile": "Profile",
         "removeAdmin": "Remove Admin",
         "removeAdminConfirm": {
           "description": "Are you sure you want to remove admin role from user {{username}}? They will lose access to the admin panel.",
@@ -226,7 +226,7 @@
     },
     "auth": {
       "continueWithDiscord": "Continue with Discord",
-      "loginRequired": "",
+      "loginRequired": "Login required",
       "redirectAfterLogin": "Redirecting you now...",
       "signInDescription": "Sign in to continue to the dashboard.",
       "welcome": "Welcome"
@@ -244,7 +244,7 @@
       "loading": "Loading...",
       "role": "Role",
       "search": "Search",
-      "timestamp": "",
+      "timestamp": "Timestamp",
       "viewAll": "View All"
     },
     "dashboard": {
