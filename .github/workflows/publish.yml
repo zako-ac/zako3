@@ -1,0 +1,38 @@
+name: Publish libs to crates.io
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish-zakofish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v4
+      - name: Publish zakofish
+        run: cargo publish --manifest-path libs/zakofish/Cargo.toml --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-tts-matching-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish zako3-tts-matching-sdk
+        run: cargo publish --manifest-path libs/tts-matching-sdk/Cargo.toml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-tap-sdk:
+    runs-on: ubuntu-latest
+    needs: [publish-zakofish]
+    steps:
+      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v4
+      - name: Publish zako3-tap-sdk
+        run: cargo publish --manifest-path libs/tap-sdk/Cargo.toml --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
