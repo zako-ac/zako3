@@ -10,8 +10,8 @@
       "dashboard": "대시보드",
       "dashboardSubtitle": "시스템 개요입니다.",
       "globalSettings": {
-        "description": "",
-        "title": ""
+        "description": "전체 시스템에 영향을 미치는 글로벌 설정을 관리합니다 (TTS 기본값 및 시스템 전체 구성 등).",
+        "title": "글로벌 설정"
       },
       "mappers": {
         "cancel": "취소",
@@ -114,12 +114,14 @@
         "subtitle": "시스템 알림 관리",
         "title": "알림"
       },
+      "on": "에서",
       "overview": "개요",
       "pendingVerifications": "보류 중인 인증",
       "quickActions": "빠른 작업",
       "recentActivity": "최근 활동",
       "stats": {
         "allSystemsOperational": "모든 시스템 정상 작동",
+        "healthy": "정상",
         "pendingVerifications": "보류 중인 인증",
         "requiresReview": "검토 필요",
         "systemHealth": "시스템 상태",
@@ -141,7 +143,7 @@
         "subtitle": "시스템의 모든 탭 관리",
         "tapDetails": "탭 상세정보",
         "title": "탭",
-        "updateSuccess": ""
+        "updateSuccess": "탭이 성공적으로 업데이트되었습니다."
       },
       "users": {
         "actions": {
@@ -220,11 +222,12 @@
         "subtitle": "사용자 제출 인증 요청을 관리합니다.",
         "tapName": "탭 이름",
         "title": "인증",
-        "view": "",
-        "viewDetails": ""
+        "view": "보기",
+        "viewDetails": "상세정보 보기"
       }
     },
     "auth": {
+      "authenticating": "인증 중...",
       "continueWithDiscord": "Discord로 계속하기",
       "loginRequired": "로그인 필요",
       "redirectAfterLogin": "지금 리디렉션합니다...",
@@ -235,16 +238,29 @@
       "actions": "작업",
       "back": "뒤로",
       "cancel": "취소",
-      "close": "",
+      "changeLanguage": "언어 변경",
+      "clear": "지우기",
+      "close": "닫기",
       "confirm": "확인",
       "copied": "클립보드에 복사되었습니다!",
       "copy": "복사",
       "copyIdToClipboard": "클립보드에 ID 복사",
       "delete": "삭제",
+      "errorLoadingData": "데이터 로드 오류:",
+      "keyboardShortcuts": "키보드 단축키",
+      "keyboardShortcutsDescription": "빠른 네비게이션 및 작업을 위한 사용 가능한 키보드 단축키",
       "loading": "로딩 중...",
+      "noActivityYet": "아직 활동이 없습니다",
+      "of": "의",
+      "page": "페이지",
+      "perPage": "페이지당",
+      "pressEscape": "누르면",
       "role": "역할",
       "search": "검색",
+      "system": "시스템",
       "timestamp": "타임스탬프",
+      "toCloseDialog": "이 대화상자를 닫습니다",
+      "toggleTheme": "테마 전환",
       "viewAll": "모두 보기"
     },
     "dashboard": {
@@ -261,13 +277,13 @@
         "uptime": "가동 시간"
       },
       "subtitle": "대시보드에 오신 것을 환영합니다.",
-      "uses_other": "",
+      "uses_other": "{{count}}회 사용",
       "welcome": "{{name}}님, 환영합니다!"
     },
     "errors": {
       "ownerNotFound": "소유자를 찾을 수 없습니다.",
       "tapNotFound": "탭을 찾을 수 없습니다.",
-      "updateFailed": "",
+      "updateFailed": "업데이트에 실패했습니다.",
       "userNotFound": "사용자를 찾을 수 없습니다."
     },
     "guilds": {
@@ -324,7 +340,8 @@
       "read": "읽음",
       "status": "상태",
       "title": "알림",
-      "unread": "읽지 않음"
+      "unread": "읽지 않음",
+      "viewAll": "모든 알림 보기"
     },
     "settings": {
       "account": "계정",
@@ -362,11 +379,11 @@
       "maxMessageLength": "최대 메시지 길이",
       "maxMessageLengthDescription": "이 길이를 초과하는 메시지는 소리 내어 읽기 전에 잘립니다 (1–65535).",
       "noRules": "추가된 규칙이 없습니다.",
-      "noTapsDescription": "",
+      "noTapsDescription": "생성된 탭이 없습니다.",
       "notifications": "알림",
       "notificationsCheckBackLater": "알림 설정은 곧 제공됩니다. 나중에 다시 확인하세요!",
       "notificationsSubtitle": "알림 수신 방법 관리",
-      "overriddenByUpstream": "",
+      "overriddenByUpstream": "업스트림에 의해 재정의됨",
       "pattern": "패턴",
       "profile": "프로필",
       "profileSubtitle": "개인 정보",
@@ -376,13 +393,13 @@
       "saveSuccess": "설정이 성공적으로 저장되었습니다.",
       "saving": "저장 중...",
       "scope": {
-        "important": "중요",
-        "none": "없음",
-        "normal": "기본"
+        "important": "우선순위",
+        "none": "기본값",
+        "normal": "설정"
       },
-      "searchTaps": "",
-      "selectTap": "",
-      "selectTapDescription": "",
+      "searchTaps": "탭 검색",
+      "selectTap": "탭 선택",
+      "selectTapDescription": "작업할 탭을 선택하세요.",
       "subtitle": "계정 설정 및 환경설정 관리",
       "textMappings": "텍스트 대체",
       "textMappingsDescription": "메시지를 소리 내어 읽을 때 단어나 구문을 사용자 정의 텍스트로 교체합니다.",
@@ -392,7 +409,7 @@
       "textReadingRuleOnMicMute": "마이크 음소거 시 읽기",
       "title": "설정",
       "tts": "TTS 설정",
-      "ttsQueue": "",
+      "ttsQueue": "TTS 대기열",
       "ttsSubtitle": "메시지를 소리 내어 읽는 방법을 설정합니다.",
       "ttsVoice": "TTS 음성",
       "ttsVoiceNone": "없음 (기본값 사용)"
@@ -416,8 +433,8 @@
       "form": {
         "addBlacklistedUsers": "차단된 사용자 추가",
         "addWhitelistedUsers": "허용된 사용자 추가",
-        "baseVolume": "",
-        "baseVolumeDescription": "",
+        "baseVolume": "기본 볼륨",
+        "baseVolumeDescription": "기본 TTS 볼륨 설정입니다.",
         "blacklistedUsers": "차단된 사용자",
         "blacklistedUsersHelp": "차단된 사용자는 이 탭을 사용할 수 없습니다.",
         "description": "설명",
@@ -435,6 +452,7 @@
       "myTapsDescription": "내가 소유하거나 접근할 수 있는 탭입니다.",
       "noTaps": "탭을 찾을 수 없습니다.",
       "noTapsOwned": "소유한 탭이 없습니다.",
+      "notFound": "탭을 찾을 수 없습니다",
       "occupations": {
         "base": "기본",
         "official": "공식",
@@ -453,6 +471,7 @@
       },
       "report": {
         "description": "이 탭을 신고하는 이유는 무엇입니까?",
+        "descriptionPlaceholder": "문제에 대한 세부 정보를 입력하세요...",
         "reason": "이유",
         "submit": "보고서 제출",
         "success": "보고서가 성공적으로 제출되었습니다.",
@@ -508,7 +527,7 @@
         "tokenLastUsed": "마지막 사용",
         "tokenNeverExpires": "만료되지 않음",
         "tokenNeverUsed": "사용되지 않음",
-        "tokenOneTimeView": "",
+        "tokenOneTimeView": "이 토큰은 한 번만 표시됩니다. 안전하게 저장하세요.",
         "tokenRegenerated": "토큰이 성공적으로 재생성되었습니다.",
         "updateSuccess": "탭이 성공적으로 업데이트되었습니다!",
         "yourNewToken": "새 API 토큰"
@@ -533,22 +552,48 @@
       "tapId": "탭 ID",
       "totalUses": "총 사용량",
       "updatedAt": "업데이트됨",
+      "userList": {
+        "addUserIdButton": "\"{{userId}}\"를 사용자 ID로 추가",
+        "clearAll": "모두 지우기",
+        "export": "내보내기",
+        "exportAsCSV": "CSV로 내보내기",
+        "exportAsJSON": "JSON으로 내보내기",
+        "exportedCSV": "사용자 목록이 CSV로 내보내졌습니다",
+        "exportedJSON": "사용자 목록이 JSON으로 내보내졌습니다",
+        "import": "가져오기",
+        "noUsersFound": "사용자를 찾을 수 없습니다.",
+        "startTyping": "입력하여 사용자를 검색하세요...",
+        "userIdAdded": "사용자 ID가 추가되었습니다. 참고: 이 사용자는 아직 존재하지 않을 수 있습니다.",
+        "userNotExists": "이 사용자는 아직 존재하지 않습니다. 이것은 허용되며 나중에 추가될 수 있습니다."
+      },
       "uses": "{{value}}번 사용됨",
       "verification": {
-        "description": "",
-        "descriptionHelp": "",
-        "descriptionPlaceholder": "",
-        "formTitle": "",
-        "requestSuccess": "",
+        "description": "인증 요청 상세 설명입니다.",
+        "descriptionHelp": "인증 요청에 대한 설명을 입력하세요.",
+        "descriptionPlaceholder": "설명을 입력하세요...",
+        "formTitle": "인증 요청",
+        "requestSuccess": "인증 요청이 성공적으로 전송되었습니다.",
         "status": {
-          "approved": "",
-          "none": ""
+          "approved": "승인됨",
+          "none": "없음"
         },
-        "subtitle": "",
-        "title": "",
-        "titleLabel": "",
-        "titlePlaceholder": ""
+        "subtitle": "인증 상태 및 요청 관리",
+        "title": "인증",
+        "titleLabel": "제목",
+        "titlePlaceholder": "제목을 입력하세요...",
+        "verificationInfo": "검증 요청은 ZAKO 팀에서 수동으로 검토합니다. 요청이 처리되는 데 며칠이 걸릴 수 있습니다."
       }
+    },
+    "voice": {
+      "history": "이력",
+      "noActiveSession": "이 채널에 활성 세션이 없습니다.",
+      "noRecentActions": "최근 작업이 없습니다.",
+      "noTracksInQueue": "대기열에 트랙이 없습니다.",
+      "queues": "큐",
+      "requestedBy": "요청한 사람",
+      "skip": "건너뛰기",
+      "tap": "탭",
+      "volume": "볼륨"
     }
   }
 }

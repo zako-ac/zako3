@@ -26,6 +26,41 @@ import type { PartialUserSettings, UserSettingsField } from './types'
 import { defaultUserSettings, emptyPartial } from './types'
 import { TapSelectDialog } from './tap-select-dialog'
 
+function OverrideAlert({
+    fieldKey,
+    upstream,
+    t,
+}: {
+    fieldKey: keyof PartialUserSettings
+    upstream: PartialUserSettings
+    t: (key: string) => string
+}) {
+    return upstream[fieldKey].type === 'important' ? (
+        <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300">
+            <AlertTriangle className="!text-yellow-600 dark:!text-yellow-400" />
+            <AlertDescription className="text-yellow-700 dark:text-yellow-400">
+                {t('settings.overriddenByUpstream')}
+            </AlertDescription>
+        </Alert>
+    ) : null
+}
+
+function FieldWrapper({
+    fieldKey,
+    value,
+    children,
+}: {
+    fieldKey: keyof PartialUserSettings
+    value: PartialUserSettings
+    children: React.ReactNode
+}) {
+    return (
+        <div className={value[fieldKey].type === 'none' ? 'pointer-events-none opacity-40' : ''}>
+            {children}
+        </div>
+    )
+}
+
 interface UserSettingsCardProps {
     initialValue: PartialUserSettings
     taps: TapWithAccess[]
@@ -91,30 +126,6 @@ export function UserSettingsCard({
 
     const upstream = upstreamSettings ?? emptyPartial
 
-    // Renders the override warning when an upstream scope has Important
-    const OverrideAlert = ({ fieldKey }: { fieldKey: keyof PartialUserSettings }) =>
-        upstream[fieldKey].type === 'important' ? (
-            <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300">
-                <AlertTriangle className="!text-yellow-600 dark:!text-yellow-400" />
-                <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-                    {t('settings.overriddenByUpstream')}
-                </AlertDescription>
-            </Alert>
-        ) : null
-
-    // Wrapper that dims + blocks pointer events when field scope is None
-    const FieldWrapper = ({
-        fieldKey,
-        children,
-    }: {
-        fieldKey: keyof PartialUserSettings
-        children: React.ReactNode
-    }) => (
-        <div className={value[fieldKey].type === 'none' ? 'pointer-events-none opacity-40' : ''}>
-            {children}
-        </div>
-    )
-
     return (
         <Card>
             <CardHeader>
@@ -132,8 +143,8 @@ export function UserSettingsCard({
                             showImportant={showImportant}
                         />
                     </div>
-                    <OverrideAlert fieldKey="tts_voice" />
-                    <FieldWrapper fieldKey="tts_voice">
+                    <OverrideAlert fieldKey="tts_voice" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="tts_voice" value={value}>
                         <div className="flex w-full items-center justify-between space-x-2">
                             <TtsVoiceField
                                 value={getValue(value.tts_voice, defaultUserSettings.tts_voice)}
@@ -164,8 +175,8 @@ export function UserSettingsCard({
                             showImportant={showImportant}
                         />
                     </div>
-                    <OverrideAlert fieldKey="enable_tts_queue" />
-                    <FieldWrapper fieldKey="enable_tts_queue">
+                    <OverrideAlert fieldKey="enable_tts_queue" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="enable_tts_queue" value={value}>
                         <TtsQueueField
                             value={getValue(value.enable_tts_queue, defaultUserSettings.enable_tts_queue)}
                             onChange={(v) => patchValue('enable_tts_queue', v)}
@@ -185,8 +196,8 @@ export function UserSettingsCard({
                             showImportant={showImportant}
                         />
                     </div>
-                    <OverrideAlert fieldKey="text_reading_rule" />
-                    <FieldWrapper fieldKey="text_reading_rule">
+                    <OverrideAlert fieldKey="text_reading_rule" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="text_reading_rule" value={value}>
                         <TextReadingRuleField
                             value={getValue(value.text_reading_rule, defaultUserSettings.text_reading_rule)}
                             onChange={(v) => patchValue('text_reading_rule', v)}
@@ -206,8 +217,8 @@ export function UserSettingsCard({
                             showImportant={showImportant}
                         />
                     </div>
-                    <OverrideAlert fieldKey="user_join_leave_alert" />
-                    <FieldWrapper fieldKey="user_join_leave_alert">
+                    <OverrideAlert fieldKey="user_join_leave_alert" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="user_join_leave_alert" value={value}>
                         <JoinLeaveAlertField
                             value={getValue(value.user_join_leave_alert, defaultUserSettings.user_join_leave_alert)}
                             onChange={(v) => patchValue('user_join_leave_alert', v)}
@@ -230,8 +241,8 @@ export function UserSettingsCard({
                             showImportant={showImportant}
                         />
                     </div>
-                    <OverrideAlert fieldKey="max_message_length" />
-                    <FieldWrapper fieldKey="max_message_length">
+                    <OverrideAlert fieldKey="max_message_length" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="max_message_length" value={value}>
                         <MaxMessageLengthField
                             value={getValue(value.max_message_length, defaultUserSettings.max_message_length)}
                             onChange={(v) => patchValue('max_message_length', v)}
@@ -254,8 +265,8 @@ export function UserSettingsCard({
                     <p className="text-muted-foreground text-sm">
                         {t('settings.textMappingsDescription')}
                     </p>
-                    <OverrideAlert fieldKey="text_mappings" />
-                    <FieldWrapper fieldKey="text_mappings">
+                    <OverrideAlert fieldKey="text_mappings" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="text_mappings" value={value}>
                         <TextMappingsField
                             value={getValue(value.text_mappings, defaultUserSettings.text_mappings)}
                             onChange={(v) => patchValue('text_mappings', v)}
@@ -278,8 +289,8 @@ export function UserSettingsCard({
                     <p className="text-muted-foreground text-sm">
                         {t('settings.emojiMappingsDescription')}
                     </p>
-                    <OverrideAlert fieldKey="emoji_mappings" />
-                    <FieldWrapper fieldKey="emoji_mappings">
+                    <OverrideAlert fieldKey="emoji_mappings" upstream={upstream} t={t} />
+                    <FieldWrapper fieldKey="emoji_mappings" value={value}>
                         <EmojiMappingsField
                             value={getValue(value.emoji_mappings, defaultUserSettings.emoji_mappings)}
                             onChange={(v) => patchValue('emoji_mappings', v)}

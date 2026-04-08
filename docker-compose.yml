@@ -1,0 +1,154 @@
+services:
+  # --- Infrastructure ---
+
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zako3}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-zako3}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: ${TIMESCALE_USER:-metrics}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:?TIMESCALE_PASSWORD is required}
+      POSTGRES_DB: ${TIMESCALE_DB:-metrics}
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "3000:3000"   # Grafana UI
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # --- Services ---
+
+  audio-engine:
+    build:
+      context: .
+      dockerfile: services/audio-engine/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      OTLP_ENDPOINT: http://otel-lgtm:4317
+      METRICS_PORT: "9090"
+      DISCORD_TOKEN: ${AUDIO_DISCORD_TOKEN:?AUDIO_DISCORD_TOKEN is required}
+      AE_TOKEN: ${AUDIO_AE_TOKEN:-changeme}
+    depends_on:
+      - nats
+      - redis
+      - otel-lgtm
+
+  hq:
+    build:
+      context: .
+      dockerfile: services/hq/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-zako3}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-zako3}
+      BACKEND_ADDRESS: "0.0.0.0:8080"
+      RPC_ADDRESS: "0.0.0.0:50052"
+      RPC_ADMIN_TOKEN: ${HQ_RPC_ADMIN_TOKEN:?HQ_RPC_ADMIN_TOKEN is required}
+      DISCORD_CLIENT_ID: ${HQ_DISCORD_CLIENT_ID:?HQ_DISCORD_CLIENT_ID is required}
+      DISCORD_CLIENT_SECRET: ${HQ_DISCORD_CLIENT_SECRET:?HQ_DISCORD_CLIENT_SECRET is required}
+      DISCORD_REDIRECT_URI: ${HQ_DISCORD_REDIRECT_URI:-http://localhost:8080/auth/callback}
+      DISCORD_BOT_TOKEN: ${HQ_DISCORD_BOT_TOKEN:?HQ_DISCORD_BOT_TOKEN is required}
+      JWT_SECRET: ${HQ_JWT_SECRET:?HQ_JWT_SECRET is required}
+      MAPPER_WASM_DIR: /tmp/hq-mappers
+      MAPPER_DB_PATH: /tmp/hq-mappers.db
+      OTLP_ENDPOINT: http://otel-lgtm:4317
+      METRICS_PORT: "9091"
+    ports:
+      - "8080:8080"
+      - "50052:50052"
+    depends_on:
+      - postgres
+      - nats
+      - otel-lgtm
+
+  taphub:
+    build:
+      context: .
+      dockerfile: services/taphub/Dockerfile
+    environment:
+      ZK_TH_REDIS_URL: redis://redis:6379
+      ZK_TH_HQ_RPC_URL: http://hq:50052
+      ZK_TH_HQ_RPC_ADMIN_TOKEN: ${ZK_TH_HQ_RPC_ADMIN_TOKEN:?ZK_TH_HQ_RPC_ADMIN_TOKEN is required}
+      ZK_TH_TRANSPORT_BIND_ADDR: "0.0.0.0:4000"
+      ZK_TH_ZAKOFISH_BIND_ADDR: "0.0.0.0:4001"
+      ZK_TH_CERT_FILE: ${ZK_TH_CERT_FILE:-cert.pem}
+      ZK_TH_KEY_FILE: ${ZK_TH_KEY_FILE:-key.pem}
+      ZK_TH_CACHE_DIR: /cache
+      ZK_TH_REQUEST_TIMEOUT_MS: "13000"
+      ZK_TH_OTLP_ENDPOINT: http://otel-lgtm:4317
+      ZK_TH_METRICS_PORT: "9092"
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+    depends_on:
+      - hq
+      - redis
+      - otel-lgtm
+
+  # --- Web ---
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_WS_BASE_URL: ws://localhost
+        VITE_GRAFANA_URL: http://localhost:3000
+    ports:
+      - "80:80"
+    depends_on:
+      - hq
+
+  # --- Workers ---
+
+  cache-gc:
+    build:
+      context: .
+      dockerfile: workers/cache-gc/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      CACHE_DIR: ${CACHE_GC_CACHE_DIR:-/cache}
+      MAX_CACHE_BYTES: ${CACHE_GC_MAX_BYTES:-}
+      OTLP_ENDPOINT: http://otel-lgtm:4317
+    depends_on:
+      - redis
+
+  metrics-sync:
+    build:
+      context: .
+      dockerfile: workers/metrics-sync/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${TIMESCALE_USER:-metrics}:${TIMESCALE_PASSWORD:?}@timescale:5432/${TIMESCALE_DB:-metrics}
+      REDIS_URL: redis://redis:6379
+      SYNC_INTERVAL_SECONDS: ${METRICS_SYNC_INTERVAL_SECONDS:-60}
+    depends_on:
+      - timescale
+      - redis
+
+volumes:
+  pg-data:
+  timescale-data:

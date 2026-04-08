@@ -16,6 +16,16 @@ export const trackSchema = z.object({
     paused: z.boolean(),
 });
 
+export const discordUserInfoSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    avatarUrl: z.string().nullable().optional(),
+});
+
+export const queueMetaSchema = z.object({
+    user: discordUserInfoSchema.optional(),
+});
+
 export const guildPlaybackStateSchema = z.object({
     guildId: z.string(),
     guildName: z.string().default(''),
@@ -23,6 +33,7 @@ export const guildPlaybackStateSchema = z.object({
     channelId: z.string(),
     channelName: z.string().default(''),
     queues: z.record(z.string(), z.array(trackSchema)),
+    queueMeta: z.record(z.string(), queueMetaSchema).default({}),
 });
 
 export const playbackActionSchema = z.object({
@@ -74,6 +85,8 @@ export const resumeTrackSchema = z.object({
 
 export type AudioMetadataDto = z.infer<typeof audioMetadataSchema>;
 export type TrackDto = z.infer<typeof trackSchema>;
+export type DiscordUserInfoDto = z.infer<typeof discordUserInfoSchema>;
+export type QueueMetaDto = z.infer<typeof queueMetaSchema>;
 export type GuildPlaybackStateDto = z.infer<typeof guildPlaybackStateSchema>;
 export type PlaybackActionDto = z.infer<typeof playbackActionSchema>;
 export type StopTrackDto = z.infer<typeof stopTrackSchema>;

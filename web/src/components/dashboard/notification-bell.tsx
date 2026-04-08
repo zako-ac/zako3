@@ -42,7 +42,7 @@ export const NotificationBell = () => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+        <Button variant="ghost" size="icon" className="relative" aria-label={t('notifications.title')}>
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
@@ -95,7 +95,7 @@ export const NotificationBell = () => {
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="justify-center">
           <Link to="/dashboard" className="text-sm font-medium text-primary">
-            View all notifications
+            {t('notifications.viewAll')}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

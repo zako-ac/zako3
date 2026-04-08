@@ -1,0 +1,18 @@
+[package]
+name = "hq-boot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zako3-telemetry = { workspace = true }
+hq-core.path = "../core"
+hq-backend.path = "../backend"
+hq-bot.path = "../bot"
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+axum = { workspace = true }
+async-nats = { workspace = true }
+futures-util = "0.3"

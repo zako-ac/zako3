@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,7 +31,7 @@ export const FilterDropdown = <T extends string = string>({
     onChange,
     className,
 }: FilterDropdownProps<T>) => {
-
+    const { t } = useTranslation()
 
     const handleToggle = (value: T) => {
         if (selected.includes(value)) {
@@ -67,7 +68,7 @@ export const FilterDropdown = <T extends string = string>({
                             className="h-auto p-0 text-xs"
                             onClick={handleClear}
                         >
-                            Clear
+                            {t('common.clear')}
                         </Button>
                     )}
                 </DropdownMenuLabel>

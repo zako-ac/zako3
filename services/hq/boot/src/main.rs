@@ -1,0 +1,104 @@
+use futures_util::StreamExt;
+use hq_backend::rpc::start_rpc_server;
+use hq_core::{get_pool, run_migrations, AppConfig, Service};
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::sync::broadcast;
+use tracing::info;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+
+    let config = Arc::new(AppConfig::load()?);
+
+    let telemetry = zako3_telemetry::init(zako3_telemetry::TelemetryConfig {
+        service_name: "hq".to_string(),
+        otlp_endpoint: config.otlp_endpoint.clone(),
+        metrics_port: config.metrics_port,
+    })
+    .await?;
+
+    info!("Starting hq-boot...");
+
+    let pool = get_pool(&config.database_url).await?;
+
+    run_migrations(&pool).await?;
+
+    let service = Service::new(pool, config.clone()).await?;
+
+    // Set up NATS→broadcast channel for playback state events
+    let (event_tx, _) = broadcast::channel::<String>(128);
+    let event_tx_nats = event_tx.clone();
+    let nats_url = config.nats_url.clone();
+    tokio::spawn(async move {
+        let nc = match async_nats::connect(&nats_url).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to connect NATS for playback events: {}", e);
+                return;
+            }
+        };
+        let mut sub = match nc.subscribe("playback.state_changed.>").await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("Failed to subscribe to playback NATS events: {}", e);
+                return;
+            }
+        };
+        info!("Listening for playback state changes on NATS");
+        while let Some(msg) = sub.next().await {
+            let payload = String::from_utf8_lossy(&msg.payload).into_owned();
+            let _ = event_tx_nats.send(payload);
+        }
+    });
+
+    let backend_address = config.backend_address.clone();
+    let service_backend = service.clone();
+    let event_tx_backend = event_tx.clone();
+    let backend_task = tokio::spawn(async move {
+        let app = hq_backend::app(service_backend, event_tx_backend);
+
+        let listener = TcpListener::bind(&backend_address)
+            .await
+            .expect("Failed to bind backend port");
+        info!("Backend listening on {}", backend_address);
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!("Backend error: {}", e);
+            panic!("Backend server failed");
+        }
+    });
+
+    let service_rpc = service.clone();
+    let rpc_address = config.rpc_address.clone();
+    let rpc_admin_token = config.rpc_admin_token.clone();
+    let rpc_task = tokio::spawn(async move {
+        let rpc = start_rpc_server(
+            service_rpc.api_key,
+            service_rpc.tap,
+            service_rpc.auth,
+            &rpc_address,
+            rpc_admin_token,
+        );
+        if let Err(e) = rpc.await {
+            tracing::error!("RPC server error: {}", e);
+            panic!("RPC server failed");
+        }
+    });
+
+    let service_bot = service.clone();
+    let resolver_slot = service.name_resolver_slot.clone();
+    let bot_task = tokio::spawn(async move {
+        info!("Starting bot...");
+        if let Err(e) = hq_bot::run(service_bot, resolver_slot).await {
+            tracing::error!("Bot error: {}", e);
+            panic!("Bot failed");
+        }
+    });
+
+    telemetry.healthy();
+
+    let _ = tokio::join!(backend_task, bot_task, rpc_task);
+
+    Ok(())
+}

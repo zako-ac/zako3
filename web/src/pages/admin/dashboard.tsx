@@ -67,7 +67,7 @@ export const AdminDashboardPage = () => {
         />
         <StatsCard
           title={t('admin.stats.systemHealth')}
-          value="Healthy"
+          value={t('admin.stats.healthy')}
           icon={<Activity className="h-4 w-4" />}
           description={t('admin.stats.allSystemsOperational')}
         />
@@ -134,7 +134,7 @@ export const AdminDashboardPage = () => {
                       <span className="font-medium">{activity.action}</span>
                       <span className="text-muted-foreground">
                         {' '}
-                        on {activity.targetName}
+                        {t('admin.on')} {activity.targetName}
                       </span>
                     </div>
                     <span className="text-muted-foreground text-xs">

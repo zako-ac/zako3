@@ -118,7 +118,7 @@ export const ReportModal = ({
                                     <FormControl>
                                         <Textarea
                                             {...field}
-                                            placeholder="Please provide details about the issue..."
+                                            placeholder={t('taps.report.descriptionPlaceholder')}
                                             rows={4}
                                         />
                                     </FormControl>

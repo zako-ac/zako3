@@ -1,8 +1,10 @@
 import { useParams } from 'react-router-dom'
-import { SkipForward, Square, Undo2, Pause, Play } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { SkipForward, Square, Undo2, Pause, Play, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import {
     usePlaybackState,
+    useRefreshPlaybackState,
     usePlaybackHistory,
     useStopTrack,
     useSkipMusic,
@@ -14,6 +16,7 @@ import {
 } from '@/features/playback'
 import type { TrackDto, AudioMetadataDto } from '@/features/playback'
 import { CopyableId } from '@/components/tap/copyable-id'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
@@ -28,6 +31,7 @@ function getNonUrlMetadata(metadata: AudioMetadataDto[]): AudioMetadataDto[] {
 }
 
 export const VoiceChannelPage = () => {
+    const { t } = useTranslation()
     const { guildId, channelId } = useParams<{
         guildId: string
         channelId: string
@@ -35,8 +39,9 @@ export const VoiceChannelPage = () => {
 
     usePlaybackEvents()
 
-    const { data: states, isLoading: stateLoading } = usePlaybackState()
+    const { data: states, isLoading: stateLoading, isRefetching } = usePlaybackState()
     const { data: history, isLoading: historyLoading } = usePlaybackHistory()
+    const refreshState = useRefreshPlaybackState()
 
     const { mutate: stopTrack, isPending: isStopping } = useStopTrack()
     const { mutate: skipMusic, isPending: isSkipping } = useSkipMusic()
@@ -64,7 +69,17 @@ export const VoiceChannelPage = () => {
 
             {/* Queues */}
             <div className="space-y-4">
-                <h2 className="text-lg font-medium">Queues</h2>
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-medium">{t('voice.queues')}</h2>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={refreshState}
+                        disabled={isRefetching}
+                    >
+                        <RefreshCw className={`h-4 w-4${isRefetching ? ' animate-spin' : ''}`} />
+                    </Button>
+                </div>
                 {stateLoading ? (
                     <div className="space-y-3">
                         <Skeleton className="h-24 w-full" />
@@ -72,21 +87,34 @@ export const VoiceChannelPage = () => {
                     </div>
                 ) : !channelState ? (
                     <p className="text-muted-foreground text-sm">
-                        No active session in this channel.
+                        {t('voice.noActiveSession')}
                     </p>
                 ) : (
                     Object.entries(channelState.queues as Record<string, TrackDto[]>)
+                        .filter(([, tracks]) => tracks.length > 0)
                         .sort(([nameA], [nameB]) => {
                             if (nameA === 'music') return -1
                             if (nameB === 'music') return 1
                             return nameA.localeCompare(nameB)
                         })
                         .map(
-                        ([queueName, tracks]) => (
+                        ([queueName, tracks]) => {
+                            const queueUser = channelState.queueMeta[queueName]?.user
+                            return (
                             <Card key={queueName}>
                                 <CardHeader className="flex flex-row items-center justify-between pb-3">
-                                    <CardTitle className="text-base font-medium capitalize">
-                                        {queueName}
+                                    <CardTitle className="text-base font-medium flex items-center gap-2">
+                                        {queueUser ? (
+                                            <>
+                                                <Avatar className="h-5 w-5">
+                                                    <AvatarImage src={queueUser.avatarUrl ?? undefined} />
+                                                    <AvatarFallback className="text-xs">{queueUser.name[0]}</AvatarFallback>
+                                                </Avatar>
+                                                {queueUser.name}
+                                            </>
+                                        ) : (
+                                            <span className="capitalize">{queueName}</span>
+                                        )}
                                     </CardTitle>
                                     {queueName === 'music' && (
                                         <Button
@@ -104,14 +132,14 @@ export const VoiceChannelPage = () => {
                                             }
                                         >
                                             <SkipForward className="mr-1.5 h-4 w-4" />
-                                            Skip
+                                            {t('voice.skip')}
                                         </Button>
                                     )}
                                 </CardHeader>
                                 <CardContent className="space-y-3">
                                     {tracks.length === 0 ? (
                                         <p className="text-muted-foreground text-sm">
-                                            No tracks in queue.
+                                            {t('voice.noTracksInQueue')}
                                         </p>
                                     ) : (
                                         tracks.map((track) => (
@@ -128,12 +156,12 @@ export const VoiceChannelPage = () => {
                                                             : track.audioRequestString}
                                                     </p>
                                                     <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                                                        Tap: {track.tapName} · Requested by:
+                                                        {t('voice.tap')}: {track.tapName} · {t('voice.requestedBy')}:
                                                         <CopyableId id={track.requestedBy} />
                                                     </p>
                                                     <div className="mt-2 flex items-center gap-2">
                                                         <span className="text-muted-foreground text-xs w-10">
-                                                            Vol
+                                                            {t('voice.volume')}
                                                         </span>
                                                         <Slider
                                                             className="w-32"
@@ -226,13 +254,13 @@ export const VoiceChannelPage = () => {
                                 </CardContent>
                             </Card>
                         )
-                    )
+                        })
                 )}
             </div>
 
             {/* History */}
             <div className="space-y-4">
-                <h2 className="text-lg font-medium">History</h2>
+                <h2 className="text-lg font-medium">{t('voice.history')}</h2>
                 {historyLoading ? (
                     <div className="space-y-2">
                         <Skeleton className="h-12 w-full" />
@@ -241,7 +269,7 @@ export const VoiceChannelPage = () => {
                     </div>
                 ) : !history || history.length === 0 ? (
                     <p className="text-muted-foreground text-sm">
-                        No recent actions.
+                        {t('voice.noRecentActions')}
                     </p>
                 ) : (
                     <Card>

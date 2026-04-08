@@ -11,9 +11,9 @@ refer hq todo
 - [x] refactor TH
 - [x] implement cache: max cache size, score-based cache eviction worker
 
-- [ ] Implement text preprocessing
+- [x] Implement text preprocessing
 
-- [ ] Make bot leave when VC is empty
+- [x] Make bot leave when VC is empty
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -36,9 +36,9 @@ refer hq todo
 - [x] AE re-join on boot
 - [x] Pause feature
 
-- [ ] otel and prometheus and logging(promtail)
-- [ ] Plan proper logging with context
-- [ ] Refine errors
+- [x] otel and prometheus and logging(promtail)
+- [x] Plan proper logging with context
+- [x] Refine errors
 
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
@@ -46,11 +46,14 @@ refer hq todo
 - [ ] Cache management admin panel
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
-- [ ] Add VC-Message channel linking
-- [ ] Make tap-sdk
+- [x] Make tap-sdk
+- [x] tts commands TODO resolve
+- [x] Remove dependencies of Zakofish
+- [ ] Standardize service folder structure to "boot"
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?
+- [ ] pre-settings: Admin can change UserSettings even user is not registered
 
 ## Do before production
 - [ ] Captcha
@@ -77,8 +80,12 @@ refer hq todo
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
 
-- [ ] Test Korean and refine i18n
+- [x] Test Korean and refine i18n
 - [ ] Add "load failed" 
+- [x] Remove empty queue
+- [ ] Add reload button and periodic reload in queue,
+- [ ] Add avatar and username to queue
+- [ ] Fix graph
 
 ## Mobile
 - [x] Tap card overflow
@@ -86,7 +93,7 @@ refer hq todo
 - [ ] Add left-drag sidebar
 
 ## Discord
-- [ ] Separate embeds and add theme color
-- [ ] Don't read itself
-- [ ] Use plain text for everyday messages, for friendly UX.
+- [x] Separate embeds and add theme color
+- [x] Don't read itself
+- [x] Use plain text for everyday messages, for friendly UX.
 - [ ] Tap list command: max 10 minutes live update

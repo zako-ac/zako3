@@ -1,0 +1,18 @@
+[package]
+name = "zako3-telemetry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = "0.32"
+opentelemetry = "0.31"
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic", "metrics"] }
+tonic = { version = "0.14", default-features = false }
+opentelemetry-prometheus = "0.31"
+prometheus = "0.14"

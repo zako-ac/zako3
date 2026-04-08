@@ -1,27 +1,41 @@
 [workspace]
 resolver = "3"
-members = ["audio-engine/audio","audio-engine/controller","audio-engine/core", "audio-engine/infra", "audio-engine/telemetry", "audio-engine/client", "worker/emoji-matcher", "hq/backend", "hq/boot", "hq/bot", "hq/core", "taphub/core", "taphub/transport/client", "taphub/transport/lib", "taphub/transport/server", "types", "vendor/zod_gen", "zakoctl", "zakofish", "tap-sdk", "worker/metrics-sync", "crates/states", "crates/preload-cache", "worker/cache-gc", "crates/tts-matching"]
+members = [
+    "crates/preload-cache",
+    "crates/states",
+    "crates/telemetry",
+    "crates/types",
+    "crates/taphub-transport/client",
+    "crates/taphub-transport/lib",
+    "crates/taphub-transport/server",
+    "crates/tts-matching",
+
+    "libs/*",
+    "services/*/*",
+    "workers/*",
+    "zakoctl",
+]
 
 [workspace.dependencies]
-zako3-audio-engine-controller = { path = "audio-engine/controller" }
-zako3-audio-engine-client = { path = "audio-engine/client" }
-zako3-audio-engine-core = { path = "audio-engine/core" }
-zako3-audio-engine-infra = { path = "audio-engine/infra" }
-zako3-audio-engine-telemetry = { path = "audio-engine/telemetry" }
-zako3-audio-engine-audio = { path = "audio-engine/audio", features = ["telemetry"] }
+zako3-telemetry = { path = "crates/telemetry" }
 
-zako3-taphub-transport-client = { path = "taphub/transport/client" }
+zako3-taphub-transport-client = { path = "crates/taphub-transport/client" }
+zako3-taphub-transport-server = { path = "crates/taphub-transport/server" }
+zako3-audio-engine-client = { path = "services/audio-engine/client" }
+zako3-preload-cache = { path = "crates/preload-cache" }
+zako3-types = { path = "crates/types" }
+zako3-states = { path = "crates/states" }
 
-zako3-types = { path = "types" }
+zako3-tts-matching = { path = "crates/tts-matching" }
 
-zakofish = { path = "zakofish" }
-zako3-tap-sdk = { path = "tap-sdk" }
+zakofish = { path = "libs/zakofish" }
+zakofish-taphub = { path = "crates/zakofish-taphub" }
+zako3-tap-sdk = { path = "libs/tap-sdk" }
 
 # HQ Dependencies
-hq-types = { path = "types", package = "zako3-types" }
-hq-core = { path = "hq/core" }
-hq-backend = { path = "hq/backend" }
-hq-bot = { path = "hq/bot" }
+hq-types = { path = "crates/types", package = "zako3-types" }
+
+zod_gen = { path = "vendor/zod_gen", version = "1.3.0" }
 
 tokio = { version = "1.36", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -71,4 +85,5 @@ opt-level = 0
 path = "vendor/zod_gen"
 
 [patch.crates-io.protofish2]
-path = "/home/allen/projects/protofish2-rs"
+git = "https://github.com/mincomk/protofish2-rs"
+branch = "main"

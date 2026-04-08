@@ -10,8 +10,8 @@
       "dashboard": "Dashboard",
       "dashboardSubtitle": "Here's an overview of the system.",
       "globalSettings": {
-        "description": "",
-        "title": ""
+        "description": "Manage global settings that affect the entire system, such as TTS defaults and system-wide configurations.",
+        "title": "Global Settings"
       },
       "mappers": {
         "cancel": "Cancel",
@@ -114,12 +114,14 @@
         "subtitle": "Manage system notifications",
         "title": "Notifications"
       },
+      "on": "on",
       "overview": "Overview",
       "pendingVerifications": "Pending Verifications",
       "quickActions": "Quick Actions",
       "recentActivity": "Recent Activity",
       "stats": {
         "allSystemsOperational": "All systems operational",
+        "healthy": "Healthy",
         "pendingVerifications": "Pending Verifications",
         "requiresReview": "Requires review",
         "systemHealth": "System Health",
@@ -141,7 +143,7 @@
         "subtitle": "Manage all taps in the system",
         "tapDetails": "Tap Details",
         "title": "Taps",
-        "updateSuccess": ""
+        "updateSuccess": "Tap updated successfully!"
       },
       "users": {
         "actions": {
@@ -166,11 +168,11 @@
           "description": "Are you sure you want to grant admin role to user {{username}}? They will have full access to the admin panel.",
           "title": "Confirm Make Admin"
         },
-        "manageUser": "",
-        "noTaps": "",
+        "manageUser": "Manage User",
+        "noTaps": "No taps owned.",
         "noUsers": "No users found.",
-        "ownedTaps": "",
-        "profile": "",
+        "ownedTaps": "Owned Taps",
+        "profile": "Profile",
         "removeAdmin": "Remove Admin",
         "removeAdminConfirm": {
           "description": "Are you sure you want to remove admin role from user {{username}}? They will lose access to the admin panel.",
@@ -225,8 +227,9 @@
       }
     },
     "auth": {
+      "authenticating": "Authenticating...",
       "continueWithDiscord": "Continue with Discord",
-      "loginRequired": "",
+      "loginRequired": "Login required",
       "redirectAfterLogin": "Redirecting you now...",
       "signInDescription": "Sign in to continue to the dashboard.",
       "welcome": "Welcome"
@@ -235,16 +238,29 @@
       "actions": "Actions",
       "back": "Back",
       "cancel": "Cancel",
+      "changeLanguage": "Change language",
+      "clear": "Clear",
       "close": "Close",
       "confirm": "Confirm",
       "copied": "Copied to clipboard!",
       "copy": "Copy to clipboard",
       "copyIdToClipboard": "Copy ID to clipboard",
       "delete": "Delete",
+      "errorLoadingData": "Error loading data:",
+      "keyboardShortcuts": "Keyboard Shortcuts",
+      "keyboardShortcutsDescription": "Available keyboard shortcuts for quick navigation and actions",
       "loading": "Loading...",
+      "noActivityYet": "No activity yet",
+      "of": "of",
+      "page": "Page",
+      "perPage": "per page",
+      "pressEscape": "Press",
       "role": "Role",
       "search": "Search",
-      "timestamp": "",
+      "system": "System",
+      "timestamp": "Timestamp",
+      "toCloseDialog": "to close this dialog",
+      "toggleTheme": "Toggle theme",
       "viewAll": "View All"
     },
     "dashboard": {
@@ -261,15 +277,15 @@
         "uptime": "Uptime"
       },
       "subtitle": "Welcome to your dashboard.",
-      "uses_one": "",
-      "uses_other": "",
+      "uses_one": "{{count}} use",
+      "uses_other": "{{count}} uses",
       "welcome": "Welcome, {{name}}!"
     },
     "errors": {
-      "ownerNotFound": "",
-      "tapNotFound": "",
-      "updateFailed": "",
-      "userNotFound": ""
+      "ownerNotFound": "Owner not found.",
+      "tapNotFound": "Tap not found.",
+      "updateFailed": "Failed to update.",
+      "userNotFound": "User not found."
     },
     "guilds": {
       "settings": {
@@ -303,29 +319,30 @@
       "verification": "Verification"
     },
     "notifications": {
-      "all": "",
-      "category": "",
+      "all": "All",
+      "category": "Category",
       "deleteConfirm": {
-        "description": "",
-        "title": ""
+        "description": "Are you sure you want to delete this notification? This cannot be undone.",
+        "title": "Confirm Deletion"
       },
-      "deleted": "",
-      "level": "",
+      "deleted": "Notification deleted.",
+      "level": "Level",
       "levels": {
-        "error": "",
-        "info": "",
-        "success": "",
-        "warning": ""
+        "error": "Error",
+        "info": "Info",
+        "success": "Success",
+        "warning": "Warning"
       },
-      "markAllAsRead": "",
-      "markedAllAsRead": "",
-      "markedAsRead": "",
-      "message": "",
+      "markAllAsRead": "Mark All as Read",
+      "markedAllAsRead": "All notifications marked as read.",
+      "markedAsRead": "Notification marked as read.",
+      "message": "Message",
       "noNotifications": "No new notifications.",
-      "read": "",
-      "status": "",
+      "read": "Read",
+      "status": "Status",
       "title": "Notifications",
-      "unread": ""
+      "unread": "Unread",
+      "viewAll": "View all notifications"
     },
     "settings": {
       "account": "Account",
@@ -367,7 +384,7 @@
       "notifications": "Notifications",
       "notificationsCheckBackLater": "Notification settings coming soon. Check back later!",
       "notificationsSubtitle": "Manage how you receive notifications",
-      "overriddenByUpstream": "",
+      "overriddenByUpstream": "Overridden by upstream",
       "pattern": "Pattern",
       "profile": "Profile",
       "profileSubtitle": "Your personal information",
@@ -377,9 +394,9 @@
       "saveSuccess": "Settings saved successfully!",
       "saving": "Saving...",
       "scope": {
-        "important": "Important",
-        "none": "None",
-        "normal": "Normal"
+        "important": "Force",
+        "none": "Default",
+        "normal": "Set"
       },
       "searchTaps": "Search taps...",
       "selectTap": "Select a Voice Tap",
@@ -393,7 +410,7 @@
       "textReadingRuleOnMicMute": "Only read messages aloud when my mic is muted",
       "title": "Settings",
       "tts": "TTS Settings",
-      "ttsQueue": "",
+      "ttsQueue": "TTS Queue",
       "ttsSubtitle": "Configure how your messages are read aloud.",
       "ttsVoice": "TTS Voice",
       "ttsVoiceNone": "None (use default)"
@@ -401,7 +418,7 @@
     "taps": {
       "activeCount": "{{value}} online",
       "create": "Create Tap",
-      "createdAt": "",
+      "createdAt": "Created At",
       "createFirst": "Create your first Tap",
       "createFirstDescription": "Get started by creating a new Tap.",
       "createSuccess": "Tap created successfully!",
@@ -429,13 +446,14 @@
         "permission": "Permission",
         "roles": "Roles",
         "rolesHelp": "Select at least one role",
-        "whitelistedUsers": "",
-        "whitelistedUsersHelp": ""
+        "whitelistedUsers": "Whitelisted Users",
+        "whitelistedUsersHelp": "Users authorized to interact with this Tap."
       },
       "myTaps": "My Taps",
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
+      "notFound": "Tap not found",
       "occupations": {
         "base": "Base",
         "official": "Official",
@@ -454,6 +472,7 @@
       },
       "report": {
         "description": "Why are you reporting this Tap?",
+        "descriptionPlaceholder": "Please provide details about the issue...",
         "reason": "Reason",
         "submit": "Submit Report",
         "success": "Report submitted successfully.",
@@ -534,6 +553,20 @@
       "tapId": "Tap ID",
       "totalUses": "Total Uses",
       "updatedAt": "Updated At",
+      "userList": {
+        "addUserIdButton": "Add \"{{userId}}\" as user ID",
+        "clearAll": "Clear all",
+        "export": "Export",
+        "exportAsCSV": "Export as CSV",
+        "exportAsJSON": "Export as JSON",
+        "exportedCSV": "User list exported as CSV",
+        "exportedJSON": "User list exported as JSON",
+        "import": "Import",
+        "noUsersFound": "No users found.",
+        "startTyping": "Start typing to search users...",
+        "userIdAdded": "Added user ID. Note: This user may not exist yet.",
+        "userNotExists": "This user doesn't exist yet. This is allowed - they may be added later."
+      },
       "uses": "{{value}} use",
       "verification": {
         "description": "Verification Description",
@@ -548,8 +581,20 @@
         "subtitle": "Get your tap verified for better visibility and trust",
         "title": "Tap Verification",
         "titleLabel": "Request Title",
-        "titlePlaceholder": "e.g. Official verification for XYZ"
+        "titlePlaceholder": "e.g. Official verification for XYZ",
+        "verificationInfo": "Verification requests are manually reviewed by the ZAKO team. It may take a few days for your request to be processed."
       }
+    },
+    "voice": {
+      "history": "History",
+      "noActiveSession": "No active session in this channel.",
+      "noRecentActions": "No recent actions.",
+      "noTracksInQueue": "No tracks in queue.",
+      "queues": "Queues",
+      "requestedBy": "Requested by",
+      "skip": "Skip",
+      "tap": "Tap",
+      "volume": "Vol"
     }
   }
 }

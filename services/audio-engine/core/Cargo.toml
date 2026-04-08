@@ -1,0 +1,31 @@
+[package]
+name = "zako3-audio-engine-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = "0.1.89"
+bytemuck = "1.24.0"
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
+dashmap = "6.1.0"
+derive_more = { version = "2.1.1", features = ["from", "into", "from_str"] }
+lazy_static = "1.5.0"
+mockall = "0.14.0"
+parking_lot = "0.12.5"
+proptest = "1.9.0"
+ringbuf = { version = "0.4.8", git = "https://github.com/mincomk/ringbuf" }
+rs-snowflake = "0.6.0"
+serde = { version = "1.0.228", features = ["derive"] }
+sha2 = "0.10.9"
+redis = { version = "0.27", features = ["tokio-comp"] }
+serde_json = "1.0"
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+symphonia = "0.5.5"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["full"] }
+tokio-util = { version = "0.7.17", features = ["io", "io-util"] }
+
+tracing = "0.1.44"
+zako3-audio-engine-audio = { path = "../audio", features = ["telemetry"] }
+zako3-types.workspace = true
+songbird.workspace = true

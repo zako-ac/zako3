@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,7 @@ import { useKeymapHotkey } from '@/hooks/use-hotkeys'
 import { Keyboard } from 'lucide-react'
 
 export function KeyboardShortcutsDialog() {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
 
   // Listen for ? key to open dialog
@@ -26,10 +28,10 @@ export function KeyboardShortcutsDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Keyboard className="size-5" />
-            Keyboard Shortcuts
+            {t('common.keyboardShortcuts')}
           </DialogTitle>
           <DialogDescription>
-            Available keyboard shortcuts for quick navigation and actions
+            {t('common.keyboardShortcutsDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -62,8 +64,7 @@ export function KeyboardShortcutsDialog() {
 
         <div className="mt-4 border-t pt-4">
           <p className="text-muted-foreground text-center text-xs">
-            Press <KbdKeys keys="escape" className="mx-1 inline-flex" /> to
-            close this dialog
+            {t('common.pressEscape')} <KbdKeys keys="escape" className="mx-1 inline-flex" /> {t('common.toCloseDialog')}
           </p>
         </div>
       </DialogContent>
