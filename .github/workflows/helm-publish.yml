@@ -42,5 +42,5 @@ jobs:
 
       - name: Package and push (latest)
         run: |
-          helm package ./helm --version "latest" --app-version "${{ env.SHA }}"
-          helm push zako3-latest.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm
+          helm package ./helm --version "0.1.0-latest" --app-version "${{ env.SHA }}"
+          helm push zako3-0.1.0-latest.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm
