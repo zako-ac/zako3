@@ -77,58 +77,68 @@ impl ZakofishTap {
         )
         .await?;
 
-        // 1. Control Stream
-        let mut control_stream = conn.open_mani().await?;
+        let mut reconnect_rx = conn.subscribe_reconnect();
 
-        let hello_msg = TapToHubMessage::ClientHello(hello_info);
-        let encoded_hello = crate::protocol::codec::encode_msgpack(&hello_msg)?;
-        control_stream.send_payload(encoded_hello).await?;
+        // Initial handshake
+        do_handshake(&mut conn, &hello_info).await?;
 
-        let response_bytes = control_stream.recv_payload().await?;
-        let response: HubToTapMessage = crate::protocol::codec::decode_msgpack(&response_bytes)?;
-
-        match response {
-            HubToTapMessage::Accept => {
-                tracing::info!("Tap connected and accepted by Hub.");
-            }
-            HubToTapMessage::Reject(reject) => {
-                return Err(ZakofishError::ProtocolError(format!(
-                    "Hub rejected connection: {:?}",
-                    reject
-                )));
-            }
-            _ => {
-                return Err(ZakofishError::ProtocolError(
-                    "Expected Accept or Reject".to_string(),
-                ));
-            }
-        }
-
-        // Keep the control stream alive in a separate task, waiting for the server to close it
-        tokio::spawn(async move {
-            let _ = control_stream.recv_payload().await;
-            tracing::warn!("Control stream closed by Hub.");
-        });
-
-        // 2. Listen for incoming AudioRequest streams
         loop {
-            let mut mani_stream = match conn.accept_mani().await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    tracing::error!("Failed to accept mani stream: {:?}", e);
-                    break;
+            tokio::select! {
+                // A new physical connection was established — re-register with hub
+                _ = reconnect_rx.changed() => {
+                    reconnect_rx.borrow_and_update();
+                    tracing::info!("Reconnected to Hub, re-sending ClientHello");
+                    if let Err(e) = do_handshake(&mut conn, &hello_info).await {
+                        tracing::error!("Re-handshake failed: {:?}", e);
+                        // Loop continues; accept_mani will trigger another reconnect if needed
+                    }
                 }
-            };
-
-            let handler_clone = handler.clone();
-            tokio::spawn(async move {
-                if let Err(e) = handle_incoming_stream(&mut mani_stream, handler_clone).await {
-                    tracing::error!("Error handling incoming stream: {:?}", e);
+                // Hub opened a new stream for an audio request
+                stream_result = conn.accept_mani() => {
+                    match stream_result {
+                        Ok(mut mani_stream) => {
+                            let handler_clone = handler.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = handle_incoming_stream(&mut mani_stream, handler_clone).await {
+                                    tracing::error!("Error handling incoming stream: {:?}", e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to accept mani stream: {:?}", e);
+                            break;
+                        }
+                    }
                 }
-            });
+            }
         }
 
         Ok(())
+    }
+}
+
+async fn do_handshake(conn: &mut ReconnectingConnection, hello_info: &TapClientHello) -> Result<()> {
+    let mut control_stream = conn.open_mani().await?;
+
+    let hello_msg = TapToHubMessage::ClientHello(hello_info.clone());
+    let encoded_hello = crate::protocol::codec::encode_msgpack(&hello_msg)?;
+    control_stream.send_payload(encoded_hello).await?;
+
+    let response_bytes = control_stream.recv_payload().await?;
+    let response: HubToTapMessage = crate::protocol::codec::decode_msgpack(&response_bytes)?;
+
+    match response {
+        HubToTapMessage::Accept => {
+            tracing::info!("Tap connected and accepted by Hub.");
+            Ok(())
+        }
+        HubToTapMessage::Reject(reject) => Err(ZakofishError::ProtocolError(format!(
+            "Hub rejected connection: {:?}",
+            reject
+        ))),
+        _ => Err(ZakofishError::ProtocolError(
+            "Expected Accept or Reject".to_string(),
+        )),
     }
 }
 
