@@ -21,11 +21,15 @@ pub(crate) async fn handle_request_audio_inner(
     request: CachedAudioRequest,
 ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
     let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
+
+    let ars = request.audio_request.to_string();
+
     let span = tracing::info_span!(
         "audio.request",
         tap_name = %request.tap_name.0,
         discord_user_id = %request.discord_user_id.0,
         cache_key = ?request.cache_key,
+        ars = %ars,
         tap_id = tracing::field::Empty,
         cache_hit = tracing::field::Empty,
         connection_id = tracing::field::Empty,
@@ -71,55 +75,60 @@ pub(crate) async fn handle_request_audio_inner(
 
     if let Some(ref item) = cache_item
         && let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await
-            && entry.has_audio() && !entry.is_downloading() {
-                tracing::info!(tap_id = %tap_id.0, cache_key = %item.key, cache_hit = true, "Cache hit");
-                if let Some(reader) = tap_hub
-                    .audio_cache
-                    .open_reader(&item.tap_id, &item.key)
-                    .await
-                {
-                    tap_hub
-                        .metrics_service
-                        .inc_cache_hits(tap_id.clone())
-                        .await
-                        .ok();
+        && entry.has_audio()
+        && !entry.is_downloading()
+    {
+        if let Some(reader) = tap_hub
+            .audio_cache
+            .open_reader(&item.tap_id, &item.key)
+            .await
+        {
+            tap_hub
+                .metrics_service
+                .inc_cache_hits(tap_id.clone())
+                .await
+                .ok();
 
-                    metrics::metrics().cache_hits_total.add(
-                        1,
-                        &[KeyValue::new("tap_id", tap_id.0.to_string()), KeyValue::new("request_type", "audio")],
-                    );
-                    tracing::Span::current().record("cache_hit", true);
+            metrics::metrics().cache_hits_total.add(
+                1,
+                &[
+                    KeyValue::new("tap_id", tap_id.0.to_string()),
+                    KeyValue::new("request_type", "audio"),
+                ],
+            );
+            tracing::Span::current().record("cache_hit", true);
+            tracing::info!(tap_id = %tap_id.0, cache_key = %item.key, cache_hit = true, "Cache hit");
 
-                    let (tx, rx) = mpsc::channel(100);
-                    tokio::spawn(async move {
-                        let mut reader = reader;
-                        let mut frame_count = 0u64;
-                        while let Ok(NextFrame::Frame(bytes)) = reader.next_frame().await {
-                            let ts = Timestamp(frame_count * 20);
-                            frame_count += 1;
-                            if tx.send((ts, bytes)).await.is_err() {
-                                break;
-                            }
-                        }
-                    });
-                    let meta = AudioMetaResponse {
-                        metadatas: entry.metadatas,
-                        cache_key: entry.cache_key,
-                        base_volume: tap.base_volume,
-                    };
-
-                    let duration = start.elapsed().as_secs_f64();
-                    metrics::record_audio_request(&tap_id.0.to_string(), true, duration, true);
-
-                    return Ok((meta, rx));
-                } else {
-                    tracing::warn!(
-                        tap_id = %tap_id.0,
-                        key = %item.key,
-                        "Cache entry found but failed to open reader"
-                    );
+            let (tx, rx) = mpsc::channel(100);
+            tokio::spawn(async move {
+                let mut reader = reader;
+                let mut frame_count = 0u64;
+                while let Ok(NextFrame::Frame(bytes)) = reader.next_frame().await {
+                    let ts = Timestamp(frame_count * 20);
+                    frame_count += 1;
+                    if tx.send((ts, bytes)).await.is_err() {
+                        break;
+                    }
                 }
-            }
+            });
+            let meta = AudioMetaResponse {
+                metadatas: entry.metadatas,
+                cache_key: entry.cache_key,
+                base_volume: tap.base_volume,
+            };
+
+            let duration = start.elapsed().as_secs_f64();
+            metrics::record_audio_request(&tap_id.0.to_string(), true, duration, true);
+
+            return Ok((meta, rx));
+        } else {
+            tracing::warn!(
+                tap_id = %tap_id.0,
+                key = %item.key,
+                "Cache entry found but failed to open reader"
+            );
+        }
+    }
 
     tracing::Span::current().record("cache_hit", false);
     tracing::info!(
@@ -176,7 +185,13 @@ pub(crate) async fn handle_request_audio_inner(
         tokio::spawn(
             async move {
                 if let Err(e) = cache
-                    .store(item_clone, metadatas_clone, cache_key_domain, rel_rx, done_rx)
+                    .store(
+                        item_clone,
+                        metadatas_clone,
+                        cache_key_domain,
+                        rel_rx,
+                        done_rx,
+                    )
                     .await
                 {
                     tracing::warn!(%e, "Failed to store audio in cache");
@@ -198,8 +213,7 @@ pub(crate) async fn handle_request_audio_inner(
             };
             let cache2 = Arc::clone(&tap_hub.audio_cache);
             let metadatas2 = metadatas.clone();
-            let cache_key2 =
-                super::wire_convert::wire_cache_policy_to_domain(succ.cache.clone());
+            let cache_key2 = super::wire_convert::wire_cache_policy_to_domain(succ.cache.clone());
             tokio::spawn(async move {
                 if let Err(e) = cache2
                     .store_metadata(meta_item, metadatas2, cache_key2)

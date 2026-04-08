@@ -15,15 +15,19 @@ use zako3_audio_engine_client::{AudioEngineRequest, AudioEngineResponse, TracedA
 pub struct AudioEngineServer {
     pub session_manager: Arc<SessionManager>,
     pub nats_url: String,
-    pub session_consumers: DashMap<GuildId, tokio::task::JoinHandle<()>>,
+    pub session_consumers: Arc<DashMap<(GuildId, ChannelId), tokio::task::JoinHandle<()>>>,
 }
 
 impl AudioEngineServer {
-    pub fn new(session_manager: Arc<SessionManager>, nats_url: String) -> Self {
+    pub fn new(
+        session_manager: Arc<SessionManager>,
+        nats_url: String,
+        session_consumers: Arc<DashMap<(GuildId, ChannelId), tokio::task::JoinHandle<()>>>,
+    ) -> Self {
         Self {
             session_manager,
             nats_url,
-            session_consumers: DashMap::new(),
+            session_consumers,
         }
     }
 
@@ -69,7 +73,7 @@ impl AudioEngineServer {
                         guild_id,
                         channel_id,
                     } => {
-                        if this.session_manager.get_session(*guild_id).is_some() {
+                        if this.session_manager.get_session(*guild_id, *channel_id).is_some() {
                             AudioEngineResponse::Error("Session already exists".to_string())
                         } else {
                             match this.session_manager.join(*guild_id, *channel_id).await {
@@ -90,14 +94,14 @@ impl AudioEngineServer {
                         guild_id,
                         channel_id,
                     } => {
-                        if let Some(session) = this.session_manager.get_session(*guild_id) {
+                        if let Some(session) = this.session_manager.get_session(*guild_id, *channel_id) {
                             let state = session.session_state().await;
                             if let Ok(Some(s)) = state {
                                 if s.channel_id == *channel_id {
-                                    match this.session_manager.leave(*guild_id).await {
+                                    match this.session_manager.leave(*guild_id, *channel_id).await {
                                         Ok(_) => {
                                             if let Some((_, handle)) =
-                                                this.session_consumers.remove(guild_id)
+                                                this.session_consumers.remove(&(*guild_id, *channel_id))
                                             {
                                                 handle.abort();
                                             }
@@ -208,7 +212,7 @@ impl AudioEngineServer {
                     let payload = traced.inner;
 
                     // Self-healing check
-                    if session_manager.get_session(guild_id).is_none() {
+                    if session_manager.get_session(guild_id, channel_id).is_none() {
                         warn!(
                             "Session {} no longer managed by this AE. Aborting consumer.",
                             guild_id
@@ -230,7 +234,7 @@ impl AudioEngineServer {
                             discord_user_id,
                             ..
                         } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session
                                 .play(
                                     queue_name,
@@ -248,49 +252,49 @@ impl AudioEngineServer {
                         AudioEngineRequest::SetVolume {
                             track_id, volume, ..
                         } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.set_volume(track_id, volume).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::Stop { track_id, .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.stop(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::StopMany { filter, .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.stop_many(filter).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::NextMusic { .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.next_music().await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::Pause { track_id, .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.pause(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::Resume { track_id, .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.resume(track_id).await {
                                 Ok(_) => AudioEngineResponse::SuccessBool(true),
                                 Err(e) => AudioEngineResponse::Error(e.to_string()),
                             }
                         }
                         AudioEngineRequest::GetSessionState { .. } => {
-                            let session = session_manager.get_session(guild_id).unwrap();
+                            let session = session_manager.get_session(guild_id, channel_id).unwrap();
                             match session.session_state().await {
                                 Ok(Some(state)) => AudioEngineResponse::SuccessSessionState(state),
                                 Ok(None) => {
@@ -329,6 +333,6 @@ impl AudioEngineServer {
             info!("Session consumer for {} stopped", subject);
         });
 
-        self.session_consumers.insert(guild_id, handle);
+        self.session_consumers.insert((guild_id, channel_id), handle);
     }
 }

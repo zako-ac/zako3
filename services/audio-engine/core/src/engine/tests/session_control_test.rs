@@ -63,7 +63,7 @@ async fn test_play_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(100),
@@ -81,7 +81,7 @@ async fn test_play_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(100),
@@ -128,6 +128,7 @@ async fn test_play_success() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -171,7 +172,7 @@ async fn test_play_queued() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(100),
@@ -187,7 +188,7 @@ async fn test_play_queued() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(100),
@@ -215,6 +216,7 @@ async fn test_play_queued() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -259,7 +261,7 @@ async fn test_stop_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -275,7 +277,7 @@ async fn test_stop_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -296,7 +298,7 @@ async fn test_stop_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -306,6 +308,7 @@ async fn test_stop_success() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -338,7 +341,7 @@ async fn test_stop_non_existent() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -349,7 +352,7 @@ async fn test_stop_non_existent() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -365,7 +368,7 @@ async fn test_stop_non_existent() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             Ok(Some(SessionState {
                 guild_id,
                 channel_id: ChannelId::from(200),
@@ -375,6 +378,7 @@ async fn test_stop_non_existent() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -401,7 +405,7 @@ async fn test_set_volume() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(300),
@@ -420,6 +424,7 @@ async fn test_set_volume() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -445,7 +450,7 @@ async fn test_next_music_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(400),
@@ -472,7 +477,7 @@ async fn test_next_music_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(400),
@@ -496,7 +501,7 @@ async fn test_next_music_success() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(400),
@@ -533,6 +538,7 @@ async fn test_next_music_success() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -553,7 +559,7 @@ async fn test_next_music_last_track() {
     mock_state
         .expect_get_session()
         .times(1)
-        .returning(move |_| {
+        .returning(move |_, _| {
             let mut s = SessionState {
                 guild_id,
                 channel_id: ChannelId::from(500),
@@ -570,6 +576,7 @@ async fn test_next_music_last_track() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),
@@ -610,7 +617,7 @@ async fn test_end_of_track_handling_and_preload() {
 
     // Unified get_session mock
     let s_clone = state_store.clone();
-    mock_state.expect_get_session().returning(move |_| {
+    mock_state.expect_get_session().returning(move |_, _| {
         let s = s_clone.lock().unwrap().clone();
         Ok(Some(s))
     });
@@ -720,6 +727,7 @@ async fn test_end_of_track_handling_and_preload() {
 
     let control = create_session_control(
         guild_id,
+        ChannelId::from(100),
         Arc::new(mock_mixer),
         Arc::new(mock_decoder),
         Arc::new(mock_state),

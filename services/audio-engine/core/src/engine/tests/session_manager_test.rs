@@ -62,12 +62,14 @@ async fn test_session_manager_leave() {
         .times(1)
         .returning(|_| Ok(()));
 
+    let channel_id = ChannelId::from(200);
+
     // 2. Delete session
     mock_state
         .expect_delete_session()
-        .with(eq(guild_id))
+        .with(eq(guild_id), eq(channel_id))
         .times(1)
-        .returning(|_| Ok(()));
+        .returning(|_, _| Ok(()));
 
     let manager = SessionManager::new(
         Arc::new(mock_discord),
@@ -75,7 +77,7 @@ async fn test_session_manager_leave() {
         Arc::new(mock_taphub),
     );
 
-    let res = manager.leave(guild_id).await;
+    let res = manager.leave(guild_id, channel_id).await;
     assert!(res.is_ok());
 }
 

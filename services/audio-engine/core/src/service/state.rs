@@ -1,6 +1,6 @@
 use crate::{
     error::ZakoResult,
-    types::{GuildId, SessionState},
+    types::{ChannelId, GuildId, SessionState},
 };
 use async_trait::async_trait;
 use mockall::automock;
@@ -11,9 +11,13 @@ pub type ArcStateService = Arc<dyn StateService>;
 #[automock]
 #[async_trait]
 pub trait StateService: Send + Sync + 'static {
-    async fn get_session(&self, guild_id: GuildId) -> ZakoResult<Option<SessionState>>;
+    async fn get_session(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+    ) -> ZakoResult<Option<SessionState>>;
     async fn save_session(&self, session: &SessionState) -> ZakoResult<()>;
-    async fn delete_session(&self, guild_id: GuildId) -> ZakoResult<()>;
+    async fn delete_session(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()>;
     async fn list_sessions(&self) -> ZakoResult<Vec<SessionState>>;
     async fn list_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>>;
 }
@@ -21,12 +25,13 @@ pub trait StateService: Send + Sync + 'static {
 pub async fn modify_state_session<F>(
     state_service: &ArcStateService,
     guild_id: GuildId,
+    channel_id: ChannelId,
     f: F,
 ) -> ZakoResult<()>
 where
     F: FnOnce(&mut SessionState) + Send + 'static,
 {
-    if let Some(mut session) = state_service.get_session(guild_id).await? {
+    if let Some(mut session) = state_service.get_session(guild_id, channel_id).await? {
         f(&mut session);
         state_service.save_session(&session).await?;
     }

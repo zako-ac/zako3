@@ -3,7 +3,7 @@ use redis::AsyncCommands;
 use zako3_audio_engine_core::{
     error::ZakoResult,
     service::state::StateService,
-    types::{GuildId, SessionState},
+    types::{ChannelId, GuildId, SessionState},
 };
 
 pub struct RedisStateService {
@@ -18,17 +18,29 @@ impl RedisStateService {
         Ok(Self { conn, ae_id })
     }
 
-    fn get_key(&self, guild_id: GuildId) -> String {
-        let id: u64 = guild_id.into();
-        format!("session:{}:{}", self.ae_id, id)
+    fn get_key(&self, guild_id: GuildId, channel_id: ChannelId) -> String {
+        format!(
+            "session:{}:{}:{}",
+            self.ae_id,
+            u64::from(guild_id),
+            u64::from(channel_id)
+        )
+    }
+
+    fn guild_pattern(&self, guild_id: GuildId) -> String {
+        format!("session:{}:{}:*", self.ae_id, u64::from(guild_id))
     }
 }
 
 #[async_trait]
 impl StateService for RedisStateService {
-    async fn get_session(&self, guild_id: GuildId) -> ZakoResult<Option<SessionState>> {
+    async fn get_session(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+    ) -> ZakoResult<Option<SessionState>> {
         let mut conn = self.conn.clone();
-        let key = self.get_key(guild_id);
+        let key = self.get_key(guild_id, channel_id);
         let data: Option<String> = conn.get(key).await?;
 
         match data {
@@ -42,15 +54,15 @@ impl StateService for RedisStateService {
 
     async fn save_session(&self, session: &SessionState) -> ZakoResult<()> {
         let mut conn = self.conn.clone();
-        let key = self.get_key(session.guild_id);
+        let key = self.get_key(session.guild_id, session.channel_id);
         let json = serde_json::to_string(session)?;
         let _: () = conn.set(key, json).await?;
         Ok(())
     }
 
-    async fn delete_session(&self, guild_id: GuildId) -> ZakoResult<()> {
+    async fn delete_session(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
         let mut conn = self.conn.clone();
-        let key = self.get_key(guild_id);
+        let key = self.get_key(guild_id, channel_id);
         let _: () = conn.del(key).await?;
         Ok(())
     }
@@ -76,10 +88,22 @@ impl StateService for RedisStateService {
     }
 
     async fn list_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
-        if let Some(session) = self.get_session(guild_id).await? {
-            Ok(vec![session])
-        } else {
-            Ok(vec![])
+        let mut conn = self.conn.clone();
+        let pattern = self.guild_pattern(guild_id);
+        let keys: Vec<String> = redis::cmd("KEYS")
+            .arg(&pattern)
+            .query_async(&mut conn)
+            .await?;
+
+        let mut sessions = Vec::with_capacity(keys.len());
+        for key in keys {
+            let data: Option<String> = conn.get(&key).await?;
+            if let Some(json) = data {
+                let session: SessionState = serde_json::from_str(&json)?;
+                sessions.push(session);
+            }
         }
+
+        Ok(sessions)
     }
 }
