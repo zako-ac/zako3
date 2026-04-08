@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use sha2::{Sha256, Digest};
 use serenity::Client;
 use serenity::all::GatewayIntents;
+use sha2::{Digest, Sha256};
 use songbird::SerenityInit;
 
 use zako3_audio_engine_controller::{
@@ -113,6 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start consuming
     if let Err(e) = engine_server.run().await {
         tracing::error!("RabbitMQ server error: {:?}", e);
+        panic!();
     }
 
     Ok(())

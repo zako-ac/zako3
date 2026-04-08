@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
-use hq_core::{AppConfig, Service, get_pool, run_migrations};
+use hq_core::{get_pool, run_migrations, AppConfig, Service};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -65,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
         info!("Backend listening on {}", backend_address);
         if let Err(e) = axum::serve(listener, app).await {
             tracing::error!("Backend error: {}", e);
+            panic!("Backend server failed");
         }
     });
 
@@ -81,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
         );
         if let Err(e) = rpc.await {
             tracing::error!("RPC server error: {}", e);
+            panic!("RPC server failed");
         }
     });
 
@@ -90,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
         info!("Starting bot...");
         if let Err(e) = hq_bot::run(service_bot, resolver_slot).await {
             tracing::error!("Bot error: {}", e);
+            panic!("Bot failed");
         }
     });
 

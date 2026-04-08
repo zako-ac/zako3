@@ -87,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Starting TapHub...");
         if let Err(e) = tap_hub_clone.run().await {
             tracing::error!(%e, "Error running TapHub");
+            panic!("TapHub failed to run: {}", e);
         }
     });
 

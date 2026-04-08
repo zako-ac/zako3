@@ -394,9 +394,9 @@
       "saveSuccess": "Settings saved successfully!",
       "saving": "Saving...",
       "scope": {
-        "important": "Important",
-        "none": "None",
-        "normal": "Normal"
+        "important": "Force",
+        "none": "Default",
+        "normal": "Set"
       },
       "searchTaps": "Search taps...",
       "selectTap": "Select a Voice Tap",

@@ -14,8 +14,13 @@ export const usePlaybackState = () =>
     useQuery({
         queryKey: playbackKeys.state(),
         queryFn: playbackApi.getState,
-        refetchInterval: 60_000,
+        refetchInterval: 15_000,
     })
+
+export const useRefreshPlaybackState = () => {
+    const queryClient = useQueryClient()
+    return () => queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
+}
 
 export const usePlaybackEvents = () => {
     const queryClient = useQueryClient()

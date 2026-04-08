@@ -108,8 +108,10 @@ impl ZakofishHub {
                 })?
         };
 
-        let mut conn = conn_arc.lock().await;
-        let mut stream = conn.open_mani().await?;
+        let mut stream = {
+            let mut conn = conn_arc.lock().await;
+            conn.open_mani().await?
+        };
 
         let request = AudioRequestMessage {
             ars: wire_ars,
@@ -165,8 +167,10 @@ impl ZakofishHub {
                 })?
         };
 
-        let mut conn = conn_arc.lock().await;
-        let mut stream = conn.open_mani().await?;
+        let mut stream = {
+            let mut conn = conn_arc.lock().await;
+            conn.open_mani().await?
+        };
 
         let request = AudioMetadataRequestMessage {
             ars: wire_ars,

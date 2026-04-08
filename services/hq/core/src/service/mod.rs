@@ -7,7 +7,7 @@ pub mod validation;
 
 pub use auth::AuthService;
 pub use discord_resolver::{
-    DiscordNameResolver, DiscordNameResolverSlot, GuildInfo, make_resolver_slot,
+    DiscordNameResolver, DiscordNameResolverSlot, DiscordUserInfo, GuildInfo, make_resolver_slot,
 };
 pub use tts_channel::TTSChannelService;
 pub mod api_key;

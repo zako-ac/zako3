@@ -393,9 +393,9 @@
       "saveSuccess": "설정이 성공적으로 저장되었습니다.",
       "saving": "저장 중...",
       "scope": {
-        "important": "중요",
-        "none": "없음",
-        "normal": "기본"
+        "important": "우선순위",
+        "none": "기본값",
+        "normal": "설정"
       },
       "searchTaps": "탭 검색",
       "selectTap": "탭 선택",

@@ -36,9 +36,9 @@ refer hq todo
 - [x] AE re-join on boot
 - [x] Pause feature
 
-- [ ] otel and prometheus and logging(promtail)
-- [ ] Plan proper logging with context
-- [ ] Refine errors
+- [x] otel and prometheus and logging(promtail)
+- [x] Plan proper logging with context
+- [x] Refine errors
 
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
@@ -47,7 +47,7 @@ refer hq todo
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
 - [x] Make tap-sdk
-- [ ] tts commands TODO resolve
+- [x] tts commands TODO resolve
 - [x] Remove dependencies of Zakofish
 - [ ] Standardize service folder structure to "boot"
 
@@ -92,7 +92,7 @@ refer hq todo
 - [ ] Add left-drag sidebar
 
 ## Discord
-- [ ] Separate embeds and add theme color
-- [ ] Don't read itself
-- [ ] Use plain text for everyday messages, for friendly UX.
+- [x] Separate embeds and add theme color
+- [x] Don't read itself
+- [x] Use plain text for everyday messages, for friendly UX.
 - [ ] Tap list command: max 10 minutes live update

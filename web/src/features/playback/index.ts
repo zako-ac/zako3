@@ -2,6 +2,7 @@ export { playbackApi } from './api'
 export {
     playbackKeys,
     usePlaybackState,
+    useRefreshPlaybackState,
     usePlaybackHistory,
     usePlaybackEvents,
     useStopTrack,

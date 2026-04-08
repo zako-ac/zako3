@@ -25,6 +25,20 @@ pub struct TrackDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct DiscordUserInfoDto {
+    pub id: String,
+    pub name: String,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueMetaDto {
+    pub user: Option<DiscordUserInfoDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct GuildPlaybackStateDto {
     pub guild_id: String,
     pub guild_name: String,
@@ -32,6 +46,8 @@ pub struct GuildPlaybackStateDto {
     pub channel_id: String,
     pub channel_name: String,
     pub queues: HashMap<String, Vec<TrackDto>>,
+    #[serde(default)]
+    pub queue_meta: HashMap<String, QueueMetaDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

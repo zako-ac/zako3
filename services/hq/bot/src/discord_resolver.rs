@@ -1,4 +1,4 @@
-use hq_core::service::{DiscordNameResolver, GuildInfo};
+use hq_core::service::{DiscordNameResolver, DiscordUserInfo, GuildInfo};
 use poise::serenity_prelude::{Cache, ChannelId, GuildId, UserId};
 use std::sync::Arc;
 
@@ -24,6 +24,15 @@ impl DiscordNameResolver for SerenityNameResolver {
         self.cache
             .guild(GuildId::new(guild_id))
             .and_then(|g| g.icon_url())
+    }
+
+    fn user_info(&self, user_id: u64) -> Option<DiscordUserInfo> {
+        let user = self.cache.user(UserId::new(user_id))?;
+        Some(DiscordUserInfo {
+            id: user_id,
+            name: user.name.clone(),
+            avatar_url: Some(user.face()),
+        })
     }
 
     fn guilds_for_user(&self, discord_user_id: u64) -> Vec<GuildInfo> {

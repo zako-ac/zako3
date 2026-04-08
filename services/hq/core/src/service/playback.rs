@@ -4,7 +4,8 @@ use chrono::Utc;
 use hq_types::{
     hq::{
         playback::{
-            AudioMetadataDto, EditQueueDto, GuildPlaybackStateDto, PlaybackActionDto, TrackDto,
+            AudioMetadataDto, DiscordUserInfoDto, EditQueueDto, GuildPlaybackStateDto,
+            PlaybackActionDto, QueueMetaDto, TrackDto,
         },
         settings::TextReadingRule,
         UserSettings,
@@ -114,6 +115,30 @@ impl PlaybackService {
                 .unwrap_or_else(|| loc.channel_name.clone());
             let guild_icon_url = resolver.and_then(|r| r.guild_icon_url(loc.guild_id));
 
+            let queue_meta = state
+                .queues
+                .keys()
+                .map(|q| {
+                    let name = q.to_string();
+                    let discord_user_id: Option<u64> = name
+                        .strip_prefix("tts_")
+                        .and_then(|s| s.parse().ok())
+                        .or_else(|| {
+                            name.strip_prefix("temp-")
+                                .and_then(|s| s.split('-').next())
+                                .and_then(|s| s.parse().ok())
+                        });
+                    let user = discord_user_id
+                        .and_then(|uid| resolver.and_then(|r| r.user_info(uid)))
+                        .map(|u| DiscordUserInfoDto {
+                            id: u.id.to_string(),
+                            name: u.name,
+                            avatar_url: u.avatar_url,
+                        });
+                    (name, QueueMetaDto { user })
+                })
+                .collect();
+
             let queues = state
                 .queues
                 .into_iter()
@@ -142,6 +167,7 @@ impl PlaybackService {
                 channel_id: loc.channel_id.to_string(),
                 channel_name,
                 queues,
+                queue_meta,
             });
         }
 
