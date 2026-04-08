@@ -472,12 +472,6 @@ impl PlaybackService {
             return Ok(vec![message_channel_id]);
         }
 
-        tracing::info!(
-            "Bot channel ids in guild {}: {:?}",
-            guild_id,
-            bot_channel_ids
-        );
-
         match settings.text_reading_rule {
             TextReadingRule::Always => {
                 if let Some(info) = user_voice_info {

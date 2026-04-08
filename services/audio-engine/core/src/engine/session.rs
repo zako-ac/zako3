@@ -311,7 +311,30 @@ impl SessionControl {
                     continue;
                 }
                 if !self.mixer.has_source(track.track_id).await {
-                    self.play_now(track).await?;
+                    if let Err(e) = self.play_now(track.clone()).await {
+                        tracing::warn!(
+                            track_id = %track.track_id,
+                            queue_name = %track.queue_name,
+                            error = %e,
+                            "Failed to start playback, removing track from queue"
+                        );
+                        self.mixer.remove_source(track.track_id);
+                        let tid = track.track_id;
+                        let qn = track.queue_name.clone();
+                        modify_state_session(
+                            &self.state_service,
+                            self.guild_id,
+                            self.channel_id,
+                            move |session| {
+                                session.remove_track(tid);
+                            },
+                        )
+                        .await?;
+                        metrics::record_track_lifecycle(
+                            "fail",
+                            &normalize_queue_name(&qn),
+                        );
+                    }
                 }
             }
         }
