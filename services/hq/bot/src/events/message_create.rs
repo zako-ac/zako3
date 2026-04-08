@@ -25,7 +25,16 @@ fn fallback_tap_name() -> TapName {
 
 #[async_trait]
 impl EventHandler for MessageCreateHandler {
-    #[instrument(name = "message_create", skip(self, ctx, msg), fields(guild_id = ?msg.guild_id, channel_id = ?msg.channel_id, author_id = ?msg.author.id, content = ?msg.content))]
+    #[instrument(
+        name = "message_create", skip(self, ctx, msg),
+        fields(
+            guild_id = ?msg.guild_id.map(u64::from),
+            channel_id = %msg.channel_id.to_string(),
+            author_id = %msg.author.id.to_string(), 
+            content = %msg.content,
+            message_id = %msg.id.to_string(),
+        )
+    )]
     async fn message(&self, ctx: Context, msg: serenity::all::Message) {
         tracing::info!("Received message: {}", msg.content);
 
