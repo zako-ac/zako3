@@ -1,0 +1,30 @@
+[package]
+name = "hq-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hq-types = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+jsonwebtoken = { workspace = true }
+oauth2 = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+mockall = { workspace = true }
+urlencoding = "2.1.3"
+sha2 = "0.10"
+hex = "0.4.3"
+jsonrpsee.workspace = true
+zako3-states = { workspace = true, features = ["redis"] }
+zako3-audio-engine-client = { workspace = true }
+zako3-tts-matching.workspace = true

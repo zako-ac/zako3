@@ -3,11 +3,17 @@ use std::process::Command;
 
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let lowercase_dir = manifest_dir.join("../../crates/tts-matching-sdk/examples/lowercase");
+    let lowercase_dir = manifest_dir.join("../../libs/tts-matching-sdk/examples/lowercase");
 
     // Only rebuild when source changes
-    println!("cargo:rerun-if-changed={}", lowercase_dir.join("src").display());
-    println!("cargo:rerun-if-changed={}", lowercase_dir.join("Cargo.toml").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        lowercase_dir.join("src").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        lowercase_dir.join("Cargo.toml").display()
+    );
 
     let status = Command::new("cargo")
         .args(["build", "--target", "wasm32-unknown-unknown", "--release"])
