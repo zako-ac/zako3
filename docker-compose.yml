@@ -45,7 +45,7 @@ services:
   audio-engine:
     build:
       context: .
-      dockerfile: services/audio-engine/Dockerfile
+      dockerfile: services/audio-engine/Dockerfile.dev
     environment:
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
@@ -61,7 +61,7 @@ services:
   hq:
     build:
       context: .
-      dockerfile: services/hq/Dockerfile
+      dockerfile: services/hq/Dockerfile.dev
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-zako3}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-zako3}
       BACKEND_ADDRESS: "0.0.0.0:8080"
@@ -87,7 +87,7 @@ services:
   taphub:
     build:
       context: .
-      dockerfile: services/taphub/Dockerfile
+      dockerfile: services/taphub/Dockerfile.dev
     environment:
       ZK_TH_REDIS_URL: redis://redis:6379
       ZK_TH_HQ_RPC_URL: http://hq:50052
@@ -113,7 +113,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: web/Dockerfile
+      dockerfile: web/Dockerfile.dev
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_WS_BASE_URL: ws://localhost
@@ -128,7 +128,7 @@ services:
   cache-gc:
     build:
       context: .
-      dockerfile: workers/cache-gc/Dockerfile
+      dockerfile: workers/cache-gc/Dockerfile.dev
     environment:
       REDIS_URL: redis://redis:6379
       CACHE_DIR: ${CACHE_GC_CACHE_DIR:-/cache}
@@ -140,7 +140,7 @@ services:
   metrics-sync:
     build:
       context: .
-      dockerfile: workers/metrics-sync/Dockerfile
+      dockerfile: workers/metrics-sync/Dockerfile.dev
     environment:
       DATABASE_URL: postgres://${TIMESCALE_USER:-metrics}:${TIMESCALE_PASSWORD:?}@timescale:5432/${TIMESCALE_DB:-metrics}
       REDIS_URL: redis://redis:6379
