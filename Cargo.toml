@@ -86,3 +86,4 @@ path = "vendor/zod_gen"
 
 [patch.crates-io.protofish2]
 git = "https://github.com/mincomk/protofish2-rs"
+branch = "main"

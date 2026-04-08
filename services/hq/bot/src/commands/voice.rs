@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use crate::{ui, util, Context, Error};
+use crate::{Context, Error, ui, util};
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    hq::{DiscordUserId, TapName},
     AudioRequestString, ChannelId, GuildId, QueueName,
+    hq::{DiscordUserId, TapName},
 };
 use poise::serenity_prelude as serenity;
 
@@ -40,7 +40,7 @@ pub(crate) async fn bot_join_and_announce(
                 guild_id,
                 channel_id,
                 queue_name,
-                TapName::from("google".to_string()),
+                TapName::from("papago".to_string()),
                 AudioRequestString::from(format!("{bot_name} 등장")),
                 1.0.into(),
                 DiscordUserId::from(bot_user_id.get().to_string()),

@@ -1,5 +1,5 @@
-FROM rust:1.81-bookworm AS chef
-RUN cargo install cargo-chef
+FROM rust:1.88-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 FROM chef AS planner
