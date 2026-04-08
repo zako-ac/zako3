@@ -74,6 +74,14 @@ impl TapHubBridgeHandler for MockHandler {
             base_volume: 1.0,
         })
     }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 fn generate_certs() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {

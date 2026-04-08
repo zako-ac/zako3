@@ -35,6 +35,12 @@ pub trait TapHubBridgeHandler: Send + Sync + 'static {
         req: AudioRequest,
         headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String>;
+
+    async fn handle_invalidate_cache(
+        &self,
+        req: CachedAudioRequest,
+        headers: HashMap<String, String>,
+    ) -> Result<(), String>;
 }
 
 pub struct TransportServer {
@@ -167,6 +173,16 @@ async fn handle_stream(
             let headers = req.headers.clone();
             let resp = match handler.handle_request_audio_meta(req, headers).await {
                 Ok(meta) => TapHubResponse::MetaReady(meta),
+                Err(e) => TapHubResponse::Error(e),
+            };
+            stream
+                .send_payload(rmp_serde::to_vec(&resp)?.into())
+                .await?;
+        }
+        TapHubRequest::InvalidateCache(req) => {
+            let headers = req.headers.clone();
+            let resp = match handler.handle_invalidate_cache(req, headers).await {
+                Ok(()) => TapHubResponse::InvalidateCacheOk,
                 Err(e) => TapHubResponse::Error(e),
             };
             stream

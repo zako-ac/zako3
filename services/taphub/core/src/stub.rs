@@ -118,4 +118,12 @@ impl TapHubBridgeHandler for App {
             base_volume: 1.0,
         })
     }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
 }

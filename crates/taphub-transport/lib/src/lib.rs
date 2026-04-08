@@ -6,6 +6,7 @@ pub enum TapHubRequest {
     RequestAudio(CachedAudioRequest),
     PreloadAudio(CachedAudioRequest),
     RequestAudioMeta(AudioRequest),
+    InvalidateCache(CachedAudioRequest),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,4 +14,5 @@ pub enum TapHubResponse {
     AudioReady(AudioMetaResponse),
     MetaReady(AudioMetaResponse),
     Error(String),
+    InvalidateCacheOk,
 }

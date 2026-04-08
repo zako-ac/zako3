@@ -10,6 +10,7 @@ use crate::hub::TapHub;
 
 mod audio_request;
 mod cache;
+mod invalidate_cache;
 mod meta;
 mod permission;
 mod preload;
@@ -40,5 +41,13 @@ impl TapHubBridgeHandler for TapHub {
         _headers: HashMap<String, String>,
     ) -> Result<AudioMetaResponse, String> {
         meta::handle_request_audio_meta_inner(self, req).await
+    }
+
+    async fn handle_invalidate_cache(
+        &self,
+        req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), String> {
+        invalidate_cache::handle_invalidate_cache_inner(self, req).await
     }
 }

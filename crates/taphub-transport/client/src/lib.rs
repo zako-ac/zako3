@@ -98,6 +98,7 @@ impl TransportClient {
 
         let mut stream = conn.open_mani().await.map_err(|e| e.to_string())?;
 
+        let req_clone = req.clone();
         let payload =
             rmp_serde::to_vec(&TapHubRequest::RequestAudio(req)).map_err(|e| e.to_string())?;
         stream
@@ -126,6 +127,8 @@ impl TransportClient {
                     OpusJitterBuffer::new(unreliable_recv, 48000, opus::Channels::Stereo, 20, 100)
                         .map_err(|e| e.to_string())?;
 
+                let conn_clone = Arc::clone(&self.conn);
+
                 tokio::spawn(async move {
                     loop {
                         match jitter.yield_pcm().await {
@@ -137,6 +140,10 @@ impl TransportClient {
                             Ok(None) => break, // Stream ended
                             Err(e) => {
                                 tracing::error!("Jitter buffer error: {:?}", e);
+                                if format!("{:?}", e).contains("InvalidPacket") {
+                                    tracing::warn!("Invalid opus packet detected; invalidating cache");
+                                    send_invalidate_cache(conn_clone, req_clone).await;
+                                }
                                 break;
                             }
                         }
@@ -178,6 +185,20 @@ impl TransportClient {
             _ => Err("Unexpected response".to_string()),
         }
     }
+}
+
+async fn send_invalidate_cache(
+    conn: Arc<Mutex<Option<ReconnectingConnection>>>,
+    req: CachedAudioRequest,
+) {
+    let mut lock = conn.lock().await;
+    let Some(conn) = lock.as_mut() else { return };
+    let Ok(mut stream) = conn.open_mani().await else { return };
+    let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else { return };
+    if stream.send_payload(payload.into()).await.is_err() {
+        return;
+    }
+    let _ = stream.recv_payload().await;
 }
 
 pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer<'static>>> {
