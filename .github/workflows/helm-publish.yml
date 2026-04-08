@@ -1,0 +1,46 @@
+name: Publish Helm chart
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["helm/**"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint
+        run: helm lint ./helm
+
+      - name: Get short SHA
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Package and push (SHA version)
+        run: |
+          helm package ./helm --version "0.1.0-${{ env.SHA }}" --app-version "${{ env.SHA }}"
+          helm push zako3-0.1.0-${{ env.SHA }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm
+
+      - name: Package and push (latest)
+        run: |
+          helm package ./helm --version "latest" --app-version "${{ env.SHA }}"
+          helm push zako3-latest.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm

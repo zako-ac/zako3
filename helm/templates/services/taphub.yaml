@@ -1,0 +1,95 @@
+{{- $fullname := include "zako3.fullname" . }}
+{{- $thSecretName := printf "%s-taphub-secret" $fullname }}
+{{- $existingSecret := .Values.taphub.existingSecret.name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-taphub
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: taphub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 8 }}
+    spec:
+      containers:
+        - name: taphub
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "taphub" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: transport
+              containerPort: {{ .Values.ports.taphubTransport }}
+            - name: zakofish
+              containerPort: {{ .Values.ports.taphubZakofish }}
+            - name: metrics
+              containerPort: {{ .Values.taphub.metricsPort | int }}
+          env:
+            - name: ZK_TH_REDIS_URL
+              value: "redis://{{ $fullname }}-redis:6379"
+            - name: ZK_TH_HQ_RPC_URL
+              value: "http://{{ $fullname }}-hq:{{ .Values.ports.hqRpc }}"
+            - name: ZK_TH_TRANSPORT_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.taphubTransport }}"
+            - name: ZK_TH_ZAKOFISH_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.taphubZakofish }}"
+            - name: ZK_TH_CERT_FILE
+              value: "/certs/cert.pem"
+            - name: ZK_TH_KEY_FILE
+              value: "/certs/key.pem"
+            - name: ZK_TH_CACHE_DIR
+              value: {{ .Values.taphub.cacheDir | quote }}
+            - name: ZK_TH_REQUEST_TIMEOUT_MS
+              value: {{ .Values.taphub.requestTimeoutMs | quote }}
+            - name: ZK_TH_OTLP_ENDPOINT
+              value: "http://{{ $fullname }}-otel-lgtm:4317"
+            - name: ZK_TH_METRICS_PORT
+              value: {{ .Values.taphub.metricsPort | quote }}
+            - name: ZK_TH_HQ_RPC_ADMIN_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $thSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.taphub.existingSecret.key) | nindent 16 }}
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /certs
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: {{ required "taphub.tlsSecret is required" .Values.taphub.tlsSecret }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-taphub
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: transport
+      port: {{ .Values.ports.taphubTransport }}
+      targetPort: transport
+    - name: zakofish
+      port: {{ .Values.ports.taphubZakofish }}
+      targetPort: zakofish

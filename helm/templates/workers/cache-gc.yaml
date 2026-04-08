@@ -1,0 +1,33 @@
+{{- $fullname := include "zako3.fullname" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-cache-gc
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cache-gc
+spec:
+  schedule: {{ .Values.cacheGc.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.cacheGc.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cacheGc.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "zako3.selectorLabels" (dict "component" "cache-gc" "Release" .Release) | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cache-gc
+              image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "cache-gc" "tag" .Values.image.tag) }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: REDIS_URL
+                  value: "redis://{{ $fullname }}-redis:6379"
+                - name: CACHE_DIR
+                  value: {{ .Values.cacheGc.cacheDir | quote }}
+                {{- if .Values.cacheGc.maxCacheBytes }}
+                - name: MAX_CACHE_BYTES
+                  value: {{ .Values.cacheGc.maxCacheBytes | quote }}
+                {{- end }}

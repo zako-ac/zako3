@@ -1,0 +1,115 @@
+{{- $fullname := include "zako3.fullname" . }}
+{{- $hqSecretName := printf "%s-hq-secret" $fullname }}
+{{- $existingSecret := .Values.hq.existingSecret.name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-hq
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "hq" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "hq" "Release" .Release) | nindent 8 }}
+    spec:
+      containers:
+        - name: hq
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "hq" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: backend
+              containerPort: {{ .Values.ports.hqBackend }}
+            - name: rpc
+              containerPort: {{ .Values.ports.hqRpc }}
+            - name: metrics
+              containerPort: {{ .Values.hq.metricsPort | int }}
+          env:
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/{{ .Values.postgres.db }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-postgres-secret" $fullname)
+                    "existingName" .Values.postgres.existingSecret.name
+                    "key" .Values.postgres.existingSecret.key) | nindent 16 }}
+            - name: BACKEND_ADDRESS
+              value: "0.0.0.0:{{ .Values.ports.hqBackend }}"
+            - name: RPC_ADDRESS
+              value: "0.0.0.0:{{ .Values.ports.hqRpc }}"
+            - name: DISCORD_REDIRECT_URI
+              value: {{ .Values.hq.discordRedirectUri | quote }}
+            - name: MAPPER_WASM_DIR
+              value: {{ .Values.hq.mapperWasmDir | quote }}
+            - name: MAPPER_DB_PATH
+              value: {{ .Values.hq.mapperDbPath | quote }}
+            - name: OTLP_ENDPOINT
+              value: "http://{{ $fullname }}-otel-lgtm:4317"
+            - name: NATS_URL
+              value: "nats://{{ $fullname }}-nats:4222"
+            - name: METRICS_PORT
+              value: {{ .Values.hq.metricsPort | quote }}
+            - name: RPC_ADMIN_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.rpcAdminToken) | nindent 16 }}
+            - name: DISCORD_CLIENT_ID
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.discordClientId) | nindent 16 }}
+            - name: DISCORD_CLIENT_SECRET
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.discordClientSecret) | nindent 16 }}
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.discordBotToken) | nindent 16 }}
+            - name: JWT_SECRET
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.jwtSecret) | nindent 16 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-hq
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "hq" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: backend
+      port: {{ .Values.ports.hqBackend }}
+      targetPort: backend
+    - name: rpc
+      port: {{ .Values.ports.hqRpc }}
+      targetPort: rpc
