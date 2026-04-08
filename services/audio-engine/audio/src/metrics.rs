@@ -1,13 +1,13 @@
 #![allow(unused_variables)]
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 #[cfg(feature = "telemetry")]
-use lazy_static::lazy_static;
+use std::sync::OnceLock;
 
 #[cfg(feature = "telemetry")]
-use prometheus::{
-    CounterVec, Histogram, HistogramOpts, IntCounter, IntGauge, Opts, register_counter_vec,
-    register_histogram, register_int_counter, register_int_gauge,
+use opentelemetry::{
+    KeyValue, global,
+    metrics::{Counter, Histogram, ObservableGauge, UpDownCounter},
 };
 
 pub struct AudioMetrics {
@@ -15,6 +15,7 @@ pub struct AudioMetrics {
     pub mixer_loops: AtomicU64,
     pub decoder_stalls: AtomicU64,
     pub stream_underruns: AtomicU64,
+    pub mixer_buffer_depth: AtomicI64,
 }
 
 impl AudioMetrics {
@@ -24,6 +25,7 @@ impl AudioMetrics {
             mixer_loops: AtomicU64::new(0),
             decoder_stalls: AtomicU64::new(0),
             stream_underruns: AtomicU64::new(0),
+            mixer_buffer_depth: AtomicI64::new(0),
         }
     }
 }
@@ -32,83 +34,97 @@ pub static AUDIO_METRICS: std::sync::LazyLock<AudioMetrics> =
     std::sync::LazyLock::new(AudioMetrics::new);
 
 #[cfg(feature = "telemetry")]
-lazy_static! {
-    pub static ref METRIC_MIXER_UNDERRUNS: IntCounter = register_int_counter!(
-        "audio_mixer_underruns_total",
-        "Total number of mixer underruns (starvation)"
-    )
-    .expect("failed to register audio_mixer_underruns_total");
-    pub static ref METRIC_MIXER_BUFFER_DEPTH: IntGauge = register_int_gauge!(
-        "audio_mixer_buffer_depth_samples",
-        "Current available samples in the mixer buffer"
-    )
-    .expect("failed to register audio_mixer_buffer_depth_samples");
-    pub static ref METRIC_DECODER_STALLS: IntCounter = register_int_counter!(
-        "audio_decoder_stalls_total",
-        "Total number of decoder stalls (buffer full)"
-    )
-    .expect("failed to register audio_decoder_stalls_total");
-    pub static ref METRIC_STREAM_UNDERRUNS: IntCounter = register_int_counter!(
-        "audio_stream_underruns_total",
-        "Total number of output stream underruns"
-    )
-    .expect("failed to register audio_stream_underruns_total");
-    pub static ref METRIC_MIXER_ACTIVE_SOURCES: IntGauge = register_int_gauge!(
-        "audio_mixer_active_sources",
-        "Current number of audio sources being mixed"
-    )
-    .expect("failed to register audio_mixer_active_sources");
-    pub static ref METRIC_MIXER_PROCESSING_DURATION: Histogram = register_histogram!(
-        HistogramOpts::new(
-            "audio_mixer_processing_duration_seconds",
-            "Time taken for a single mixer loop iteration"
-        )
-        .buckets(vec![
-            0.001, 0.005, 0.010, 0.015, 0.020, 0.025, 0.030, 0.050, 0.100
-        ])
-    )
-    .expect("failed to register audio_mixer_processing_duration_seconds");
-    pub static ref METRIC_DECODE_ERRORS: CounterVec = register_counter_vec!(
-        Opts::new(
-            "audio_decode_errors_total",
-            "Total number of audio decoding errors"
-        ),
-        &["error_type"]
-    )
-    .expect("failed to register audio_decode_errors_total");
-    pub static ref METRIC_SESSION_ACTIVE: IntGauge = register_int_gauge!(
-        "audio_session_active_total",
-        "Number of active audio sessions"
-    )
-    .expect("failed to register audio_session_active_total");
-    pub static ref METRIC_TRACK_LIFECYCLE: CounterVec = register_counter_vec!(
-        Opts::new("audio_track_lifecycle_total", "Track lifecycle events"),
-        &["event", "queue_name"]
-    )
-    .expect("failed to register audio_track_lifecycle_total");
-    pub static ref METRIC_PRELOAD: CounterVec = register_counter_vec!(
-        Opts::new("audio_preload_total", "Audio preload attempts"),
-        &["result"]
-    )
-    .expect("failed to register audio_preload_total");
-    pub static ref METRIC_TAPHUB_REQUEST_DURATION: Histogram = register_histogram!(
-        HistogramOpts::new(
-            "taphub_request_duration_seconds",
-            "Latency of TapHub API requests"
-        )
-        .buckets(vec![
-            0.010, 0.025, 0.050, 0.100, 0.250, 0.500, 1.0, 2.5, 5.0, 10.0
-        ])
-    )
-    .expect("failed to register taphub_request_duration_seconds");
-    pub static ref METRIC_TAPHUB_ERRORS: CounterVec = register_counter_vec!(
-        Opts::new(
-            "taphub_errors_total",
-            "Total number of TapHub request errors"
-        ),
-        &["endpoint"]
-    )
-    .expect("failed to register taphub_errors_total");
+struct AudioOtelMetrics {
+    mixer_underruns: Counter<u64>,
+    decoder_stalls: Counter<u64>,
+    stream_underruns: Counter<u64>,
+    mixer_active_sources: UpDownCounter<i64>,
+    mixer_processing_duration: Histogram<f64>,
+    decode_errors: Counter<u64>,
+    session_active: UpDownCounter<i64>,
+    track_lifecycle: Counter<u64>,
+    preload: Counter<u64>,
+    taphub_request_duration: Histogram<f64>,
+    taphub_errors: Counter<u64>,
+    // Keep alive so the callback is not unregistered
+    _mixer_buffer_depth_gauge: ObservableGauge<i64>,
+}
+
+#[cfg(feature = "telemetry")]
+static OTEL_METRICS: OnceLock<AudioOtelMetrics> = OnceLock::new();
+
+#[cfg(feature = "telemetry")]
+fn otel() -> &'static AudioOtelMetrics {
+    OTEL_METRICS.get_or_init(|| {
+        let meter = global::meter("audio-engine");
+
+        let buffer_depth_gauge = meter
+            .i64_observable_gauge("audio_mixer_buffer_depth_samples")
+            .with_description("Current available samples in the mixer buffer")
+            .with_callback(|observer| {
+                observer.observe(
+                    AUDIO_METRICS.mixer_buffer_depth.load(Ordering::Relaxed),
+                    &[],
+                );
+            })
+            .build();
+
+        AudioOtelMetrics {
+            mixer_underruns: meter
+                .u64_counter("audio_mixer_underruns_total")
+                .with_description("Total number of mixer underruns (starvation)")
+                .build(),
+            decoder_stalls: meter
+                .u64_counter("audio_decoder_stalls_total")
+                .with_description("Total number of decoder stalls (buffer full)")
+                .build(),
+            stream_underruns: meter
+                .u64_counter("audio_stream_underruns_total")
+                .with_description("Total number of output stream underruns")
+                .build(),
+            mixer_active_sources: meter
+                .i64_up_down_counter("audio_mixer_active_sources")
+                .with_description("Current number of audio sources being mixed")
+                .build(),
+            mixer_processing_duration: meter
+                .f64_histogram("audio_mixer_processing_duration_seconds")
+                .with_description("Time taken for a single mixer loop iteration")
+                .with_unit("s")
+                .with_boundaries(vec![
+                    0.001, 0.005, 0.010, 0.015, 0.020, 0.025, 0.030, 0.050, 0.100,
+                ])
+                .build(),
+            decode_errors: meter
+                .u64_counter("audio_decode_errors_total")
+                .with_description("Total number of audio decoding errors")
+                .build(),
+            session_active: meter
+                .i64_up_down_counter("audio_session_active_total")
+                .with_description("Number of active audio sessions")
+                .build(),
+            track_lifecycle: meter
+                .u64_counter("audio_track_lifecycle_total")
+                .with_description("Track lifecycle events")
+                .build(),
+            preload: meter
+                .u64_counter("audio_preload_total")
+                .with_description("Audio preload attempts")
+                .build(),
+            taphub_request_duration: meter
+                .f64_histogram("taphub_request_duration_seconds")
+                .with_description("Latency of TapHub API requests")
+                .with_unit("s")
+                .with_boundaries(vec![
+                    0.010, 0.025, 0.050, 0.100, 0.250, 0.500, 1.0, 2.5, 5.0, 10.0,
+                ])
+                .build(),
+            taphub_errors: meter
+                .u64_counter("taphub_errors_total")
+                .with_description("Total number of TapHub request errors")
+                .build(),
+            _mixer_buffer_depth_gauge: buffer_depth_gauge,
+        }
+    })
 }
 
 pub fn record_mixer_underrun() {
@@ -116,18 +132,19 @@ pub fn record_mixer_underrun() {
         .mixer_underruns
         .fetch_add(1, Ordering::Relaxed);
     #[cfg(feature = "telemetry")]
-    METRIC_MIXER_UNDERRUNS.inc();
+    otel().mixer_underruns.add(1, &[]);
 }
 
 pub fn record_mixer_buffer_depth(depth: usize) {
-    #[cfg(feature = "telemetry")]
-    METRIC_MIXER_BUFFER_DEPTH.set(depth as i64);
+    AUDIO_METRICS
+        .mixer_buffer_depth
+        .store(depth as i64, Ordering::Relaxed);
 }
 
 pub fn record_decoder_stall() {
     AUDIO_METRICS.decoder_stalls.fetch_add(1, Ordering::Relaxed);
     #[cfg(feature = "telemetry")]
-    METRIC_DECODER_STALLS.inc();
+    otel().decoder_stalls.add(1, &[]);
 }
 
 pub fn record_stream_underrun() {
@@ -135,62 +152,69 @@ pub fn record_stream_underrun() {
         .stream_underruns
         .fetch_add(1, Ordering::Relaxed);
     #[cfg(feature = "telemetry")]
-    METRIC_STREAM_UNDERRUNS.inc();
+    otel().stream_underruns.add(1, &[]);
 }
 
-pub fn record_mixer_active_sources(count: i64) {
-    #[cfg(feature = "telemetry")]
-    METRIC_MIXER_ACTIVE_SOURCES.set(count);
-}
+pub fn record_mixer_active_sources(_count: i64) {}
 
 pub fn inc_mixer_active_sources() {
     #[cfg(feature = "telemetry")]
-    METRIC_MIXER_ACTIVE_SOURCES.inc();
+    otel().mixer_active_sources.add(1, &[]);
 }
 
 pub fn dec_mixer_active_sources() {
     #[cfg(feature = "telemetry")]
-    METRIC_MIXER_ACTIVE_SOURCES.dec();
+    otel().mixer_active_sources.add(-1, &[]);
 }
 
 pub fn record_mixer_processing_duration(duration_secs: f64) {
     #[cfg(feature = "telemetry")]
-    METRIC_MIXER_PROCESSING_DURATION.observe(duration_secs);
+    otel().mixer_processing_duration.record(duration_secs, &[]);
 }
 
 pub fn record_decode_error(error_type: &str) {
     #[cfg(feature = "telemetry")]
-    METRIC_DECODE_ERRORS.with_label_values(&[error_type]).inc();
+    otel()
+        .decode_errors
+        .add(1, &[KeyValue::new("error_type", error_type.to_string())]);
 }
 
 pub fn inc_session_active() {
     #[cfg(feature = "telemetry")]
-    METRIC_SESSION_ACTIVE.inc();
+    otel().session_active.add(1, &[]);
 }
 
 pub fn dec_session_active() {
     #[cfg(feature = "telemetry")]
-    METRIC_SESSION_ACTIVE.dec();
+    otel().session_active.add(-1, &[]);
 }
 
 pub fn record_track_lifecycle(event: &str, queue_name: &str) {
     #[cfg(feature = "telemetry")]
-    METRIC_TRACK_LIFECYCLE
-        .with_label_values(&[event, queue_name])
-        .inc();
+    otel().track_lifecycle.add(
+        1,
+        &[
+            KeyValue::new("event", event.to_string()),
+            KeyValue::new("queue_name", queue_name.to_string()),
+        ],
+    );
 }
 
 pub fn record_preload(result: &str) {
     #[cfg(feature = "telemetry")]
-    METRIC_PRELOAD.with_label_values(&[result]).inc();
+    otel()
+        .preload
+        .add(1, &[KeyValue::new("result", result.to_string())]);
 }
 
 pub fn record_taphub_request_duration(duration_secs: f64) {
     #[cfg(feature = "telemetry")]
-    METRIC_TAPHUB_REQUEST_DURATION.observe(duration_secs);
+    otel().taphub_request_duration.record(duration_secs, &[]);
 }
 
 pub fn record_taphub_error(endpoint: &str) {
     #[cfg(feature = "telemetry")]
-    METRIC_TAPHUB_ERRORS.with_label_values(&[endpoint]).inc();
+    otel()
+        .taphub_errors
+        .add(1, &[KeyValue::new("endpoint", endpoint.to_string())]);
 }

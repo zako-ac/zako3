@@ -17,19 +17,16 @@ use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
 use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest};
 
 pub struct TransportClient {
-    client: Arc<ProtofishClient>,
-    conn: Arc<Mutex<Option<ReconnectingConnection>>>,
-    server_addr: SocketAddr,
-    server_name: String,
+    conn: Arc<Mutex<ReconnectingConnection>>,
 }
 
 impl TransportClient {
-    pub fn new(
+    pub async fn connect(
         bind_addr: SocketAddr,
         server_addr: SocketAddr,
         server_name: String,
         root_certificates: Vec<CertificateDer<'static>>,
-    ) -> std::io::Result<Self> {
+    ) -> Result<Self, String> {
         let protofish_config = ProtofishConfig::default();
 
         let config = ClientConfig {
@@ -39,19 +36,11 @@ impl TransportClient {
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(30),
             protofish_config,
         };
-        let client =
-            ProtofishClient::bind(config).map_err(|e| std::io::Error::other(e.to_string()))?;
+        let client = Arc::new(
+            ProtofishClient::bind(config).map_err(|e| e.to_string())?,
+        );
 
-        Ok(Self {
-            client: Arc::new(client),
-            conn: Arc::new(Mutex::new(None)),
-            server_addr,
-            server_name,
-        })
-    }
-
-    pub async fn connect(&self) -> Result<(), String> {
-        let config = ReconnectConfig {
+        let reconnect_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
             max_backoff: Duration::from_secs(5),
             backoff_multiplier: 2.0,
@@ -59,24 +48,23 @@ impl TransportClient {
         };
 
         let conn = ReconnectingConnection::connect(
-            self.client.clone(),
-            self.server_addr,
-            self.server_name.clone(),
+            client,
+            server_addr,
+            server_name,
             HashMap::new(),
-            config,
+            reconnect_config,
         )
         .await
         .map_err(|e| e.to_string())?;
 
-        let mut lock = self.conn.lock().await;
-        *lock = Some(conn);
-        Ok(())
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
     async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, String> {
         let mut lock = self.conn.lock().await;
-        let conn = lock.as_mut().ok_or("Not connected".to_string())?;
-
+        let conn = &mut *lock;
         let mut stream = conn.open_mani().await.map_err(|e| e.to_string())?;
 
         let payload = rmp_serde::to_vec(&req).map_err(|e| e.to_string())?;
@@ -94,8 +82,7 @@ impl TransportClient {
 
     pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, String> {
         let mut lock = self.conn.lock().await;
-        let conn = lock.as_mut().ok_or("Not connected".to_string())?;
-
+        let conn = &mut *lock;
         let mut stream = conn.open_mani().await.map_err(|e| e.to_string())?;
 
         let req_clone = req.clone();
@@ -188,12 +175,11 @@ impl TransportClient {
 }
 
 async fn send_invalidate_cache(
-    conn: Arc<Mutex<Option<ReconnectingConnection>>>,
+    conn: Arc<Mutex<ReconnectingConnection>>,
     req: CachedAudioRequest,
 ) {
     let mut lock = conn.lock().await;
-    let Some(conn) = lock.as_mut() else { return };
-    let Ok(mut stream) = conn.open_mani().await else { return };
+    let Ok(mut stream) = lock.open_mani().await else { return };
     let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else { return };
     if stream.send_payload(payload.into()).await.is_err() {
         return;

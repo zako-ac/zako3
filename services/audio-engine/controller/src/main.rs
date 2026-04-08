@@ -46,16 +46,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let certs = load_certs("cert.pem").unwrap_or_else(|_| vec![]);
 
-    let taphub_transport = TransportClient::new(
+    let taphub_transport = match TransportClient::connect(
         "0.0.0.0:0".parse()?,
         "127.0.0.1:4000".parse()?,
         "localhost".to_string(),
         certs,
-    )?;
-
-    if let Err(e) = taphub_transport.connect().await {
-        tracing::warn!("Failed to connect to taphub: {:?}", e);
-    }
+    )
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("Failed to connect to taphub: {:?}", e);
+            return Err(e.into());
+        }
+    };
 
     let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
     let state_service = Arc::new(RedisStateService::new(&config.redis_url, ae_id).await?);

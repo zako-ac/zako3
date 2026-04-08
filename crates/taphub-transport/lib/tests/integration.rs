@@ -114,15 +114,14 @@ async fn test_transport_integration() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client_bind_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    let client = TransportClient::new(
+    let client = TransportClient::connect(
         client_bind_addr,
         bound_addr,
         "localhost".to_string(),
         client_certs,
     )
-    .expect("Failed to create client");
-
-    client.connect().await.expect("Failed to connect client");
+    .await
+    .expect("Failed to connect client");
 
     let req = CachedAudioRequest {
         tap_name: "test_tap".to_string().into(),

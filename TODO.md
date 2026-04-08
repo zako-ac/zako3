@@ -53,6 +53,7 @@ refer hq todo
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?
+- [ ] pre-settings: Admin can change UserSettings even user is not registered
 
 ## Do before production
 - [ ] Captcha

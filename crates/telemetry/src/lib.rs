@@ -50,7 +50,7 @@ impl TelemetryConfig {
 /// - Optional HTTP server on `metrics_port` serving `/health` and `/metrics`
 pub async fn init(config: TelemetryConfig) -> anyhow::Result<TelemetryController> {
     tracing::init_tracing(&config.service_name, config.otlp_endpoint.clone())?;
-    metrics::init_metrics(&config.service_name)?;
+    metrics::init_metrics(&config.service_name, config.otlp_endpoint.clone())?;
 
     let is_healthy = Arc::new(AtomicBool::new(false));
 

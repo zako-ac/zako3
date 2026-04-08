@@ -29,10 +29,10 @@ os_pipe = "1.2.3"
 async-os-pipe = "0.1.0"
 bytes = "1.11"
 zako3-audio-engine-telemetry = { path = "../telemetry", optional = true }
-prometheus = { version = "0.13", optional = true }
+opentelemetry = { version = "0.31", optional = true }
 songbird.workspace = true
 opus = "0.3.1"
 
 [features]
-default = []
-telemetry = ["dep:zako3-audio-engine-telemetry", "dep:prometheus"]
+default = ["telemetry"]
+telemetry = ["dep:zako3-audio-engine-telemetry", "dep:opentelemetry"]

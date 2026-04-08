@@ -62,10 +62,13 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
     Ok(())
 }
 
-pub fn init_metrics(service_name: &str) -> anyhow::Result<()> {
+pub fn init_metrics(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
+    use opentelemetry_otlp::WithExportConfig;
+    use opentelemetry_sdk::metrics::PeriodicReader;
+
     let registry = prometheus::default_registry();
 
-    let exporter = opentelemetry_prometheus::exporter()
+    let prom_exporter = opentelemetry_prometheus::exporter()
         .with_registry(registry.clone())
         .build()?;
 
@@ -73,12 +76,20 @@ pub fn init_metrics(service_name: &str) -> anyhow::Result<()> {
         .with_attribute(KeyValue::new("service.name", service_name.to_string()))
         .build();
 
-    let provider = SdkMeterProvider::builder()
-        .with_reader(exporter)
-        .with_resource(resource)
-        .build();
+    let mut builder = SdkMeterProvider::builder()
+        .with_reader(prom_exporter)
+        .with_resource(resource);
 
-    global::set_meter_provider(provider);
+    if let Some(endpoint) = otlp_endpoint {
+        let otlp_exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()?;
+        let periodic_reader = PeriodicReader::builder(otlp_exporter).build();
+        builder = builder.with_reader(periodic_reader);
+    }
+
+    global::set_meter_provider(builder.build());
 
     Ok(())
 }

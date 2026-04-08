@@ -49,7 +49,7 @@ pub async fn init(config: TelemetryConfig) -> anyhow::Result<TelemetryController
     observability::init_tracing(&config.service_name, config.otlp_endpoint.clone())?;
 
     // 2. Initialize Metrics
-    observability::init_metrics(&config.service_name)?;
+    observability::init_metrics(&config.service_name, config.otlp_endpoint.clone())?;
 
     // 3. Prepare Server State
     let is_healthy = Arc::new(AtomicBool::new(false));
