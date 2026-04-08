@@ -309,6 +309,7 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
         .route("/api/v1/playback/ws", get(playback::playback_ws))
         .layer(Extension(event_tx))
         .layer(TraceLayer::new_for_http())
+        .layer(middleware::metrics::MetricsLayer::new())
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

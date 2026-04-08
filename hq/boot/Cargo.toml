@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+zako3-telemetry = { workspace = true }
 hq-core = { workspace = true }
 hq-backend = { workspace = true }
 hq-bot = { workspace = true }

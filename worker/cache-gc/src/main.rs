@@ -4,7 +4,6 @@ mod metrics;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::Level;
 use zako3_preload_cache::FileAudioCache;
 
 use config::{Cli, Command};
@@ -12,7 +11,13 @@ use metrics::ActionMetrics;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    let otlp_endpoint = std::env::var("OTLP_ENDPOINT").ok();
+    let _telemetry = zako3_telemetry::init(zako3_telemetry::TelemetryConfig {
+        service_name: "cache-gc".to_string(),
+        otlp_endpoint,
+        metrics_port: None,
+    })
+    .await?;
 
     let cli = Cli::parse();
 

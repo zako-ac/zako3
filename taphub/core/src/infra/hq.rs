@@ -30,6 +30,7 @@ impl RpcHqRepository {
 
 #[async_trait]
 impl HqRepository for RpcHqRepository {
+    #[tracing::instrument(skip(self, token), name = "hq.rpc.authenticate_tap")]
     async fn authenticate_tap(&self, token: &str) -> Option<Tap> {
         self.http_client
             .authenticate_tap(token.to_string())
@@ -40,7 +41,9 @@ impl HqRepository for RpcHqRepository {
             .ok()?
     }
 
+    #[tracing::instrument(skip(self), name = "hq.rpc.get_tap", fields(tap_id))]
     async fn get_tap_by_id(&self, tap_id: &str) -> Option<Tap> {
+        tracing::Span::current().record("tap_id", tap_id);
         self.http_client
             .get_tap_internal(tap_id.to_string())
             .await
@@ -50,6 +53,7 @@ impl HqRepository for RpcHqRepository {
             .ok()?
     }
 
+    #[tracing::instrument(skip(self), name = "hq.rpc.get_user", fields(discord_id = %discord_id.0))]
     async fn get_user_by_discord_id(&self, discord_id: &DiscordUserId) -> Option<User> {
         self.http_client
             .get_user_by_discord_id(discord_id.0.clone())

@@ -10,7 +10,14 @@ use zako3_states::{RedisCacheRepository, TapMetricKey, TapMetricsStateService, T
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt::init();
+
+    let otlp_endpoint = env::var("OTLP_ENDPOINT").ok();
+    let _telemetry = zako3_telemetry::init(zako3_telemetry::TelemetryConfig {
+        service_name: "metrics-sync".to_string(),
+        otlp_endpoint,
+        metrics_port: None,
+    })
+    .await?;
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");

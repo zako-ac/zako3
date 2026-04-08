@@ -42,6 +42,7 @@ impl AuthService {
         url
     }
 
+    #[tracing::instrument(skip(self, code, state), name = "auth.authenticate", err)]
     pub async fn authenticate(
         &self,
         code: &str,
@@ -192,6 +193,7 @@ impl AuthService {
         }
     }
 
+    #[tracing::instrument(skip(self), name = "auth.get_user", fields(user_id = id), err)]
     pub async fn get_user(&self, id: &str) -> CoreResult<AuthUserDto> {
         let user_id = UserId::from_str(id)
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
@@ -212,6 +214,7 @@ impl AuthService {
         })
     }
 
+    #[tracing::instrument(skip(self), name = "auth.refresh_token", fields(user_id = id), err)]
     pub async fn refresh_token(&self, id: &str) -> CoreResult<AuthResponseDto> {
         let user_id = UserId::from_str(id)
             .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;

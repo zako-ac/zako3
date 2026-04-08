@@ -20,6 +20,8 @@ pub struct AppConfig {
     pub nats_url: String,
     pub mapper_wasm_dir: PathBuf,
     pub mapper_db_path: PathBuf,
+    pub otlp_endpoint: Option<String>,
+    pub metrics_port: Option<u16>,
 }
 
 impl AppConfig {
@@ -44,6 +46,11 @@ impl AppConfig {
             nats_url: env::var("NATS_URL").unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string()),
             mapper_wasm_dir: env::var("MAPPER_WASM_DIR").map(PathBuf::from)?,
             mapper_db_path: env::var("MAPPER_DB_PATH").map(PathBuf::from)?,
+            otlp_endpoint: env::var("OTLP_ENDPOINT").ok(),
+            metrics_port: env::var("METRICS_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .or(Some(9091)),
         })
     }
 }

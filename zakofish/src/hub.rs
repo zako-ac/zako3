@@ -61,8 +61,15 @@ impl ZakofishHub {
             let next_connection_id = self.next_connection_id.clone();
 
             tokio::spawn(async move {
+                let span = tracing::info_span!(
+                    "tap.connection",
+                    tap_id = tracing::field::Empty,
+                    connection_id = tracing::field::Empty,
+                    friendly_name = tracing::field::Empty,
+                    disconnect_reason = tracing::field::Empty,
+                );
                 if let Err(e) =
-                    handle_new_connection(conn, handler, sessions, next_connection_id).await
+                    handle_new_connection(conn, handler, sessions, next_connection_id, span).await
                 {
                     tracing::error!("Error handling new connection: {:?}", e);
                 }
@@ -179,7 +186,10 @@ async fn handle_new_connection(
         >,
     >,
     next_connection_id: Arc<AtomicU64>,
+    span: tracing::Span,
 ) -> Result<()> {
+    let _enter = span.enter();
+
     let mut mani_stream = conn.accept_mani().await?;
     let payload_bytes = mani_stream.recv_payload().await?;
 
@@ -190,6 +200,12 @@ async fn handle_new_connection(
         crate::types::message::TapToHubMessage::ClientHello(hello) => {
             let tap_id = hello.tap_id.clone();
             let connection_id = next_connection_id.fetch_add(1, Ordering::SeqCst);
+
+            tracing::Span::current().record("tap_id", tracing::field::display(&tap_id.0));
+            tracing::Span::current().record("connection_id", connection_id);
+            tracing::Span::current()
+                .record("friendly_name", tracing::field::display(&hello.friendly_name));
+
             match handler.on_tap_authenticate(connection_id, hello).await {
                 Ok(_) => {
                     let accept_msg = crate::types::message::HubToTapMessage::Accept;
@@ -217,10 +233,13 @@ async fn handle_new_connection(
                             }
                         }
                     }
+
+                    tracing::Span::current().record("disconnect_reason", "clean");
                     handler.on_tap_disconnected(tap_id, connection_id).await;
                     Ok(())
                 }
                 Err(reject) => {
+                    tracing::Span::current().record("disconnect_reason", "rejected");
                     let reject_msg = crate::types::message::HubToTapMessage::Reject(reject);
                     mani_stream
                         .send_payload(crate::protocol::codec::encode_msgpack(&reject_msg)?.into())

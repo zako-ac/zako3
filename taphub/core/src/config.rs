@@ -11,6 +11,8 @@ pub struct AppConfig {
     pub redis_url: String,
     pub cache_dir: PathBuf,
     pub request_timeout_ms: u64,
+    pub otlp_endpoint: Option<String>,
+    pub metrics_port: Option<u16>,
 }
 
 impl AppConfig {
@@ -36,6 +38,11 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10_000),
+            otlp_endpoint: env::var("ZK_TH_OTLP_ENDPOINT").ok(),
+            metrics_port: env::var("ZK_TH_METRICS_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .or(Some(9092)),
         })
     }
 }

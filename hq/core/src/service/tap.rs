@@ -40,6 +40,7 @@ impl TapService {
         }
     }
 
+    #[tracing::instrument(skip(self, dto), fields(user_id = %owner_id.0), err)]
     pub async fn create(&self, owner_id: UserId, dto: CreateTapDto) -> CoreResult<Tap> {
         validate_tap_name(&dto.name)?;
         validate_tap_description(&dto.description)?;
@@ -163,6 +164,7 @@ impl TapService {
         })
     }
 
+    #[tracing::instrument(skip(self), err)]
     pub async fn get_tap_with_access(
         &self,
         tap_id: TapId,
@@ -306,6 +308,7 @@ impl TapService {
         })
     }
 
+    #[tracing::instrument(skip(self, dto), fields(tap_id = %tap_id.0, user_id = %user_id.0), err)]
     pub async fn update_tap(
         &self,
         tap_id: TapId,
@@ -446,6 +449,7 @@ impl TapService {
         Ok((tap.clone(), changes))
     }
 
+    #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0, user_id = %user_id.0), err)]
     pub async fn delete_tap(&self, tap_id: TapId, user_id: UserId) -> CoreResult<()> {
         let tap = self
             .tap_repo
@@ -467,6 +471,7 @@ impl TapService {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0), err)]
     pub async fn get_tap_internal(&self, tap_id: TapId) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
     }

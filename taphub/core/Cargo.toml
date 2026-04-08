@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+zako3-telemetry = { workspace = true }
+opentelemetry = "0.31"
 async-trait.workspace = true
 mockall.workspace = true
 serde_json.workspace = true

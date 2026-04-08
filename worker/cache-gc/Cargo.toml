@@ -12,6 +12,7 @@ name = "cache-gc"
 path = "src/main.rs"
 
 [dependencies]
+zako3-telemetry = { workspace = true }
 zako3-preload-cache = { path = "../../crates/preload-cache" }
 zako3-states        = { path = "../../crates/states", features = ["redis"] }
 zako3-types         = { workspace = true }

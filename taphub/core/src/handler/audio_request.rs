@@ -1,14 +1,18 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use bytes::Bytes;
 use hex;
+use opentelemetry::KeyValue;
 use protofish2::Timestamp;
 use sha2::Digest;
 use tokio::sync::mpsc;
+use tracing::Instrument;
 use zako3_preload_cache::{AudioCache, NextFrame};
 use zako3_types::{AudioMetaResponse, CachedAudioRequest, hq::UserId};
 
 use crate::hub::TapHub;
+use crate::metrics;
 
 use super::{cache::build_cache_item, cache::resolve_metadata, stream::bridge_rel};
 
@@ -16,6 +20,19 @@ pub(crate) async fn handle_request_audio_inner(
     tap_hub: &TapHub,
     request: CachedAudioRequest,
 ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+    let span = tracing::info_span!(
+        "audio.request",
+        tap_name = %request.tap_name.0,
+        discord_user_id = %request.discord_user_id.0,
+        cache_key = ?request.cache_key,
+        tap_id = tracing::field::Empty,
+        cache_hit = tracing::field::Empty,
+        connection_id = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
+    let start = Instant::now();
+
     // Get tap ID from name
     let tap_id = tap_hub
         .state_service
@@ -23,6 +40,8 @@ pub(crate) async fn handle_request_audio_inner(
         .await
         .map_err(|e| format!("Failed to get tap id: {}", e))?
         .ok_or_else(|| "Tap disconnected or not found".to_string())?;
+
+    tracing::Span::current().record("tap_id", tracing::field::display(&tap_id.0));
 
     // Record metrics
     if let Err(e) = tap_hub.metrics_service.inc_total_uses(tap_id.clone()).await {
@@ -51,7 +70,7 @@ pub(crate) async fn handle_request_audio_inner(
     if let Some(ref item) = cache_item {
         if let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await {
             if entry.has_audio() && !entry.is_downloading() {
-                tracing::info!("Cache hit for tap_id={}, key={}", item.tap_id.0, item.key);
+                tracing::info!(tap_id = %tap_id.0, cache_key = %item.key, cache_hit = true, "Cache hit");
                 if let Some(reader) = tap_hub
                     .audio_cache
                     .open_reader(&item.tap_id, &item.key)
@@ -62,6 +81,12 @@ pub(crate) async fn handle_request_audio_inner(
                         .inc_cache_hits(tap_id.clone())
                         .await
                         .ok();
+
+                    metrics::metrics().cache_hits_total.add(
+                        1,
+                        &[KeyValue::new("tap_id", tap_id.0.to_string()), KeyValue::new("request_type", "audio")],
+                    );
+                    tracing::Span::current().record("cache_hit", true);
 
                     let (tx, rx) = mpsc::channel(100);
                     tokio::spawn(async move {
@@ -85,39 +110,53 @@ pub(crate) async fn handle_request_audio_inner(
                         cache_key: entry.cache_key,
                         base_volume: tap.base_volume,
                     };
+
+                    let duration = start.elapsed().as_secs_f64();
+                    metrics::record_audio_request(&tap_id.0.to_string(), true, duration, true);
+
                     return Ok((meta, rx));
                 } else {
                     tracing::warn!(
-                        "Cache entry found but failed to open reader for tap_id={}, key={}",
-                        item.tap_id.0,
-                        item.key
+                        tap_id = %tap_id.0,
+                        key = %item.key,
+                        "Cache entry found but failed to open reader"
                     );
                 }
             }
         }
     }
 
+    tracing::Span::current().record("cache_hit", false);
     tracing::info!(
-        "Cache miss for tap_id={}, cache_key={:?}",
-        tap_id.0,
-        cache_item.as_ref().map(|i| &i.key)
+        tap_id = %tap_id.0,
+        cache_key = ?cache_item.as_ref().map(|i| &i.key),
+        "Cache miss — requesting from Tap"
     );
 
     // Cache miss: request from zakofish
     let (connection_id, disconnect_rx) = tap_hub.select_connection(&tap_id).await?;
+    tracing::Span::current().record("connection_id", connection_id);
 
-    let (succ, rel, mut unrel) = tap_hub
-        .zf_hub
-        .request_audio(
-            tap_id.clone(),
+    let (succ, rel, mut unrel) = {
+        let zakofish_span = tracing::info_span!(
+            "zakofish.audio_request",
+            tap_id = %tap_id.0,
             connection_id,
-            request.audio_request.clone(),
-            Default::default(),
-        )
-        .await
-        .map_err(|e| format!("Failed to request audio from tap: {}", e))?;
+        );
+        tap_hub
+            .zf_hub
+            .request_audio(
+                tap_id.clone(),
+                connection_id,
+                request.audio_request.clone(),
+                Default::default(),
+            )
+            .instrument(zakofish_span)
+            .await
+            .map_err(|e| format!("Failed to request audio from tap: {}", e))?
+    };
 
-    tracing::info!("Received audio from zakofish for tap_id={}", tap_id.0);
+    tracing::info!(tap_id = %tap_id.0, connection_id, "Received audio from Tap");
 
     // Bridge reliable stream
     let (rel_rx, done_rx) = bridge_rel(rel, disconnect_rx);
@@ -137,14 +176,18 @@ pub(crate) async fn handle_request_audio_inner(
         let cache_key = succ.cache.clone();
         let item_clone = item.clone();
 
-        tokio::spawn(async move {
-            if let Err(e) = cache
-                .store(item_clone, metadatas_clone, cache_key, rel_rx, done_rx)
-                .await
-            {
-                tracing::warn!(%e, "Failed to store audio in cache");
+        let cache_write_span = tracing::info_span!("cache.write", tap_id = %tap_id.0);
+        tokio::spawn(
+            async move {
+                if let Err(e) = cache
+                    .store(item_clone, metadatas_clone, cache_key, rel_rx, done_rx)
+                    .await
+                {
+                    tracing::warn!(%e, "Failed to store audio in cache");
+                }
             }
-        });
+            .instrument(cache_write_span),
+        );
 
         // If audio was cached under a CacheKey, also store metadata under ARHash
         // so that metadata-only requests can find it regardless of cache policy.
@@ -176,6 +219,9 @@ pub(crate) async fn handle_request_audio_inner(
         cache_key: succ.cache,
         base_volume: tap.base_volume,
     };
+
+    let duration = start.elapsed().as_secs_f64();
+    metrics::record_audio_request(&tap_id.0.to_string(), false, duration, true);
 
     let (tx, rx) = mpsc::channel(100);
     tokio::spawn(async move {

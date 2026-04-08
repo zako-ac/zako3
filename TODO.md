@@ -13,7 +13,7 @@ refer hq todo
 
 - [x] Implement text preprocessing
 
-- [ ] Make bot leave when VC is empty
+- [x] Make bot leave when VC is empty
 
 # Other
 - [x] AE Track proto handling (todo!)
@@ -46,9 +46,9 @@ refer hq todo
 - [ ] Cache management admin panel
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
-- [ ] Add VC-Message channel linking
 - [x] Make tap-sdk
 - [ ] tts commands TODO resolve
+- [ ] Remove dependencies of Zakofish
 
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?

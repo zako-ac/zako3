@@ -29,13 +29,18 @@ fn load_certs(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
-    tracing::info!("Starting TapHub Core...");
-
     let config = AppConfig::load()?;
+
+    let telemetry = zako3_telemetry::init(zako3_telemetry::TelemetryConfig {
+        service_name: "taphub".to_string(),
+        otlp_endpoint: config.otlp_endpoint.clone(),
+        metrics_port: config.metrics_port,
+    })
+    .await?;
+
+    tracing::info!("Starting TapHub Core...");
     let bind_addr = config.transport_bind_addr.parse()?;
 
     let (cert_chain, private_key) = load_certs(&config)?;
@@ -88,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut server = TransportServer::new(bind_addr, cert_chain, private_key, tap_hub)?;
 
     tracing::info!("Listening on {}", server.local_addr()?);
+    telemetry.healthy();
     server.run().await;
 
     Ok(())

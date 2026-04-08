@@ -58,6 +58,8 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
             .await
             .map_err(|_| (StatusCode::UNAUTHORIZED, "Unknown user".to_string()))?;
 
+        tracing::Span::current().record("user_id", tracing::field::display(&user_id));
+
         Ok(AuthUser(user_id))
     }
 }

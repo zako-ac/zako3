@@ -12,6 +12,7 @@ name = "redis-pusher"
 path = "src/bin/redis_pusher.rs"
 
 [dependencies]
+zako3-telemetry = { workspace = true }
 anyhow.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 dotenvy.workspace = true

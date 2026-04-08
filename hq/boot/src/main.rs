@@ -9,11 +9,18 @@ use tracing::info;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt().init();
+
+    let config = Arc::new(AppConfig::load()?);
+
+    let telemetry = zako3_telemetry::init(zako3_telemetry::TelemetryConfig {
+        service_name: "hq".to_string(),
+        otlp_endpoint: config.otlp_endpoint.clone(),
+        metrics_port: config.metrics_port,
+    })
+    .await?;
 
     info!("Starting hq-boot...");
 
-    let config = Arc::new(AppConfig::load()?);
     let pool = get_pool(&config.database_url).await?;
 
     run_migrations(&pool).await?;
@@ -85,6 +92,8 @@ async fn main() -> anyhow::Result<()> {
             tracing::error!("Bot error: {}", e);
         }
     });
+
+    telemetry.healthy();
 
     let _ = tokio::join!(backend_task, bot_task, rpc_task);
 

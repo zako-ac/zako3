@@ -2,6 +2,8 @@ use bytes::Bytes;
 use protofish2::mani::transfer::recv::TransferReliableRecvStream;
 use tokio::sync::{mpsc, oneshot, watch};
 
+use crate::metrics;
+
 /// Bridge a reliable stream to an `mpsc::Receiver<Bytes>`.
 /// Also returns a oneshot that fires `()` only when the stream ends naturally
 /// via TransferEnd/TransferEndAck AND the Tap has not disconnected.
@@ -15,11 +17,14 @@ pub(crate) fn bridge_rel(
     let (tx, rx) = mpsc::channel(100);
     let (done_tx, done_rx) = oneshot::channel();
     tokio::spawn(async move {
+        metrics::metrics().active_streams.add(1, &[]);
+
         // Already disconnected before the stream even started.
         if *disconnect_rx.borrow() {
             tracing::warn!(
                 "Tap already disconnected before stream started; stream will not be cached"
             );
+            metrics::metrics().active_streams.add(-1, &[]);
             return;
         }
 
@@ -54,6 +59,8 @@ pub(crate) fn bridge_rel(
                 }
             }
         }
+
+        metrics::metrics().active_streams.add(-1, &[]);
     });
     (rx, done_rx)
 }

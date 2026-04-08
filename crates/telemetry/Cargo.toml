@@ -1,17 +1,17 @@
 [package]
-name = "zako3-audio-engine-telemetry"
+name = "zako3-telemetry"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-axum = "0.7"
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-opentelemetry = "0.32"
 opentelemetry = "0.31"
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
 opentelemetry-prometheus = "0.31"
 prometheus = "0.14"
-tokio = { version = "1.49", features = ["full"] }
-tracing = "0.1"
-tracing-opentelemetry = "0.32"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
