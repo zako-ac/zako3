@@ -150,7 +150,7 @@ async fn handle_message_create(
 
 fn queue_name(user_id: &DiscordUserId, queue_tts: bool) -> QueueName {
     if queue_tts {
-        format!("tts-{}", user_id).into()
+        format!("tts_{}", user_id).into()
     } else {
         format!("temp-{}-{}", user_id, uuid::Uuid::new_v4()).into()
     }

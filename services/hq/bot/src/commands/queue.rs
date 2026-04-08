@@ -3,7 +3,7 @@ use poise::serenity_prelude as serenity;
 use hq_types::{AudioStopFilter, QueueName, Track, UserId};
 
 const MUSIC_QUEUE_PREFIX: &str = "music";
-const TTS_QUEUE_PREFIX: &str = "tts-";
+const TTS_QUEUE_PREFIX: &str = "tts_";
 
 #[derive(Debug, poise::ChoiceParameter)]
 pub enum ClearTarget {

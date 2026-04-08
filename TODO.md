@@ -83,6 +83,7 @@ refer hq todo
 - [ ] Add "load failed" 
 - [x] Remove empty queue
 - [ ] Add reload button and periodic reload in queue,
+- [ ] Add avatar and username to queue
 
 ## Mobile
 - [x] Tap card overflow

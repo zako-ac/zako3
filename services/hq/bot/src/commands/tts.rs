@@ -1,8 +1,9 @@
-use crate::{ui, util::VoiceStateExt, Context, Error};
+use crate::{ui, util, util::VoiceStateExt, Context, Error};
 use hq_core::{service::UserVoiceInfo, CoreError};
 use hq_types::{
     hq::{DiscordUserId, TapId},
-    AudioRequestString, ChannelId, GuildId, QueueName, TapName, Volume,
+    hq::settings::{PartialUserSettings, UserSettingsField},
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, UserId, Volume,
 };
 use poise::serenity_prelude as serenity;
 
@@ -14,9 +15,17 @@ pub enum TtsTarget {
     All,
 }
 
+#[derive(Debug, poise::ChoiceParameter)]
+pub enum VoiceScope {
+    #[name = "This Guild"]
+    GuildUser,
+    #[name = "All Guilds"]
+    User,
+}
+
 #[poise::command(
     slash_command,
-    subcommands("speak", "stop", "skip"),
+    subcommands("speak", "stop", "skip", "voice"),
     name_localized("ko", "tts"),
     description_localized("en-US", "Text-to-speech commands"),
     description_localized("ko", "텍스트 음성 변환 명령")
@@ -93,7 +102,7 @@ pub async fn speak(
 
     let audio_request = AudioRequestString::from(message.clone());
     let discord_user_id = DiscordUserId::from(discord_id.clone());
-    let queue_name = QueueName::from(format!("tts-{discord_id}"));
+    let queue_name = QueueName::from(format!("tts_{discord_id}"));
 
     for channel_id in channel_ids {
         service
@@ -159,7 +168,54 @@ pub async fn stop(
         require_mute_members(ctx).await?;
     }
 
-    // TODO: call audio_engine.tts_stop(guild_id, target_user_id)
+    let service = &ctx.data().service;
+    let session = util::resolve_session(ctx, None).await?;
+    let self_discord_id = ctx.author().id.get().to_string();
+
+    match (&target, &user) {
+        (_, Some(u)) => {
+            let uid = u.id.get().to_string();
+            service
+                .audio_engine
+                .stop_many(
+                    session.guild_id,
+                    session.channel_id,
+                    AudioStopFilter::TTS(UserId::from(uid)),
+                )
+                .await?;
+        }
+        (Some(TtsTarget::All), _) => {
+            let state = service
+                .audio_engine
+                .get_session_state(session.guild_id, session.channel_id)
+                .await?;
+            let tts_users: Vec<String> = state
+                .queues
+                .keys()
+                .filter_map(|q| q.to_string().strip_prefix("tts_").map(|s| s.to_string()))
+                .collect();
+            for uid in tts_users {
+                service
+                    .audio_engine
+                    .stop_many(
+                        session.guild_id,
+                        session.channel_id,
+                        AudioStopFilter::TTS(UserId::from(uid)),
+                    )
+                    .await?;
+            }
+        }
+        _ => {
+            service
+                .audio_engine
+                .stop_many(
+                    session.guild_id,
+                    session.channel_id,
+                    AudioStopFilter::TTS(UserId::from(self_discord_id)),
+                )
+                .await?;
+        }
+    }
 
     ctx.say(ui::messages::tts_stopped()).await?;
     Ok(())
@@ -185,7 +241,39 @@ pub async fn skip(
         require_mute_members(ctx).await?;
     }
 
-    // TODO: call audio_engine.tts_skip(guild_id, target_user_id)
+    let service = &ctx.data().service;
+    let session = util::resolve_session(ctx, None).await?;
+    let self_discord_id = ctx.author().id.get().to_string();
+    let state = service
+        .audio_engine
+        .get_session_state(session.guild_id, session.channel_id)
+        .await?;
+
+    let target_queues: Vec<String> = match (&target, &user) {
+        (_, Some(u)) => vec![format!("tts_{}", u.id.get())],
+        (Some(TtsTarget::All), _) => state
+            .queues
+            .keys()
+            .filter(|q| q.to_string().starts_with("tts_"))
+            .map(|q| q.to_string())
+            .collect(),
+        _ => vec![format!("tts_{self_discord_id}")],
+    };
+
+    for queue_name_str in target_queues {
+        let qn = QueueName::from(queue_name_str);
+        if let Some(first_track_id) = state
+            .queues
+            .get(&qn)
+            .and_then(|q| q.first())
+            .map(|t| t.track_id)
+        {
+            service
+                .audio_engine
+                .stop(session.guild_id, session.channel_id, first_track_id)
+                .await?;
+        }
+    }
 
     ctx.say(ui::messages::tts_skipped()).await?;
     Ok(())
@@ -203,6 +291,9 @@ pub async fn voice(
     #[description = "The voice provider to use"]
     #[description_localized("ko", "사용할 음성 제공자")]
     provider: Option<String>,
+    #[description = "Where to save this preference (default: All Guilds)"]
+    #[description_localized("ko", "설정을 저장할 범위 (기본값: 모든 서버)")]
+    scope: Option<VoiceScope>,
 ) -> Result<(), Error> {
     let service = &ctx.data().service;
     let discord_id = ctx.author().id.to_string();
@@ -225,7 +316,36 @@ pub async fn voice(
             return Err(CoreError::NotFound(format!("Voice '{}' not found.", tap_name)).into());
         }
 
-        // TODO: persist voice preference via user_settings
+        let found = found.unwrap();
+        let tap_id = TapId::from(found.tap.id.clone());
+        let partial = PartialUserSettings {
+            tts_voice: UserSettingsField::Normal(Some(tap_id)),
+            ..PartialUserSettings::empty()
+        };
+
+        match scope.unwrap_or(VoiceScope::User) {
+            VoiceScope::GuildUser => {
+                let guild_id_str = ctx
+                    .guild_id()
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "This command must be used in a server for guild scope.".to_string(),
+                        )
+                    })?
+                    .get()
+                    .to_string();
+                service
+                    .user_settings
+                    .save_guild_user_settings(&user.id, &guild_id_str, partial)
+                    .await?;
+            }
+            VoiceScope::User => {
+                service
+                    .user_settings
+                    .save_settings(user.id.clone(), partial)
+                    .await?;
+            }
+        }
 
         ctx.say(ui::messages::voice_changed(tap_name)).await?;
     } else {
