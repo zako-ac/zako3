@@ -5,14 +5,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
+use zako3_types::AudioRequestString;
+use zako3_types::hq::TapId;
 
-use crate::error::{Result, ZakofishError};
-use crate::types::message::{
+use zakofish::error::{Result, ZakofishError};
+use zakofish::types::message::{
     AudioMetadataRequestMessage, AudioMetadataSuccessMessage, AudioRequestMessage,
     AudioRequestSuccessMessage, TapClientHello, TapServerReject,
 };
-use zako3_types::AudioRequestString;
-use zako3_types::hq::TapId;
 
 #[async_trait::async_trait]
 pub trait HubHandler: Send + Sync {
@@ -30,7 +30,10 @@ pub struct ZakofishHub {
     next_connection_id: Arc<AtomicU64>,
     sessions: Arc<
         Mutex<
-            HashMap<TapId, HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>>,
+            HashMap<
+                zakofish::types::TapId,
+                HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
+            >,
         >,
     >,
 }
@@ -88,10 +91,13 @@ impl ZakofishHub {
         TransferReliableRecvStream,
         TransferUnreliableRecvStream,
     )> {
+        let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
+        let wire_ars = zakofish::types::AudioRequestString(ars.to_string());
+
         let conn_arc = {
             let sessions = self.sessions.lock().await;
             sessions
-                .get(&tap_id)
+                .get(&wire_tap_id)
                 .and_then(|m| m.get(&connection_id))
                 .cloned()
                 .ok_or_else(|| {
@@ -102,17 +108,20 @@ impl ZakofishHub {
         let mut conn = conn_arc.lock().await;
         let mut stream = conn.open_mani().await?;
 
-        let request = AudioRequestMessage { ars, headers };
-        let payload = crate::types::message::HubToTapMessage::AudioRequest(request);
-        let encoded = crate::protocol::codec::encode_msgpack(&payload)?;
+        let request = AudioRequestMessage {
+            ars: wire_ars,
+            headers,
+        };
+        let payload = zakofish::types::message::HubToTapMessage::AudioRequest(request);
+        let encoded = zakofish::protocol::codec::encode_msgpack(&payload)?;
         stream.send_payload(encoded.into()).await?;
 
         let response_bytes = stream.recv_payload().await?;
-        let response: crate::types::message::TapToHubMessage =
-            crate::protocol::codec::decode_msgpack(&response_bytes)?;
+        let response: zakofish::types::message::TapToHubMessage =
+            zakofish::protocol::codec::decode_msgpack(&response_bytes)?;
 
         match response {
-            crate::types::message::TapToHubMessage::AudioRequestSuccess(success) => {
+            zakofish::types::message::TapToHubMessage::AudioRequestSuccess(success) => {
                 match stream.accept_transfer().await? {
                     ManiTransferRecvStreams::Dual {
                         reliable,
@@ -123,7 +132,7 @@ impl ZakofishHub {
                     )),
                 }
             }
-            crate::types::message::TapToHubMessage::AudioRequestFailure(failure) => Err(
+            zakofish::types::message::TapToHubMessage::AudioRequestFailure(failure) => Err(
                 ZakofishError::ProtocolError(format!("Audio request failed: {:?}", failure)),
             ),
             _ => Err(ZakofishError::ProtocolError(
@@ -139,10 +148,13 @@ impl ZakofishHub {
         ars: AudioRequestString,
         headers: HashMap<String, String>,
     ) -> Result<AudioMetadataSuccessMessage> {
+        let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
+        let wire_ars = zakofish::types::AudioRequestString(ars.to_string());
+
         let conn_arc = {
             let sessions = self.sessions.lock().await;
             sessions
-                .get(&tap_id)
+                .get(&wire_tap_id)
                 .and_then(|m| m.get(&connection_id))
                 .cloned()
                 .ok_or_else(|| {
@@ -153,18 +165,24 @@ impl ZakofishHub {
         let mut conn = conn_arc.lock().await;
         let mut stream = conn.open_mani().await?;
 
-        let request = AudioMetadataRequestMessage { ars, headers };
-        let payload = crate::types::message::HubToTapMessage::AudioMetadataRequest(request);
-        let encoded = crate::protocol::codec::encode_msgpack(&payload)?;
+        let request = AudioMetadataRequestMessage {
+            ars: wire_ars,
+            headers,
+        };
+        let payload =
+            zakofish::types::message::HubToTapMessage::AudioMetadataRequest(request);
+        let encoded = zakofish::protocol::codec::encode_msgpack(&payload)?;
         stream.send_payload(encoded.into()).await?;
 
         let response_bytes = stream.recv_payload().await?;
-        let response: crate::types::message::TapToHubMessage =
-            crate::protocol::codec::decode_msgpack(&response_bytes)?;
+        let response: zakofish::types::message::TapToHubMessage =
+            zakofish::protocol::codec::decode_msgpack(&response_bytes)?;
 
         match response {
-            crate::types::message::TapToHubMessage::AudioMetadataSuccess(success) => Ok(success),
-            crate::types::message::TapToHubMessage::AudioRequestFailure(failure) => {
+            zakofish::types::message::TapToHubMessage::AudioMetadataSuccess(success) => {
+                Ok(success)
+            }
+            zakofish::types::message::TapToHubMessage::AudioRequestFailure(failure) => {
                 Err(ZakofishError::ProtocolError(format!(
                     "Audio metadata request failed: {:?}",
                     failure
@@ -182,7 +200,10 @@ async fn handle_new_connection(
     handler: Arc<dyn HubHandler>,
     sessions: Arc<
         Mutex<
-            HashMap<TapId, HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>>,
+            HashMap<
+                zakofish::types::TapId,
+                HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
+            >,
         >,
     >,
     next_connection_id: Arc<AtomicU64>,
@@ -193,31 +214,33 @@ async fn handle_new_connection(
     let mut mani_stream = conn.accept_mani().await?;
     let payload_bytes = mani_stream.recv_payload().await?;
 
-    let hello_msg: crate::types::message::TapToHubMessage =
-        crate::protocol::codec::decode_msgpack(&payload_bytes)?;
+    let hello_msg: zakofish::types::message::TapToHubMessage =
+        zakofish::protocol::codec::decode_msgpack(&payload_bytes)?;
 
     match hello_msg {
-        crate::types::message::TapToHubMessage::ClientHello(hello) => {
-            let tap_id = hello.tap_id.clone();
+        zakofish::types::message::TapToHubMessage::ClientHello(hello) => {
+            let tap_id_wire = hello.tap_id.clone();
             let connection_id = next_connection_id.fetch_add(1, Ordering::SeqCst);
 
-            tracing::Span::current().record("tap_id", tracing::field::display(&tap_id.0));
+            tracing::Span::current().record("tap_id", tracing::field::display(&tap_id_wire.0));
             tracing::Span::current().record("connection_id", connection_id);
             tracing::Span::current()
                 .record("friendly_name", tracing::field::display(&hello.friendly_name));
 
             match handler.on_tap_authenticate(connection_id, hello).await {
                 Ok(_) => {
-                    let accept_msg = crate::types::message::HubToTapMessage::Accept;
+                    let accept_msg = zakofish::types::message::HubToTapMessage::Accept;
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&accept_msg)?.into())
+                        .send_payload(
+                            zakofish::protocol::codec::encode_msgpack(&accept_msg)?.into(),
+                        )
                         .await?;
 
                     let conn_arc = Arc::new(Mutex::new(conn));
                     sessions
                         .lock()
                         .await
-                        .entry(tap_id.clone())
+                        .entry(tap_id_wire.clone())
                         .or_default()
                         .insert(connection_id, conn_arc.clone());
 
@@ -226,23 +249,27 @@ async fn handle_new_connection(
 
                     {
                         let mut sessions = sessions.lock().await;
-                        if let Some(conns) = sessions.get_mut(&tap_id) {
+                        if let Some(conns) = sessions.get_mut(&tap_id_wire) {
                             conns.remove(&connection_id);
                             if conns.is_empty() {
-                                sessions.remove(&tap_id);
+                                sessions.remove(&tap_id_wire);
                             }
                         }
                     }
 
                     tracing::Span::current().record("disconnect_reason", "clean");
-                    handler.on_tap_disconnected(tap_id, connection_id).await;
+                    // Convert wire TapId to zako3-types TapId for the public handler callback
+                    let tap_id_public = TapId(tap_id_wire.0.clone());
+                    handler.on_tap_disconnected(tap_id_public, connection_id).await;
                     Ok(())
                 }
                 Err(reject) => {
                     tracing::Span::current().record("disconnect_reason", "rejected");
-                    let reject_msg = crate::types::message::HubToTapMessage::Reject(reject);
+                    let reject_msg = zakofish::types::message::HubToTapMessage::Reject(reject);
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&reject_msg)?.into())
+                        .send_payload(
+                            zakofish::protocol::codec::encode_msgpack(&reject_msg)?.into(),
+                        )
                         .await?;
                     Ok(())
                 }

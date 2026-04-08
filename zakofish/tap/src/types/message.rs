@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use zako3_types::{AudioCachePolicy, AudioMetadata, AudioRequestString, hq::TapId};
 
-use crate::types::HubRejectReasonType;
+use crate::types::model::{
+    AudioCachePolicy, AudioMetadata, AudioRequestString, HubRejectReasonType, TapId,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]

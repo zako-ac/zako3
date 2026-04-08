@@ -65,13 +65,12 @@ pub async fn join(
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     // Extract guild/channel data before any await.
-    let (serenity_guild_id, guild_id, channel_id, channel_name) = {
+    let (serenity_guild_id, guild_id, channel_id) = {
         match channel {
             Some(c) => (
                 c.guild_id,
                 GuildId::from(c.guild_id.get()),
                 ChannelId::from(c.id.get()),
-                c.name.clone(),
             ),
             None => {
                 let guild = ctx.guild().ok_or_else(|| {
@@ -82,16 +81,10 @@ pub async fn join(
                     .get(&ctx.author().id)
                     .and_then(|vs| vs.channel_id)
                     .ok_or(Error::NotInVoiceChannel)?;
-                let name = guild
-                    .channels
-                    .get(&serenity_cid)
-                    .map(|c| c.name.clone())
-                    .unwrap_or_else(|| serenity_cid.to_string());
                 (
                     guild.id,
                     GuildId::from(guild.id.get()),
                     ChannelId::from(serenity_cid.get()),
-                    name,
                 )
             }
         }
@@ -111,7 +104,8 @@ pub async fn join(
         .add(u64::from(guild_id), u64::from(channel_id))
         .await?;
 
-    ctx.say(ui::messages::bot_joined(&channel_name)).await?;
+    ctx.say(ui::messages::bot_joined(u64::from(channel_id).into()))
+        .await?;
     Ok(())
 }
 
@@ -161,7 +155,6 @@ pub async fn move_to(
     let session = util::resolve_session(ctx, None).await?;
     let new_serenity_guild_id = channel.guild_id;
     let new_channel_id = ChannelId::from(channel.id.get());
-    let channel_name = channel.name.clone();
 
     let service = &ctx.data().service;
 
@@ -187,6 +180,7 @@ pub async fn move_to(
         .add(u64::from(session.guild_id), u64::from(new_channel_id))
         .await?;
 
-    ctx.say(ui::messages::bot_moved(&channel_name)).await?;
+    ctx.say(ui::messages::bot_moved(u64::from(new_channel_id).into()))
+        .await?;
     Ok(())
 }

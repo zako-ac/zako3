@@ -9,13 +9,13 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
-use zako3_types::{AudioCachePolicy, AudioCacheType};
-use zakofish::hub::{HubHandler, ZakofishHub};
 use zakofish::tap::{TapHandler, ZakofishTap};
+use zakofish::types::model::{AudioCachePolicy, AudioCacheType};
 use zakofish::types::message::{
-    AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
-    TapClientHello, TapServerReject,
+    AttachedMetadata, AudioMetadataSuccessMessage, AudioRequestFailureMessage,
+    AudioRequestSuccessMessage, TapClientHello, TapServerReject,
 };
+use zakofish_taphub::hub::{HubHandler, ZakofishHub};
 
 fn generate_cert() -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
     let subject_alt_names = vec!["localhost".to_string()];
@@ -51,7 +51,7 @@ struct TestTapHandler;
 impl TapHandler for TestTapHandler {
     async fn handle_audio_request(
         &self,
-        _ars: AudioRequestString,
+        _ars: zakofish::types::model::AudioRequestString,
         _headers: HashMap<String, String>,
     ) -> Result<
         (
@@ -66,10 +66,10 @@ impl TapHandler for TestTapHandler {
                 ttl_seconds: None,
             },
             duration_secs: Some(10.0),
-            metadatas: vec![],
+            metadatas: AttachedMetadata::Metadatas(vec![]),
         };
 
-        let (tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel::<(Timestamp, Bytes)>(10);
 
         tokio::spawn(async move {
             for i in 0..5 {
@@ -86,13 +86,16 @@ impl TapHandler for TestTapHandler {
 
     async fn handle_audio_metadata_request(
         &self,
-        ars: AudioRequestString,
+        ars: zakofish::types::model::AudioRequestString,
         _headers: HashMap<String, String>,
     ) -> Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage> {
         if ars.to_string() == "test:metadata" {
             Ok(AudioMetadataSuccessMessage {
                 metadatas: vec![],
-                cache: AudioCachePolicy { cache_type: AudioCacheType::None, ttl_seconds: None },
+                cache: AudioCachePolicy {
+                    cache_type: AudioCacheType::None,
+                    ttl_seconds: None,
+                },
             })
         } else {
             Err(AudioRequestFailureMessage {
@@ -147,10 +150,13 @@ async fn test_zakofish_flow() {
     let tap = Arc::new(ZakofishTap::new(client_config).unwrap());
     let tap_handler = Arc::new(TestTapHandler);
 
+    // TapClientHello uses wire-side TapId (zakofish::types::TapId)
+    let tap_id_wire = zakofish::types::TapId("343456".to_string());
+    // ZakofishHub::request_audio uses zako3-types TapId
     let tap_id = TapId("343456".to_string());
 
     let hello_info = TapClientHello {
-        tap_id: tap_id.clone(),
+        tap_id: tap_id_wire,
         friendly_name: "Test Tap".to_string(),
         api_token: "secret".to_string(),
         selection_weight: 1.0,

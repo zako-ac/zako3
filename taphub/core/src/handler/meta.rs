@@ -90,8 +90,8 @@ pub(crate) async fn handle_request_audio_meta_inner(
     };
     {
         let cache = Arc::clone(&tap_hub.audio_cache);
-        let metadatas = meta.metadatas.clone();
-        let cache_key = meta.cache.clone();
+        let metadatas = super::wire_convert::wire_metadatas_to_domain(meta.metadatas.clone());
+        let cache_key = super::wire_convert::wire_cache_policy_to_domain(meta.cache.clone());
         tokio::spawn(async move {
             if let Err(e) = cache.store_metadata(meta_item, metadatas, cache_key).await {
                 tracing::warn!(%e, "Failed to store metadata in cache");
@@ -100,8 +100,8 @@ pub(crate) async fn handle_request_audio_meta_inner(
     }
 
     Ok(AudioMetaResponse {
-        metadatas: meta.metadatas,
-        cache_key: meta.cache,
+        metadatas: super::wire_convert::wire_metadatas_to_domain(meta.metadatas),
+        cache_key: super::wire_convert::wire_cache_policy_to_domain(meta.cache),
         base_volume: tap.base_volume,
     })
 }

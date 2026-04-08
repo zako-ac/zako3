@@ -41,14 +41,14 @@ pub(crate) fn build_cache_item(
 /// The fallback checks the cache for an ARHash key derived from the audio request.
 pub(crate) async fn resolve_metadata(
     tap_hub: &TapHub,
-    metadatas: zakofish::types::message::AttachedMetadata,
+    metadatas: zakofish_taphub::types::AttachedMetadata,
     tap_id: &TapId,
     audio_request_str: &str,
 ) -> Vec<zako3_types::AudioMetadata> {
-    use zakofish::types::message::AttachedMetadata;
+    use zakofish_taphub::types::AttachedMetadata;
 
     match metadatas {
-        AttachedMetadata::Metadatas(v) => v,
+        AttachedMetadata::Metadatas(v) => super::wire_convert::wire_metadatas_to_domain(v),
         AttachedMetadata::UseCached => {
             let meta_hash = hex::encode(Sha256::digest(audio_request_str.as_bytes()));
             let meta_key = AudioCacheItemKey::ARHash(meta_hash);

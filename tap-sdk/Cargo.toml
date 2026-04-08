@@ -7,8 +7,7 @@ edition = "2024"
 auto-encode = ["dep:ogg", "dep:tokio-stream"]
 
 [dependencies]
-zakofish     = { workspace = true }
-zako3-types  = { workspace = true }
+zakofish = { workspace = true }
 tokio        = { workspace = true }
 async-trait  = { workspace = true }
 bytes        = "1"

@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use zakofish::config::load_certs;
 use zakofish::tap::ZakofishTap;
 use zakofish::types::message::TapClientHello;
-use zako3_types::hq::TapId;
+use zakofish::types::model::TapId;
 
 use crate::error::SdkError;
 use crate::handler::TapHandler;
@@ -119,7 +119,7 @@ struct HandlerBridge(Arc<dyn TapHandler>);
 impl zakofish::tap::TapHandler for HandlerBridge {
     async fn handle_audio_metadata_request(
         &self,
-        ars: zako3_types::AudioRequestString,
+        ars: zakofish::types::model::AudioRequestString,
         _headers: HashMap<String, String>,
     ) -> std::result::Result<
         zakofish::types::message::AudioMetadataSuccessMessage,
@@ -133,7 +133,7 @@ impl zakofish::tap::TapHandler for HandlerBridge {
 
     async fn handle_audio_request(
         &self,
-        ars: zako3_types::AudioRequestString,
+        ars: zakofish::types::model::AudioRequestString,
         _headers: HashMap<String, String>,
     ) -> std::result::Result<
         (

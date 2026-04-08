@@ -176,11 +176,12 @@ pub(crate) async fn handle_request_audio_inner(
         let cache_key = succ.cache.clone();
         let item_clone = item.clone();
 
+        let cache_key_domain = super::wire_convert::wire_cache_policy_to_domain(cache_key);
         let cache_write_span = tracing::info_span!("cache.write", tap_id = %tap_id.0);
         tokio::spawn(
             async move {
                 if let Err(e) = cache
-                    .store(item_clone, metadatas_clone, cache_key, rel_rx, done_rx)
+                    .store(item_clone, metadatas_clone, cache_key_domain, rel_rx, done_rx)
                     .await
                 {
                     tracing::warn!(%e, "Failed to store audio in cache");
@@ -202,7 +203,8 @@ pub(crate) async fn handle_request_audio_inner(
             };
             let cache2 = Arc::clone(&tap_hub.audio_cache);
             let metadatas2 = metadatas.clone();
-            let cache_key2 = succ.cache.clone();
+            let cache_key2 =
+                super::wire_convert::wire_cache_policy_to_domain(succ.cache.clone());
             tokio::spawn(async move {
                 if let Err(e) = cache2
                     .store_metadata(meta_item, metadatas2, cache_key2)
@@ -216,7 +218,7 @@ pub(crate) async fn handle_request_audio_inner(
 
     let meta = AudioMetaResponse {
         metadatas,
-        cache_key: succ.cache,
+        cache_key: super::wire_convert::wire_cache_policy_to_domain(succ.cache),
         base_volume: tap.base_volume,
     };
 

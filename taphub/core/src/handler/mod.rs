@@ -13,6 +13,7 @@ mod meta;
 mod permission;
 mod preload;
 mod stream;
+mod wire_convert;
 
 #[async_trait]
 impl TapHubBridgeHandler for TapHub {

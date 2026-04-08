@@ -24,7 +24,7 @@ rustls = "0.23.37"
 rustls-pki-types = "1.14.0"
 serde.workspace = true
 rustls-pemfile = "2.2.0"
-zakofish.workspace = true
+zakofish-taphub = { path = "../../zakofish/taphub" }
 parking_lot = "0.12.5"
 uuid.workspace = true
 dashmap = "6.1.0"

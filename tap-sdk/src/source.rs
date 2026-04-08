@@ -1,5 +1,5 @@
 use std::fmt;
-use zako3_types::AudioRequestString;
+use zakofish::types::model::AudioRequestString;
 
 /// A request identifier passed to a tap — typically a URL.
 #[derive(Debug, Clone)]

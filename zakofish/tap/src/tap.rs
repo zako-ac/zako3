@@ -13,7 +13,7 @@ use crate::types::message::{
     AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
     HubToTapMessage, TapClientHello, TapToHubMessage,
 };
-use zako3_types::AudioRequestString;
+use crate::types::model::AudioRequestString;
 
 #[async_trait::async_trait]
 pub trait TapHandler: Send + Sync {

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use opentelemetry::KeyValue;
 use tokio::sync::watch;
-use zakofish::{
+use zakofish_taphub::{
     hub::HubHandler,
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
@@ -37,7 +37,7 @@ impl HubHandler for TapHubConnectionHandler {
             .await;
 
         if let Some(tap) = tap {
-            if hello.tap_id == tap.id {
+            if hello.tap_id.0 == tap.id.0 {
                 tracing::Span::current().record("tap_id", tracing::field::display(&tap.id.0));
                 tracing::Span::current()
                     .record("friendly_name", tracing::field::display(&hello.friendly_name));

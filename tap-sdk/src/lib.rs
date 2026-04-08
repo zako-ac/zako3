@@ -17,3 +17,6 @@ pub use stream::AudioStreamSender;
 pub use zakofish::types::message::{
     AttachedMetadata, AudioMetadataSuccessMessage, AudioRequestSuccessMessage,
 };
+
+// Re-export audio model types needed to build response structs
+pub use zakofish::types::model::{AudioCachePolicy, AudioCacheType, AudioMetadata};

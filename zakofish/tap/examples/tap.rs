@@ -9,14 +9,12 @@ use protofish2::compression::CompressionType;
 use protofish2::connection::ClientConfig;
 use rustls::pki_types::CertificateDer;
 use uuid::Uuid;
-use zako3_types::AudioRequestString;
-use zako3_types::hq::TapId;
 
-use zako3_types::{AudioCachePolicy, AudioCacheType};
 use zakofish::tap::{TapHandler, ZakofishTap};
+use zakofish::types::model::{AudioCachePolicy, AudioCacheType, AudioRequestString, TapId};
 use zakofish::types::message::{
-    AudioMetadataSuccessMessage, AudioRequestFailureMessage, AudioRequestSuccessMessage,
-    TapClientHello,
+    AttachedMetadata, AudioMetadataSuccessMessage, AudioRequestFailureMessage,
+    AudioRequestSuccessMessage, TapClientHello,
 };
 
 struct SimpleTapHandler;
@@ -58,7 +56,7 @@ impl TapHandler for SimpleTapHandler {
                     ttl_seconds: None,
                 },
                 duration_secs: Some(1.0),
-                metadatas: vec![],
+                metadatas: AttachedMetadata::Metadatas(vec![]),
             },
             rx,
         ))

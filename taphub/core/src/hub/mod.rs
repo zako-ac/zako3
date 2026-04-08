@@ -8,7 +8,7 @@ use std::{
 use parking_lot::Mutex;
 use tokio::sync::watch;
 use zako3_types::hq::TapId;
-use zakofish::{
+use zakofish_taphub::{
     ZakofishError,
     create_server_config,
     hub::ZakofishHub,

@@ -4,9 +4,9 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
-use zakofish::config::create_server_config;
-use zakofish::hub::{HubHandler, ZakofishHub};
-use zakofish::types::message::{TapClientHello, TapServerReject};
+use zakofish_taphub::create_server_config;
+use zakofish_taphub::hub::{HubHandler, ZakofishHub};
+use zakofish_taphub::types::message::{TapClientHello, TapServerReject};
 
 fn generate_cert() -> (String, String) {
     let subject_alt_names = vec!["localhost".to_string()];
@@ -31,10 +31,8 @@ impl HubHandler for SimpleHubHandler {
             "Hub: Tap connected! ID: {:?}, Connection: {}",
             hello.tap_id, connection_id
         );
-        let _ = self
-            .tap_connected_tx
-            .send((hello.tap_id, connection_id))
-            .await;
+        let tap_id = TapId(hello.tap_id.0.clone());
+        let _ = self.tap_connected_tx.send((tap_id, connection_id)).await;
         Ok(())
     }
 
@@ -45,6 +43,7 @@ impl HubHandler for SimpleHubHandler {
         );
     }
 }
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
