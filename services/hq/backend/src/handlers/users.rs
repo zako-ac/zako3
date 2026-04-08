@@ -213,7 +213,7 @@ pub async fn get_effective_settings(
 ) -> Result<Json<UserSettings>, (axum::http::StatusCode, String)> {
     let settings = service
         .user_settings
-        .get_effective_settings(&user_id, query.guild_id.as_deref())
+        .get_effective_settings(&Some(user_id), query.guild_id.as_deref())
         .await
         .map_err(map_error)?;
     Ok(Json(settings))

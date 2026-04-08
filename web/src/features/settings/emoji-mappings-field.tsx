@@ -54,7 +54,7 @@ export function EmojiMappingsField({ value, onChange }: EmojiMappingsFieldProps)
                         <img
                             src={rule.emoji_image_url}
                             alt={rule.emoji_name}
-                            className="size-6 shrink-0 rounded"
+                            className="size-6 shrink-0"
                         />
                     )}
                     <span className="text-muted-foreground w-32 shrink-0 truncate text-sm">

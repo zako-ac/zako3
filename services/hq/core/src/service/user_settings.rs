@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use hq_types::hq::UserId;
 use hq_types::hq::settings::{PartialUserSettings, UserSettings};
+use hq_types::hq::UserId;
 use zako3_states::UserSettingsStateService;
 
-use crate::CoreResult;
 use crate::repo::{
     GlobalSettingsRepository, GuildSettingsRepository, UserGuildSettingsRepository, UserRepository,
 };
+use crate::CoreResult;
 
 #[derive(Clone)]
 pub struct UserSettingsService {
@@ -172,18 +172,28 @@ impl UserSettingsService {
     /// If `guild_id` is `None`, only `User`, `Global`, and hardcoded defaults are used.
     pub async fn get_effective_settings(
         &self,
-        user_id: &UserId,
+        user_id: &Option<UserId>,
         guild_id: Option<&str>,
     ) -> CoreResult<UserSettings> {
         let (guild_user, user, guild, global) = tokio::try_join!(
             async {
-                if let Some(gid) = guild_id {
-                    self.user_guild_settings_repo.get(user_id, gid).await
+                if let Some(uid) = user_id {
+                    if let Some(gid) = guild_id {
+                        self.user_guild_settings_repo.get(uid, gid).await
+                    } else {
+                        Ok(None)
+                    }
                 } else {
                     Ok(None)
                 }
             },
-            self.user_repo.get_settings(user_id.clone()),
+            async {
+                if let Some(uid) = user_id {
+                    self.user_repo.get_settings(uid.clone()).await
+                } else {
+                    Ok(None)
+                }
+            },
             async {
                 if let Some(gid) = guild_id {
                     self.guild_settings_repo.get(gid).await

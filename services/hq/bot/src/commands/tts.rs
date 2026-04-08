@@ -1,8 +1,8 @@
 use crate::{ui, util, util::VoiceStateExt, Context, Error};
 use hq_core::{service::UserVoiceInfo, CoreError};
 use hq_types::{
-    hq::{DiscordUserId, TapId},
     hq::settings::{PartialUserSettings, UserSettingsField},
+    hq::{DiscordUserId, TapId},
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, UserId, Volume,
 };
 use poise::serenity_prelude as serenity;
@@ -67,18 +67,17 @@ pub async fn speak(
     };
 
     let discord_id = ctx.author().id.get().to_string();
-    let username = ctx.author().name.clone();
     let service = &ctx.data().service;
 
-    // Resolve the user's account and effective settings.
-    let user = service
-        .auth
-        .get_or_create_user(&discord_id, &username, None, None)
-        .await?;
+    let user_id_optional = service
+        .tap
+        .get_user_by_discord_id(&discord_id)
+        .await?
+        .map(|u| u.id.clone());
 
     let settings = service
         .user_settings
-        .get_effective_settings(&user.id, Some(&guild_id.to_string()))
+        .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
         .await?;
 
     // Resolve target voice channels using the same routing logic as auto-TTS.

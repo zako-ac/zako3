@@ -353,14 +353,12 @@ async fn announce_join_leave(
         .get_user_by_discord_id(&discord_user_id.to_string())
         .await?;
 
-    let settings = if let Some(user) = &hq_user {
-        service
-            .user_settings
-            .get_effective_settings(&user.id, Some(&guild_id.to_string()))
-            .await?
-    } else {
-        UserSettings::default()
-    };
+    let user_id_optional = hq_user.as_ref().map(|u| u.id.clone());
+
+    let settings = service
+        .user_settings
+        .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
+        .await?;
 
     let tap_name = resolve_tap_name(service, &settings).await?;
     let sessions = service.audio_engine.get_sessions_in_guild(guild_id).await?;
@@ -406,7 +404,14 @@ fn build_message(alert: &UserJoinLeaveAlert, display_name: &str, is_join: bool) 
         UserJoinLeaveAlert::Custom {
             join_message,
             leave_message,
-        } => Some(if is_join { join_message } else { leave_message }.clone()),
+        } => Some(
+            if is_join {
+                join_message.replace("{{name}}", display_name)
+            } else {
+                leave_message.replace("{{name}}", display_name)
+            }
+            .clone(),
+        ),
     }
 }
 

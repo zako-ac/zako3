@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    hq::{DiscordUserId, Tap, TapName, UserSettings},
+    hq::{DiscordUserId, Tap, TapName},
     AudioRequestString, ChannelId, GuildId, QueueName,
 };
 use serenity::{
@@ -71,37 +71,19 @@ async fn handle_message_create(
     if service.tts_channel.is_enabled(&message_channel_id).await? {
         let content = msg.content.trim();
 
-        let (settings, tap_name) = {
             let user = service
                 .tap
                 .get_user_by_discord_id(&author_id.to_string())
                 .await?;
 
-            if let Some(hq_user) = user {
-                let settings = service
+            let user_id_optional = user.as_ref().map(|u| u.id.clone());
+
+            let settings = service
                     .user_settings
-                    .get_effective_settings(&hq_user.id, Some(&guild_id.to_string()))
+                    .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
                     .await?;
 
-                let tap_name = resolve_tap_name_for_user(&service, &settings).await?;
-
-                (settings, tap_name)
-            } else {
-                // fetch global settings
-
-                if let Some(global_settings_partial) =
-                    service.user_settings.get_global_settings().await?
-                {
-                    let global_settings = global_settings_partial.resolve();
-
-                    let tap_name = resolve_tap_name_for_user(&service, &global_settings).await?;
-
-                    (global_settings, tap_name)
-                } else {
-                    (UserSettings::default(), fallback_tap_name())
-                }
-            }
-        };
+        let tap_name = resolve_tap_name_for_user(&service, &settings).await?;
 
         let channel_ids = service
             .playback
