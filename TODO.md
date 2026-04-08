@@ -85,6 +85,7 @@ refer hq todo
 - [x] Remove empty queue
 - [ ] Add reload button and periodic reload in queue,
 - [ ] Add avatar and username to queue
+- [ ] Fix graph
 
 ## Mobile
 - [x] Tap card overflow

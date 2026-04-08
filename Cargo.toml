@@ -85,4 +85,4 @@ opt-level = 0
 path = "vendor/zod_gen"
 
 [patch.crates-io.protofish2]
-path = "/home/allen/projects/protofish2-rs"
+git = "https://github.com/mincomk/protofish2-rs"
