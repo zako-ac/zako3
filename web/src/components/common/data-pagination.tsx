@@ -1,4 +1,4 @@
-
+import { useTranslation } from 'react-i18next'
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,6 +31,7 @@ export const DataPagination = ({
   showPageSize = true,
   className,
 }: DataPaginationProps) => {
+  const { t } = useTranslation()
   const { page, perPage, total, totalPages } = meta
 
   const startItem = total === 0 ? 0 : (page - 1) * perPage + 1
@@ -43,7 +44,7 @@ export const DataPagination = ({
     <div className={`flex items-center justify-between gap-4 ${className}`}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span>
-          {startItem}-{endItem} of {total}
+          {startItem}-{endItem} {t('common.of')} {total}
         </span>
         {showPageSize && (
           <>
@@ -63,7 +64,7 @@ export const DataPagination = ({
                 ))}
               </SelectContent>
             </Select>
-            <span>per page</span>
+            <span>{t('common.perPage')}</span>
           </>
         )}
       </div>
@@ -86,7 +87,7 @@ export const DataPagination = ({
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="mx-2 text-sm">
-          Page {page} of {totalPages}
+          {t('common.page')} {page} {t('common.of')} {totalPages}
         </span>
         <Button
           variant="outline"

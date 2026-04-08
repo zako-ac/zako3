@@ -1,9 +1,11 @@
 import { useTheme } from 'next-themes'
+import { useTranslation } from 'react-i18next'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export const ThemeToggle = () => {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
 
   const toggleTheme = () => {
@@ -16,7 +18,7 @@ export const ThemeToggle = () => {
       size="icon"
       onClick={toggleTheme}
       className="relative"
-      aria-label="Toggle theme"
+      aria-label={t('common.toggleTheme')}
     >
       <AnimatePresence mode="wait" initial={false}>
         {theme === 'dark' ? (

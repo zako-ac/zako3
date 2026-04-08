@@ -80,7 +80,7 @@ export const TapVerificationPage = () => {
     if (!tap) {
         return (
             <div className="py-12 text-center">
-                <p className="text-muted-foreground">Tap not found</p>
+                <p className="text-muted-foreground">{t('taps.notFound')}</p>
             </div>
         )
     }
@@ -178,8 +178,7 @@ export const TapVerificationPage = () => {
                         <div className="flex items-start gap-2 text-sm text-muted-foreground">
                             <Info className="h-4 w-4 mt-0.5 shrink-0" />
                             <p>
-                                Verification requests are manually reviewed by the ZAKO team. 
-                                It may take a few days for your request to be processed.
+                                {t('taps.verification.verificationInfo')}
                             </p>
                         </div>
                     </CardFooter>

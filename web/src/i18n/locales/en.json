@@ -114,12 +114,14 @@
         "subtitle": "Manage system notifications",
         "title": "Notifications"
       },
+      "on": "on",
       "overview": "Overview",
       "pendingVerifications": "Pending Verifications",
       "quickActions": "Quick Actions",
       "recentActivity": "Recent Activity",
       "stats": {
         "allSystemsOperational": "All systems operational",
+        "healthy": "Healthy",
         "pendingVerifications": "Pending Verifications",
         "requiresReview": "Requires review",
         "systemHealth": "System Health",
@@ -225,6 +227,7 @@
       }
     },
     "auth": {
+      "authenticating": "Authenticating...",
       "continueWithDiscord": "Continue with Discord",
       "loginRequired": "Login required",
       "redirectAfterLogin": "Redirecting you now...",
@@ -235,16 +238,29 @@
       "actions": "Actions",
       "back": "Back",
       "cancel": "Cancel",
+      "changeLanguage": "Change language",
+      "clear": "Clear",
       "close": "Close",
       "confirm": "Confirm",
       "copied": "Copied to clipboard!",
       "copy": "Copy to clipboard",
       "copyIdToClipboard": "Copy ID to clipboard",
       "delete": "Delete",
+      "errorLoadingData": "Error loading data:",
+      "keyboardShortcuts": "Keyboard Shortcuts",
+      "keyboardShortcutsDescription": "Available keyboard shortcuts for quick navigation and actions",
       "loading": "Loading...",
+      "noActivityYet": "No activity yet",
+      "of": "of",
+      "page": "Page",
+      "perPage": "per page",
+      "pressEscape": "Press",
       "role": "Role",
       "search": "Search",
+      "system": "System",
       "timestamp": "Timestamp",
+      "toCloseDialog": "to close this dialog",
+      "toggleTheme": "Toggle theme",
       "viewAll": "View All"
     },
     "dashboard": {
@@ -325,7 +341,8 @@
       "read": "Read",
       "status": "Status",
       "title": "Notifications",
-      "unread": "Unread"
+      "unread": "Unread",
+      "viewAll": "View all notifications"
     },
     "settings": {
       "account": "Account",
@@ -436,6 +453,7 @@
       "myTapsDescription": "Taps you own or have access to.",
       "noTaps": "No Taps found.",
       "noTapsOwned": "You do not own any Taps.",
+      "notFound": "Tap not found",
       "occupations": {
         "base": "Base",
         "official": "Official",
@@ -454,6 +472,7 @@
       },
       "report": {
         "description": "Why are you reporting this Tap?",
+        "descriptionPlaceholder": "Please provide details about the issue...",
         "reason": "Reason",
         "submit": "Submit Report",
         "success": "Report submitted successfully.",
@@ -534,6 +553,20 @@
       "tapId": "Tap ID",
       "totalUses": "Total Uses",
       "updatedAt": "Updated At",
+      "userList": {
+        "addUserIdButton": "Add \"{{userId}}\" as user ID",
+        "clearAll": "Clear all",
+        "export": "Export",
+        "exportAsCSV": "Export as CSV",
+        "exportAsJSON": "Export as JSON",
+        "exportedCSV": "User list exported as CSV",
+        "exportedJSON": "User list exported as JSON",
+        "import": "Import",
+        "noUsersFound": "No users found.",
+        "startTyping": "Start typing to search users...",
+        "userIdAdded": "Added user ID. Note: This user may not exist yet.",
+        "userNotExists": "This user doesn't exist yet. This is allowed - they may be added later."
+      },
       "uses": "{{value}} use",
       "verification": {
         "description": "Verification Description",
@@ -548,8 +581,20 @@
         "subtitle": "Get your tap verified for better visibility and trust",
         "title": "Tap Verification",
         "titleLabel": "Request Title",
-        "titlePlaceholder": "e.g. Official verification for XYZ"
+        "titlePlaceholder": "e.g. Official verification for XYZ",
+        "verificationInfo": "Verification requests are manually reviewed by the ZAKO team. It may take a few days for your request to be processed."
       }
+    },
+    "voice": {
+      "history": "History",
+      "noActiveSession": "No active session in this channel.",
+      "noRecentActions": "No recent actions.",
+      "noTracksInQueue": "No tracks in queue.",
+      "queues": "Queues",
+      "requestedBy": "Requested by",
+      "skip": "Skip",
+      "tap": "Tap",
+      "volume": "Vol"
     }
   }
 }

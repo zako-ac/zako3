@@ -87,7 +87,7 @@ export const TapStatsPage = () => {
     if (!tap || !stats) {
         return (
             <div className="py-12 text-center">
-                <p className="text-muted-foreground">Tap not found</p>
+                <p className="text-muted-foreground">{t('taps.notFound')}</p>
             </div>
         )
     }

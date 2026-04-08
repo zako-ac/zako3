@@ -114,12 +114,14 @@
         "subtitle": "시스템 알림 관리",
         "title": "알림"
       },
+      "on": "에서",
       "overview": "개요",
       "pendingVerifications": "보류 중인 인증",
       "quickActions": "빠른 작업",
       "recentActivity": "최근 활동",
       "stats": {
         "allSystemsOperational": "모든 시스템 정상 작동",
+        "healthy": "정상",
         "pendingVerifications": "보류 중인 인증",
         "requiresReview": "검토 필요",
         "systemHealth": "시스템 상태",
@@ -225,6 +227,7 @@
       }
     },
     "auth": {
+      "authenticating": "인증 중...",
       "continueWithDiscord": "Discord로 계속하기",
       "loginRequired": "로그인 필요",
       "redirectAfterLogin": "지금 리디렉션합니다...",
@@ -235,16 +238,29 @@
       "actions": "작업",
       "back": "뒤로",
       "cancel": "취소",
+      "changeLanguage": "언어 변경",
+      "clear": "지우기",
       "close": "닫기",
       "confirm": "확인",
       "copied": "클립보드에 복사되었습니다!",
       "copy": "복사",
       "copyIdToClipboard": "클립보드에 ID 복사",
       "delete": "삭제",
+      "errorLoadingData": "데이터 로드 오류:",
+      "keyboardShortcuts": "키보드 단축키",
+      "keyboardShortcutsDescription": "빠른 네비게이션 및 작업을 위한 사용 가능한 키보드 단축키",
       "loading": "로딩 중...",
+      "noActivityYet": "아직 활동이 없습니다",
+      "of": "의",
+      "page": "페이지",
+      "perPage": "페이지당",
+      "pressEscape": "누르면",
       "role": "역할",
       "search": "검색",
+      "system": "시스템",
       "timestamp": "타임스탬프",
+      "toCloseDialog": "이 대화상자를 닫습니다",
+      "toggleTheme": "테마 전환",
       "viewAll": "모두 보기"
     },
     "dashboard": {
@@ -324,7 +340,8 @@
       "read": "읽음",
       "status": "상태",
       "title": "알림",
-      "unread": "읽지 않음"
+      "unread": "읽지 않음",
+      "viewAll": "모든 알림 보기"
     },
     "settings": {
       "account": "계정",
@@ -435,6 +452,7 @@
       "myTapsDescription": "내가 소유하거나 접근할 수 있는 탭입니다.",
       "noTaps": "탭을 찾을 수 없습니다.",
       "noTapsOwned": "소유한 탭이 없습니다.",
+      "notFound": "탭을 찾을 수 없습니다",
       "occupations": {
         "base": "기본",
         "official": "공식",
@@ -453,6 +471,7 @@
       },
       "report": {
         "description": "이 탭을 신고하는 이유는 무엇입니까?",
+        "descriptionPlaceholder": "문제에 대한 세부 정보를 입력하세요...",
         "reason": "이유",
         "submit": "보고서 제출",
         "success": "보고서가 성공적으로 제출되었습니다.",
@@ -533,6 +552,20 @@
       "tapId": "탭 ID",
       "totalUses": "총 사용량",
       "updatedAt": "업데이트됨",
+      "userList": {
+        "addUserIdButton": "\"{{userId}}\"를 사용자 ID로 추가",
+        "clearAll": "모두 지우기",
+        "export": "내보내기",
+        "exportAsCSV": "CSV로 내보내기",
+        "exportAsJSON": "JSON으로 내보내기",
+        "exportedCSV": "사용자 목록이 CSV로 내보내졌습니다",
+        "exportedJSON": "사용자 목록이 JSON으로 내보내졌습니다",
+        "import": "가져오기",
+        "noUsersFound": "사용자를 찾을 수 없습니다.",
+        "startTyping": "입력하여 사용자를 검색하세요...",
+        "userIdAdded": "사용자 ID가 추가되었습니다. 참고: 이 사용자는 아직 존재하지 않을 수 있습니다.",
+        "userNotExists": "이 사용자는 아직 존재하지 않습니다. 이것은 허용되며 나중에 추가될 수 있습니다."
+      },
       "uses": "{{value}}번 사용됨",
       "verification": {
         "description": "인증 요청 상세 설명입니다.",
@@ -547,8 +580,20 @@
         "subtitle": "인증 상태 및 요청 관리",
         "title": "인증",
         "titleLabel": "제목",
-        "titlePlaceholder": "제목을 입력하세요..."
+        "titlePlaceholder": "제목을 입력하세요...",
+        "verificationInfo": "검증 요청은 ZAKO 팀에서 수동으로 검토합니다. 요청이 처리되는 데 며칠이 걸릴 수 있습니다."
       }
+    },
+    "voice": {
+      "history": "이력",
+      "noActiveSession": "이 채널에 활성 세션이 없습니다.",
+      "noRecentActions": "최근 작업이 없습니다.",
+      "noTracksInQueue": "대기열에 트랙이 없습니다.",
+      "queues": "큐",
+      "requestedBy": "요청한 사람",
+      "skip": "건너뛰기",
+      "tap": "탭",
+      "volume": "볼륨"
     }
   }
 }

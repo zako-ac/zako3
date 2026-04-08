@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Upload, Download, UserCircle, HelpCircle } from 'lucide-react'
 import { useUsers } from '@/features/users'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,7 @@ export const UserListSelector = ({
   description,
   disabled = false,
 }: UserListSelectorProps) => {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -96,7 +98,7 @@ export const UserListSelector = ({
     a.download = `user-list-${timestamp}.json`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success('User list exported as JSON')
+    toast.success(t('taps.userList.exportedJSON'))
   }
 
   const handleExportCSV = () => {
@@ -110,7 +112,7 @@ export const UserListSelector = ({
     a.download = `user-list-${timestamp}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success('User list exported as CSV')
+    toast.success(t('taps.userList.exportedCSV'))
   }
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,7 +188,7 @@ export const UserListSelector = ({
             disabled={disabled}
           >
             <Upload className="mr-2 h-4 w-4" />
-            Import
+            {t('taps.userList.import')}
           </Button>
           <Popover>
             <PopoverTrigger asChild>
@@ -197,7 +199,7 @@ export const UserListSelector = ({
                 disabled={value.length === 0 || disabled}
               >
                 <Download className="mr-2 h-4 w-4" />
-                Export
+                {t('taps.userList.export')}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-40 p-2" align="end">
@@ -208,7 +210,7 @@ export const UserListSelector = ({
                   onClick={handleExportJSON}
                   className="justify-start"
                 >
-                  Export as JSON
+                  {t('taps.userList.exportAsJSON')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -216,7 +218,7 @@ export const UserListSelector = ({
                   onClick={handleExportCSV}
                   className="justify-start"
                 >
-                  Export as CSV
+                  {t('taps.userList.exportAsCSV')}
                 </Button>
               </div>
             </PopoverContent>
@@ -268,8 +270,7 @@ export const UserListSelector = ({
                 {!user.exists && (
                   <TooltipContent>
                     <p className="max-w-xs">
-                      This user doesn't exist yet. This is allowed - they may be
-                      added later.
+                      {t('taps.userList.userNotExists')}
                     </p>
                   </TooltipContent>
                 )}
@@ -285,7 +286,7 @@ export const UserListSelector = ({
               disabled={disabled}
               className="h-6 px-2 text-xs"
             >
-              Clear all
+              {t('taps.userList.clearAll')}
             </Button>
           )}
         </div>
@@ -315,7 +316,7 @@ export const UserListSelector = ({
               <CommandEmpty>
                 {search ? (
                   <div className="p-4 text-sm">
-                    <p className="mb-2">No users found.</p>
+                    <p className="mb-2">{t('taps.userList.noUsersFound')}</p>
                     <Button
                       type="button"
                       variant="outline"
@@ -325,17 +326,17 @@ export const UserListSelector = ({
                           handleSelect(search)
                           setSearch('')
                           toast.info(
-                            'Added user ID. Note: This user may not exist yet.'
+                            t('taps.userList.userIdAdded')
                           )
                         }
                       }}
                       className="w-full"
                     >
-                      Add "{search}" as user ID
+                      {t('taps.userList.addUserIdButton', { userId: search })}
                     </Button>
                   </div>
                 ) : (
-                  'Start typing to search users...'
+                  t('taps.userList.startTyping')
                 )}
               </CommandEmpty>
               <CommandGroup>

@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { SkipForward, Square, Undo2, Pause, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -28,6 +29,7 @@ function getNonUrlMetadata(metadata: AudioMetadataDto[]): AudioMetadataDto[] {
 }
 
 export const VoiceChannelPage = () => {
+    const { t } = useTranslation()
     const { guildId, channelId } = useParams<{
         guildId: string
         channelId: string
@@ -64,7 +66,7 @@ export const VoiceChannelPage = () => {
 
             {/* Queues */}
             <div className="space-y-4">
-                <h2 className="text-lg font-medium">Queues</h2>
+                <h2 className="text-lg font-medium">{t('voice.queues')}</h2>
                 {stateLoading ? (
                     <div className="space-y-3">
                         <Skeleton className="h-24 w-full" />
@@ -72,7 +74,7 @@ export const VoiceChannelPage = () => {
                     </div>
                 ) : !channelState ? (
                     <p className="text-muted-foreground text-sm">
-                        No active session in this channel.
+                        {t('voice.noActiveSession')}
                     </p>
                 ) : (
                     Object.entries(channelState.queues as Record<string, TrackDto[]>)
@@ -105,14 +107,14 @@ export const VoiceChannelPage = () => {
                                             }
                                         >
                                             <SkipForward className="mr-1.5 h-4 w-4" />
-                                            Skip
+                                            {t('voice.skip')}
                                         </Button>
                                     )}
                                 </CardHeader>
                                 <CardContent className="space-y-3">
                                     {tracks.length === 0 ? (
                                         <p className="text-muted-foreground text-sm">
-                                            No tracks in queue.
+                                            {t('voice.noTracksInQueue')}
                                         </p>
                                     ) : (
                                         tracks.map((track) => (
@@ -129,12 +131,12 @@ export const VoiceChannelPage = () => {
                                                             : track.audioRequestString}
                                                     </p>
                                                     <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                                                        Tap: {track.tapName} · Requested by:
+                                                        {t('voice.tap')}: {track.tapName} · {t('voice.requestedBy')}:
                                                         <CopyableId id={track.requestedBy} />
                                                     </p>
                                                     <div className="mt-2 flex items-center gap-2">
                                                         <span className="text-muted-foreground text-xs w-10">
-                                                            Vol
+                                                            {t('voice.volume')}
                                                         </span>
                                                         <Slider
                                                             className="w-32"
@@ -233,7 +235,7 @@ export const VoiceChannelPage = () => {
 
             {/* History */}
             <div className="space-y-4">
-                <h2 className="text-lg font-medium">History</h2>
+                <h2 className="text-lg font-medium">{t('voice.history')}</h2>
                 {historyLoading ? (
                     <div className="space-y-2">
                         <Skeleton className="h-12 w-full" />
@@ -242,7 +244,7 @@ export const VoiceChannelPage = () => {
                     </div>
                 ) : !history || history.length === 0 ? (
                     <p className="text-muted-foreground text-sm">
-                        No recent actions.
+                        {t('voice.noRecentActions')}
                     </p>
                 ) : (
                     <Card>

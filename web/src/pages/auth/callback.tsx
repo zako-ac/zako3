@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthCallback } from '@/features/auth/hooks'
 import { ROUTES } from '@/lib/constants'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 
 export const AuthCallbackPage = () => {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { mutate: handleCallback } = useAuthCallback()
@@ -42,7 +44,7 @@ export const AuthCallbackPage = () => {
     <div className="flex min-h-svh items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <Spinner className="h-8 w-8" />
-        <p className="text-muted-foreground">Authenticating...</p>
+        <p className="text-muted-foreground">{t('auth.authenticating')}</p>
       </div>
     </div>
   )

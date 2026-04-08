@@ -40,7 +40,7 @@ export const ActivityLog = ({
     maxHeight = '400px',
     className,
 }: ActivityLogProps) => {
-    const { i18n } = useTranslation()
+    const { i18n, t } = useTranslation()
 
     if (isLoading) {
         return (
@@ -78,7 +78,7 @@ export const ActivityLog = ({
                 <ScrollArea style={{ height: maxHeight }}>
                     {items.length === 0 ? (
                         <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                            No activity yet
+                            {t('common.noActivityYet')}
                         </div>
                     ) : (
                         <div className="relative space-y-0">

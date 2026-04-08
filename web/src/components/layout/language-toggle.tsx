@@ -14,14 +14,14 @@ const languages = [
 ] as const
 
 export const LanguageToggle = () => {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation()
 
   const currentLanguage = languages.find((lang) => lang.code === i18n.language) || languages[0]
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Change language">
+        <Button variant="ghost" size="icon" aria-label={t('common.changeLanguage')}>
           <Languages className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>

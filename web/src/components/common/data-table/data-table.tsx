@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { ReactNode } from 'react'
 import {
   Table,
@@ -78,11 +79,13 @@ export function DataTable<T>({
   className,
   onRowClick,
 }: DataTableProps<T>) {
+  const { t } = useTranslation()
+
   if (error) {
     return (
       <div className="border-destructive/50 bg-destructive/10 rounded-md border p-4">
         <p className="text-destructive text-sm">
-          Error loading data: {error.message}
+          {t('common.errorLoadingData')} {error.message}
         </p>
       </div>
     )

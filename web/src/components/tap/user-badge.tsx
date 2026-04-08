@@ -54,7 +54,7 @@ export const UserBadge = ({
                 <div className="bg-muted flex h-5 w-5 items-center justify-center rounded-full">
                     <Cpu className="h-3 w-3" />
                 </div>
-                <span className="font-medium italic">System</span>
+                <span className="font-medium italic">{t('common.system')}</span>
             </div>
         )
     }
