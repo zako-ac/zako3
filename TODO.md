@@ -82,6 +82,7 @@ refer hq todo
 - [x] Test Korean and refine i18n
 - [ ] Add "load failed" 
 - [x] Remove empty queue
+- [ ] Add reload button and periodic reload in queue,
 
 ## Mobile
 - [x] Tap card overflow

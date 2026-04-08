@@ -359,6 +359,8 @@ impl AudioEngineServer {
             info!("Session consumer for {} stopped", subject);
         });
 
-        self.session_consumers.insert((guild_id, channel_id), handle);
+        if let Some(old_handle) = self.session_consumers.insert((guild_id, channel_id), handle) {
+            old_handle.abort();
+        }
     }
 }

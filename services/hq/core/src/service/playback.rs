@@ -472,18 +472,36 @@ impl PlaybackService {
             return Ok(vec![message_channel_id]);
         }
 
+        tracing::info!(
+            "Bot channel ids in guild {}: {:?}",
+            guild_id,
+            bot_channel_ids
+        );
+
         match settings.text_reading_rule {
             TextReadingRule::Always => {
                 if let Some(info) = user_voice_info {
                     if let Some(channel_id) = info.channel_id {
-                        return Ok(vec![channel_id]);
+                        if bot_channel_ids.contains(&channel_id) {
+                            tracing::info!(
+                                "User in bot-connected channel {}, routing TTS there",
+                                channel_id
+                            );
+                            return Ok(vec![channel_id]);
+                        }
                     }
                 }
+                tracing::info!("User not in a bot-connected channel, falling back to sending TTS to all channels");
                 Ok(bot_channel_ids)
             }
             TextReadingRule::InVoiceChannel | TextReadingRule::OnMicMute => {
+                tracing::info!("currently unreachable");
                 if let Some(info) = user_voice_info {
                     if let Some(channel_id) = info.channel_id {
+                        if !bot_channel_ids.contains(&channel_id) {
+                            return Ok(vec![]);
+                        }
+
                         match settings.text_reading_rule {
                             TextReadingRule::InVoiceChannel => return Ok(vec![channel_id]),
                             TextReadingRule::OnMicMute => {

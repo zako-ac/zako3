@@ -78,7 +78,19 @@ async fn handle_message_create(
 
                 (settings, tap_name)
             } else {
-                (UserSettings::default(), fallback_tap_name())
+                // fetch global settings
+
+                if let Some(global_settings_partial) =
+                    service.user_settings.get_global_settings().await?
+                {
+                    let global_settings = global_settings_partial.resolve();
+
+                    let tap_name = resolve_tap_name_for_user(&service, &global_settings).await?;
+
+                    (global_settings, tap_name)
+                } else {
+                    (UserSettings::default(), fallback_tap_name())
+                }
             }
         };
 
