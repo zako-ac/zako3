@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zako3.fullname" . }}-timescale-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.timescale.storageSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zako3.fullname" . }}-timescale
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: timescale
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "timescale" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "timescale" "Release" .Release) | nindent 8 }}
+    spec:
+      containers:
+        - name: timescale
+          image: timescale/timescaledb:latest-pg16
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.timescale.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.timescale.db | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-timescale-secret" (include "zako3.fullname" .))
+                    "existingName" .Values.timescale.existingSecret.name
+                    "key" .Values.timescale.existingSecret.key) | nindent 16 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.timescale.user | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "zako3.fullname" . }}-timescale-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zako3.fullname" . }}-timescale
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "timescale" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

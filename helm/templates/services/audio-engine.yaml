@@ -1,0 +1,66 @@
+{{- $fullname := include "zako3.fullname" . }}
+{{- range .Values.audioEngines }}
+{{- $instanceSecretName := printf "%s-audio-engine-%s-secret" $fullname .name }}
+{{- $existingSecret := .existingSecret.name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-audio-engine-{{ .name }}
+  labels:
+    {{- include "zako3.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: audio-engine
+    audio-engine/instance: {{ .name | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audio-engine-{{ .name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audio-engine-{{ .name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+    spec:
+      containers:
+        - name: audio-engine
+          image: {{ include "zako3.imageRef" (dict "registry" $.Values.image.registry "name" "audio-engine" "tag" $.Values.image.tag) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: REDIS_URL
+              value: "redis://{{ $fullname }}-redis:6379"
+            - name: NATS_URL
+              value: "nats://{{ $fullname }}-nats:4222"
+            - name: OTLP_ENDPOINT
+              value: "http://{{ $fullname }}-otel-lgtm:4317"
+            - name: METRICS_PORT
+              value: "9090"
+            - name: DISCORD_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $instanceSecretName
+                    "existingName" $existingSecret
+                    "key" .existingSecret.discordTokenKey) | nindent 16 }}
+            - name: AE_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $instanceSecretName
+                    "existingName" $existingSecret
+                    "key" .existingSecret.aeTokenKey) | nindent 16 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+{{- end }}

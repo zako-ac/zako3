@@ -1,0 +1,114 @@
+image:
+  registry: ""
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# --- Postgres ---
+postgres:
+  user: zako3
+  password: ""
+  db: zako3
+  existingSecret:
+    name: ""
+    key: "password"
+  storageSize: "10Gi"
+
+# --- TimescaleDB ---
+timescale:
+  user: metrics
+  password: ""
+  db: metrics
+  existingSecret:
+    name: ""
+    key: "password"
+  storageSize: "20Gi"
+
+# --- HQ service ---
+hq:
+  discordRedirectUri: "http://localhost:8080/auth/callback"
+  # Inline values — chart creates a Secret from these if existingSecret.name is not set
+  rpcAdminToken: ""
+  discordClientId: ""
+  discordClientSecret: ""
+  discordBotToken: ""
+  jwtSecret: ""
+  # Reference an existing Secret instead (all keys must exist in the Secret)
+  existingSecret:
+    name: ""
+    keys:
+      rpcAdminToken: "rpc-admin-token"
+      discordClientId: "discord-client-id"
+      discordClientSecret: "discord-client-secret"
+      discordBotToken: "discord-bot-token"
+      jwtSecret: "jwt-secret"
+  mapperWasmDir: "/tmp/hq-mappers"
+  mapperDbPath: "/tmp/hq-mappers.db"
+  metricsPort: "9091"
+
+# --- TapHub service ---
+taphub:
+  hqRpcAdminToken: ""
+  existingSecret:
+    name: ""
+    key: "hq-rpc-admin-token"
+  # tlsSecret must reference an existing Secret with keys: cert.pem, key.pem
+  tlsSecret: ""
+  cacheDir: "/cache"
+  requestTimeoutMs: "13000"
+  metricsPort: "9092"
+
+# --- Audio Engine instances ---
+# Each entry creates a separate Deployment.
+# Use existingSecret.name to reference a pre-existing Secret; otherwise inline values are used.
+audioEngines:
+  - name: "instance-1"
+    discordToken: ""
+    aeToken: "changeme"
+    existingSecret:
+      name: ""
+      discordTokenKey: "discord-token"
+      aeTokenKey: "ae-token"
+  # - name: "instance-2"
+  #   discordToken: ""
+  #   aeToken: "changeme"
+  #   existingSecret:
+  #     name: "audio-engine-2-secret"
+  #     discordTokenKey: "discord-token"
+  #     aeTokenKey: "ae-token"
+
+# --- Web frontend ---
+web:
+  viteApiBaseUrl: "/api/v1"
+  viteWsBaseUrl: "ws://localhost"
+  viteGrafanaUrl: "http://localhost:3000"
+
+# --- Workers ---
+cacheGc:
+  schedule: "*/30 * * * *"
+  maxCacheBytes: ""
+  cacheDir: "/cache"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+metricsSync:
+  syncIntervalSeconds: 60
+
+# --- Ports ---
+ports:
+  hqBackend: 8080
+  hqRpc: 50052
+  taphubTransport: 4000
+  taphubZakofish: 4001
+  web: 80
+
+# --- NATS ---
+nats:
+  image: nats:2-alpine
+
+# --- Redis ---
+redis:
+  image: redis:7-alpine
+
+# --- Otel-LGTM ---
+otelLgtm:
+  image: grafana/otel-lgtm:latest

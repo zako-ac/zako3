@@ -1,0 +1,46 @@
+{{- $fullname := include "zako3.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-metrics-sync
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "metrics-sync" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "metrics-sync" "Release" .Release) | nindent 8 }}
+    spec:
+      initContainers:
+        - name: wait-for-redis
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ $fullname }}-redis 6379; do
+                echo "Waiting for redis..."; sleep 2
+              done
+              echo "Redis is ready."
+      containers:
+        - name: metrics-sync
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "metrics-sync" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: REDIS_URL
+              value: "redis://{{ $fullname }}-redis:6379"
+            - name: SYNC_INTERVAL_SECONDS
+              value: {{ .Values.metricsSync.syncIntervalSeconds | quote }}
+            - name: TIMESCALE_PASSWORD
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-timescale-secret" $fullname)
+                    "existingName" .Values.timescale.existingSecret.name
+                    "key" .Values.timescale.existingSecret.key) | nindent 16 }}
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.timescale.user }}:$(TIMESCALE_PASSWORD)@{{ $fullname }}-timescale:5432/{{ .Values.timescale.db }}"

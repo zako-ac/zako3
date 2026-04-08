@@ -1,0 +1,6 @@
+apiVersion: v2
+name: zako3
+description: Zako3 Discord bot platform
+type: application
+version: 0.1.0
+appVersion: "latest"

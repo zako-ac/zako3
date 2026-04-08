@@ -12,6 +12,121 @@ Variables marked **required** have no default and will cause `docker compose` to
 
 ---
 
+## Helm
+
+### Prerequisites
+
+- Helm 3.x
+- A Kubernetes cluster
+- TLS certificate and key for taphub stored in a Secret (see below)
+
+### Quickstart
+
+```sh
+helm install zako3 ./helm \
+  --set postgres.password=<pg-password> \
+  --set timescale.password=<ts-password> \
+  --set hq.rpcAdminToken=<token> \
+  --set hq.discordClientId=<id> \
+  --set hq.discordClientSecret=<secret> \
+  --set hq.discordBotToken=<token> \
+  --set hq.jwtSecret=<secret> \
+  --set taphub.hqRpcAdminToken=<token> \
+  --set taphub.tlsSecret=<existing-k8s-secret-name> \
+  --set "audioEngines[0].name=bot1" \
+  --set "audioEngines[0].discordToken=<token>"
+```
+
+Or use a `values.yaml` override file:
+
+```sh
+helm install zako3 ./helm -f my-values.yaml
+```
+
+### Multiple audio-engine instances
+
+Add one entry per bot to `audioEngines[]`. Each entry creates a separate Deployment.
+
+```yaml
+# my-values.yaml
+audioEngines:
+  - name: "server-a"
+    discordToken: "Bot TOKEN_A"
+    aeToken: "shared-secret"
+  - name: "server-b"
+    discordToken: "Bot TOKEN_B"
+    aeToken: "shared-secret"
+```
+
+### TLS for taphub
+
+taphub requires TLS. Create the Secret before installing the chart:
+
+```sh
+kubectl create secret generic taphub-tls \
+  --from-file=cert.pem=./cert.pem \
+  --from-file=key.pem=./key.pem
+```
+
+Then set `taphub.tlsSecret: taphub-tls` in your values. The chart never creates this Secret.
+
+### Using existing Secrets
+
+For each sensitive service, you can reference a pre-existing Secret instead of setting inline values:
+
+```yaml
+# Postgres password from an existing Secret
+postgres:
+  existingSecret:
+    name: "my-postgres-secret"
+    key: "password"
+
+# All HQ secrets from one existing Secret
+hq:
+  existingSecret:
+    name: "my-hq-secret"
+    keys:
+      rpcAdminToken: "rpc-admin-token"
+      discordClientId: "discord-client-id"
+      discordClientSecret: "discord-client-secret"
+      discordBotToken: "discord-bot-token"
+      jwtSecret: "jwt-secret"
+
+# Per audio-engine instance
+audioEngines:
+  - name: "bot1"
+    existingSecret:
+      name: "audio-engine-bot1-secret"
+      discordTokenKey: "discord-token"
+      aeTokenKey: "ae-token"
+```
+
+When `existingSecret.name` is set for a service, the chart skips creating a Secret for it.
+
+### Image registry
+
+All service images are pulled as `<registry>/<name>:<tag>`. Set the registry and tag:
+
+```yaml
+image:
+  registry: "ghcr.io/minco"
+  tag: "1.2.3"
+```
+
+### Workers
+
+- **`metrics-sync`** runs as a Deployment. It starts only after Redis is ready (enforced via an initContainer that polls `redis:6379`).
+- **`cache-gc`** runs as a CronJob. Default schedule: `*/30 * * * *`. Override with `cacheGc.schedule`.
+
+### Verify
+
+```sh
+helm lint ./helm
+helm template zako3 ./helm -f my-values.yaml | kubectl apply --dry-run=client -f -
+```
+
+---
+
 ## Environment Variable Reference
 
 ### Infrastructure

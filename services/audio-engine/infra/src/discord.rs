@@ -22,6 +22,7 @@ impl SongbirdDiscordService {
     }
 
     fn to_songbird_guild_id(guild_id: GuildId) -> songbird::id::GuildId {
+        // TODO remove unwrap
         songbird::id::GuildId::from(NonZeroU64::new(guild_id.into()).unwrap())
     }
 
