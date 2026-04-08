@@ -249,7 +249,7 @@ async fn require_mute_members(ctx: Context<'_>) -> Result<(), Error> {
         .await
         .and_then(|m| {
             ctx.guild()
-                .map(|g| g.member_permissions(&*m).mute_members())
+                .map(|g| g.member_permissions(&m).mute_members())
         })
         .unwrap_or(false);
 

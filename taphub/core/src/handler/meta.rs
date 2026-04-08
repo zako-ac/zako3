@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use hex;
 use sha2::Digest;
 use zako3_preload_cache::AudioCache;
 use zako3_types::{

@@ -20,14 +20,13 @@ pub async fn start_register_handler(
                     match handle_emoji_register(request, store).await {
                         Ok(response) => {
                             let payload = serde_json::to_vec(&response).unwrap();
-                            if let Some(subj) = message.reply {
-                                if let Err(e) = client.publish(subj, payload.into()).await {
+                            if let Some(subj) = message.reply
+                                && let Err(e) = client.publish(subj, payload.into()).await {
                                     tracing::error!(
                                         "Failed to send emoji registration response: {}",
                                         e
                                     );
                                 }
-                            }
                         }
                         Err(e) => {
                             tracing::error!("Error handling emoji registration: {}", e);

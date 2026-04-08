@@ -40,7 +40,7 @@ impl TransportClient {
             protofish_config,
         };
         let client = ProtofishClient::bind(config)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         Ok(Self {
             client: Arc::new(client),

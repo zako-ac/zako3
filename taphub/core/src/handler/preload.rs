@@ -32,8 +32,8 @@ pub(crate) async fn handle_preload_audio_inner(
 
     // Skip preload if already cached
     let cache_item = build_cache_item(tap_id.clone(), &req.cache_key, &req.audio_request);
-    if let Some(ref item) = cache_item {
-        if let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await {
+    if let Some(ref item) = cache_item
+        && let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await {
             tracing::info!(
                 "Preload cache hit for tap_id={}, key={}",
                 item.tap_id.0,
@@ -45,7 +45,6 @@ pub(crate) async fn handle_preload_audio_inner(
                 base_volume: tap.base_volume,
             });
         }
-    }
 
     // Connection selection
     let (connection_id, disconnect_rx) = tap_hub.select_connection(&tap_id).await?;

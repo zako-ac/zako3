@@ -78,7 +78,7 @@ fn write_truncated_opus(path: &Path) {
     let fake_len: u32 = 50;
     file.write_all(&fake_len.to_le_bytes())
         .expect("write fake length");
-    file.write_all(&vec![0u8; 10]).expect("write truncated data");
+    file.write_all(&[0u8; 10]).expect("write truncated data");
     file.flush().expect("flush file");
 }
 

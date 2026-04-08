@@ -71,7 +71,7 @@ impl SessionManager {
 
         let session = SessionState {
             guild_id,
-            channel_id: channel_id,
+            channel_id,
             queues: Default::default(),
         };
 

@@ -32,6 +32,7 @@ impl AudioEngineService {
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn play(
         &self,
         guild_id: GuildId,

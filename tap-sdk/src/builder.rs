@@ -85,7 +85,7 @@ impl TapBuilder {
         let client_config = ClientConfig {
             bind_address: "127.0.0.1:0"
                 .parse()
-                .map_err(|e| SdkError::AddrParse(e))?,
+                .map_err(SdkError::AddrParse)?,
             root_certificates: cert_chain,
             supported_compression_types: vec![CompressionType::None],
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),

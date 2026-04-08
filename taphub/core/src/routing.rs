@@ -10,7 +10,7 @@ impl DynamicSampler {
     }
 
     fn next_pick(&mut self, ids: &[u64], weights: &[f32]) -> u64 {
-        const PHI: f32 = 0.6180339887;
+        const PHI: f32 = 0.618_034;
         self.cursor = (self.cursor + PHI) % 1.0;
 
         let total_weight: f32 = weights.iter().sum();

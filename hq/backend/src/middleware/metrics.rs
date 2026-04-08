@@ -41,6 +41,12 @@ pub struct MetricsLayer {
     meters: Arc<Meters>,
 }
 
+impl Default for MetricsLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsLayer {
     pub fn new() -> Self {
         Self {

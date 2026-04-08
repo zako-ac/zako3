@@ -39,9 +39,9 @@ pub struct Emoji {
     pub name: String,
 }
 
-impl Into<ImgHash> for imagehash::Hash {
-    fn into(self) -> ImgHash {
-        ImgHash(self.bits)
+impl From<imagehash::Hash> for ImgHash {
+    fn from(val: imagehash::Hash) -> Self {
+        ImgHash(val.bits)
     }
 }
 

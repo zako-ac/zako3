@@ -287,6 +287,30 @@ impl ZodSchema for serde_json::Value {
 
 impl<T: ZodSchema> ZodObjectSchema for T {}
 
+impl<T: chrono::TimeZone> ZodSchema for chrono::DateTime<T> {
+    fn zod_schema() -> String {
+        format!("{}.datetime()", zod_string())
+    }
+}
+
+impl ZodSchema for uuid::Uuid {
+    fn zod_schema() -> String {
+        format!("{}.uuid()", zod_string())
+    }
+}
+
+impl ZodSchema for u16 {
+    fn zod_schema() -> String {
+        zod_number().to_string()
+    }
+}
+
+impl ZodSchema for u8 {
+    fn zod_schema() -> String {
+        zod_number().to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,29 +376,5 @@ mod tests {
             <HashMap<String, Vec<String>>>::zod_schema(),
             "z.record(z.string(), z.array(z.string()))"
         );
-    }
-}
-
-impl<T: chrono::TimeZone> ZodSchema for chrono::DateTime<T> {
-    fn zod_schema() -> String {
-        format!("{}.datetime()", zod_string())
-    }
-}
-
-impl ZodSchema for uuid::Uuid {
-    fn zod_schema() -> String {
-        format!("{}.uuid()", zod_string())
-    }
-}
-
-impl ZodSchema for u16 {
-    fn zod_schema() -> String {
-        zod_number().to_string()
-    }
-}
-
-impl ZodSchema for u8 {
-    fn zod_schema() -> String {
-        zod_number().to_string()
     }
 }

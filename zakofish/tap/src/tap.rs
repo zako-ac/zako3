@@ -82,7 +82,7 @@ impl ZakofishTap {
 
         let hello_msg = TapToHubMessage::ClientHello(hello_info);
         let encoded_hello = crate::protocol::codec::encode_msgpack(&hello_msg)?;
-        control_stream.send_payload(encoded_hello.into()).await?;
+        control_stream.send_payload(encoded_hello).await?;
 
         let response_bytes = control_stream.recv_payload().await?;
         let response: HubToTapMessage = crate::protocol::codec::decode_msgpack(&response_bytes)?;
@@ -149,7 +149,7 @@ async fn handle_incoming_stream(
                     // Send success payload
                     let response_msg = TapToHubMessage::AudioRequestSuccess(success_msg);
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?)
                         .await?;
 
                     // Start transfer
@@ -178,7 +178,7 @@ async fn handle_incoming_stream(
                 Err(failure_msg) => {
                     let response_msg = TapToHubMessage::AudioRequestFailure(failure_msg);
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?)
                         .await?;
                 }
             }
@@ -191,13 +191,13 @@ async fn handle_incoming_stream(
                 Ok(success_msg) => {
                     let response_msg = TapToHubMessage::AudioMetadataSuccess(success_msg);
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?)
                         .await?;
                 }
                 Err(failure_msg) => {
                     let response_msg = TapToHubMessage::AudioRequestFailure(failure_msg);
                     mani_stream
-                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?.into())
+                        .send_payload(crate::protocol::codec::encode_msgpack(&response_msg)?)
                         .await?;
                 }
             }

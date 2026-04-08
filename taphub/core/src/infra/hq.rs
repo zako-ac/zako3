@@ -12,6 +12,7 @@ pub struct RpcHqRepository {
 }
 
 impl RpcHqRepository {
+    #[allow(clippy::result_large_err)]
     pub fn new(url: &str, admin_token: &str) -> ZakoResult<Self> {
         let mut headers = http::HeaderMap::new();
         headers.insert(

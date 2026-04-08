@@ -96,7 +96,7 @@ impl TapHub {
             .await
             .map_err(|e| format!("Failed to get tap states: {}", e))?;
 
-        let available: Vec<_> = states.iter().cloned().collect();
+        let available: Vec<_> = states.to_vec();
 
         let connection_id = self
             .sampler

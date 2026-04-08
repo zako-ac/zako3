@@ -9,6 +9,13 @@ use crate::types::{Emoji, ImgHash};
 pub struct MockEmojiStore;
 
 #[cfg(test)]
+impl Default for MockEmojiStore {
+    fn default() -> Self {
+        Self
+    }
+}
+
+#[cfg(test)]
 impl MockEmojiStore {
     pub fn new() -> Self {
         Self

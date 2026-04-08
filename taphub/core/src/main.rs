@@ -16,8 +16,8 @@ fn load_certs(
     let cert_path = &config.cert_file;
     let key_path = &config.key_file;
 
-    let cert_file = &mut BufReader::new(File::open(&cert_path)?);
-    let key_file = &mut BufReader::new(File::open(&key_path)?);
+    let cert_file = &mut BufReader::new(File::open(cert_path)?);
+    let key_file = &mut BufReader::new(File::open(key_path)?);
 
     let cert_chain = rustls_pemfile::certs(cert_file).collect::<Result<Vec<_>, _>>()?;
 

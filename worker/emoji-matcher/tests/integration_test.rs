@@ -73,8 +73,8 @@ async fn test_save_and_find_emoji() {
     // Search with very different hash (Hamming distance > 5)
     let mut very_different_hash_vec = vec![0.0f32; 64];
     // Set completely different bits
-    for i in 10..20 {
-        very_different_hash_vec[i] = 1.0;
+    for item in very_different_hash_vec.iter_mut().skip(10).take(10) {
+        *item = 1.0;
     }
     let very_different_hash = ImgHash::from_float_vec(very_different_hash_vec);
 

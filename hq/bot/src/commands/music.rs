@@ -100,6 +100,7 @@ pub async fn play(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn do_play<'a>(
     ctx: Context<'a>,
     guild_id: GuildId,

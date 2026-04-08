@@ -67,6 +67,7 @@ impl AudioEngineRpcClient {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn play(
         &self,
         guild_id: GuildId,

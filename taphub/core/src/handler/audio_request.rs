@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
-use hex;
 use opentelemetry::KeyValue;
 use protofish2::Timestamp;
 use sha2::Digest;
@@ -67,9 +66,9 @@ pub(crate) async fn handle_request_audio_inner(
     // Try cache hit
     let cache_item = build_cache_item(tap_id.clone(), &request.cache_key, &request.audio_request);
 
-    if let Some(ref item) = cache_item {
-        if let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await {
-            if entry.has_audio() && !entry.is_downloading() {
+    if let Some(ref item) = cache_item
+        && let Some(entry) = tap_hub.audio_cache.get_entry(&item.tap_id, &item.key).await
+            && entry.has_audio() && !entry.is_downloading() {
                 tracing::info!(tap_id = %tap_id.0, cache_key = %item.key, cache_hit = true, "Cache hit");
                 if let Some(reader) = tap_hub
                     .audio_cache
@@ -92,16 +91,11 @@ pub(crate) async fn handle_request_audio_inner(
                     tokio::spawn(async move {
                         let mut reader = reader;
                         let mut frame_count = 0u64;
-                        loop {
-                            match reader.next_frame().await {
-                                Ok(NextFrame::Frame(bytes)) => {
-                                    let ts = Timestamp(frame_count * 20);
-                                    frame_count += 1;
-                                    if tx.send((ts, bytes)).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Ok(NextFrame::Pending) | Ok(NextFrame::Done) | Err(_) => break,
+                        while let Ok(NextFrame::Frame(bytes)) = reader.next_frame().await {
+                            let ts = Timestamp(frame_count * 20);
+                            frame_count += 1;
+                            if tx.send((ts, bytes)).await.is_err() {
+                                break;
                             }
                         }
                     });
@@ -123,8 +117,6 @@ pub(crate) async fn handle_request_audio_inner(
                     );
                 }
             }
-        }
-    }
 
     tracing::Span::current().record("cache_hit", false);
     tracing::info!(

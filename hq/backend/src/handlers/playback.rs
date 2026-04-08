@@ -283,7 +283,7 @@ async fn handle_ws(mut socket: WebSocket, event_tx: broadcast::Sender<String>) {
     loop {
         tokio::select! {
             Ok(msg) = rx.recv() => {
-                if socket.send(Message::Text(msg.into())).await.is_err() {
+                if socket.send(Message::Text(msg)).await.is_err() {
                     break;
                 }
             }

@@ -65,7 +65,7 @@ async fn lowercase_mapper_transforms_text() {
 
     service
         .pipeline_repo()
-        .set_ordered(&[mapper.id.clone()])
+        .set_ordered(std::slice::from_ref(&mapper.id))
         .await
         .unwrap();
 

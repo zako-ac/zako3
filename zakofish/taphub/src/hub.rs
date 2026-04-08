@@ -9,6 +9,16 @@ use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
 
 use zakofish::error::{Result, ZakofishError};
+
+type SessionMap = Arc<
+    Mutex<
+        HashMap<
+            zakofish::types::TapId,
+            HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
+        >,
+    >,
+>;
+
 use zakofish::types::message::{
     AudioMetadataRequestMessage, AudioMetadataSuccessMessage, AudioRequestMessage,
     AudioRequestSuccessMessage, TapClientHello, TapServerReject,
@@ -28,14 +38,7 @@ pub struct ZakofishHub {
     server: Arc<ProtofishServer>,
     handler: Arc<dyn HubHandler>,
     next_connection_id: Arc<AtomicU64>,
-    sessions: Arc<
-        Mutex<
-            HashMap<
-                zakofish::types::TapId,
-                HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
-            >,
-        >,
-    >,
+    sessions: SessionMap,
 }
 
 impl ZakofishHub {
@@ -114,7 +117,7 @@ impl ZakofishHub {
         };
         let payload = zakofish::types::message::HubToTapMessage::AudioRequest(request);
         let encoded = zakofish::protocol::codec::encode_msgpack(&payload)?;
-        stream.send_payload(encoded.into()).await?;
+        stream.send_payload(encoded).await?;
 
         let response_bytes = stream.recv_payload().await?;
         let response: zakofish::types::message::TapToHubMessage =
@@ -172,7 +175,7 @@ impl ZakofishHub {
         let payload =
             zakofish::types::message::HubToTapMessage::AudioMetadataRequest(request);
         let encoded = zakofish::protocol::codec::encode_msgpack(&payload)?;
-        stream.send_payload(encoded.into()).await?;
+        stream.send_payload(encoded).await?;
 
         let response_bytes = stream.recv_payload().await?;
         let response: zakofish::types::message::TapToHubMessage =
@@ -198,14 +201,7 @@ impl ZakofishHub {
 async fn handle_new_connection(
     mut conn: protofish2::connection::ProtofishConnection,
     handler: Arc<dyn HubHandler>,
-    sessions: Arc<
-        Mutex<
-            HashMap<
-                zakofish::types::TapId,
-                HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
-            >,
-        >,
-    >,
+    sessions: SessionMap,
     next_connection_id: Arc<AtomicU64>,
     span: tracing::Span,
 ) -> Result<()> {
@@ -232,7 +228,7 @@ async fn handle_new_connection(
                     let accept_msg = zakofish::types::message::HubToTapMessage::Accept;
                     mani_stream
                         .send_payload(
-                            zakofish::protocol::codec::encode_msgpack(&accept_msg)?.into(),
+                            zakofish::protocol::codec::encode_msgpack(&accept_msg)?,
                         )
                         .await?;
 
@@ -268,7 +264,7 @@ async fn handle_new_connection(
                     let reject_msg = zakofish::types::message::HubToTapMessage::Reject(reject);
                     mani_stream
                         .send_payload(
-                            zakofish::protocol::codec::encode_msgpack(&reject_msg)?.into(),
+                            zakofish::protocol::codec::encode_msgpack(&reject_msg)?,
                         )
                         .await?;
                     Ok(())

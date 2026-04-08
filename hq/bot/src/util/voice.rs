@@ -68,6 +68,7 @@ pub async fn resolve_session(
 }
 
 /// Returns the invoking user's current voice channel ID from the serenity guild cache.
+#[allow(clippy::result_large_err)]
 pub fn get_user_voice_channel(ctx: Context<'_>) -> Result<(serenity::ChannelId, ChannelId), Error> {
     let guild = ctx
         .guild()
@@ -81,6 +82,7 @@ pub fn get_user_voice_channel(ctx: Context<'_>) -> Result<(serenity::ChannelId, 
 }
 
 /// Returns the guild ID from context, or an error if used outside a guild.
+#[allow(clippy::result_large_err)]
 pub fn require_guild_id(ctx: Context<'_>) -> Result<GuildId, Error> {
     ctx.guild_id()
         .map(|id| GuildId::from(id.get()))
