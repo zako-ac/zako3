@@ -1,8 +1,6 @@
 name: Publish Docker images
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
 
 env:
