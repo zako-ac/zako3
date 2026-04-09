@@ -114,7 +114,7 @@ ports:
   hqBackend: 8080
   hqRpc: 50052
   taphubTransport: 4000
-  taphubZakofish: 4001
+  taphubZakofish: 7060
   web: 80
 
 # --- NATS ---
