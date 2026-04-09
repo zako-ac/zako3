@@ -25,9 +25,9 @@ spec:
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               command: ["cache-gc"]
               args:
-                - "run-all"
                 - "--max-bytes"
                 - {{ .Values.cacheGc.maxCacheBytes | quote }}
+                - "run-all"
               env:
                 - name: REDIS_URL
                   value: "redis://{{ $fullname }}-redis:6379"
