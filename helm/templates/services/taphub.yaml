@@ -96,6 +96,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
+  type: ClusterIP
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
   ports:
@@ -103,6 +104,18 @@ spec:
       protocol: UDP
       port: {{ .Values.ports.taphubTransport }}
       targetPort: transport
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-taphub-zakofish
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
+  ports:
     - name: zakofish
       protocol: UDP
       port: {{ .Values.ports.taphubZakofish }}
