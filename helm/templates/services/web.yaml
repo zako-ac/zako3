@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
+    zako.ac/service: web
 spec:
   replicas: 1
   selector:

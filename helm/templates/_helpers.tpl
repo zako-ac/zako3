@@ -20,7 +20,7 @@ Create a default fully qualified app name.
 Common labels
 */}}
 {{- define "zako3.labels" -}}
-helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
