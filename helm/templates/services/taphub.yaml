@@ -57,6 +57,8 @@ spec:
                     "existingName" $existingSecret
                     "key" .Values.taphub.existingSecret.key) | nindent 16 }}
           volumeMounts:
+            - name: cache
+              mountPath: {{ .Values.taphub.cacheDir }}
             - name: tls-certs
               mountPath: /certs
               readOnly: true
@@ -73,6 +75,9 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
       volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: {{ include "zako3.fullname" . }}-taphub-cache
         - name: tls-certs
           secret:
             secretName: {{ required "taphub.tlsSecret is required" .Values.taphub.tlsSecret }}

@@ -113,10 +113,29 @@ image:
   tag: "1.2.3"
 ```
 
+### Persistent storage
+
+All stateful components use PersistentVolumeClaims. By default the cluster's default StorageClass is used. Override with:
+
+```yaml
+storageClass: "local-path"   # must support ReadWriteOnce for postgres/timescale
+                              # must support ReadWriteMany for taphub cache
+```
+
+Or pass `--set storageClass=local-path` at install time.
+
+| PVC | Access mode | Default size | Values key |
+|-----|-------------|--------------|------------|
+| `<release>-postgres-data` | ReadWriteOnce | 10Gi | `postgres.storageSize` |
+| `<release>-timescale-data` | ReadWriteOnce | 20Gi | `timescale.storageSize` |
+| `<release>-taphub-cache` | ReadWriteMany | 5Gi | `taphub.cacheStorageSize` |
+
+The taphub cache PVC is shared between the `taphub` Deployment and the `cache-gc` CronJob. A StorageClass that supports `ReadWriteMany` (e.g. NFS, Longhorn, CephFS) is required in production; for single-node clusters `local-path` with a single replica also works.
+
 ### Workers
 
 - **`metrics-sync`** runs as a Deployment. It starts only after Redis is ready (enforced via an initContainer that polls `redis:6379`).
-- **`cache-gc`** runs as a CronJob. Default schedule: `*/30 * * * *`. Override with `cacheGc.schedule`.
+- **`cache-gc`** runs as a CronJob. Default schedule: `*/30 * * * *`. Override with `cacheGc.schedule`. Mounts the shared taphub cache PVC to perform eviction.
 
 ### Verify
 

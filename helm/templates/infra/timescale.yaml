@@ -5,6 +5,9 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
   accessModes:
     - ReadWriteOnce
   resources:

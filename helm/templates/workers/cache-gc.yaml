@@ -31,3 +31,10 @@ spec:
                 - name: MAX_CACHE_BYTES
                   value: {{ .Values.cacheGc.maxCacheBytes | quote }}
                 {{- end }}
+              volumeMounts:
+                - name: cache
+                  mountPath: {{ .Values.cacheGc.cacheDir }}
+          volumes:
+            - name: cache
+              persistentVolumeClaim:
+                claimName: {{ $fullname }}-taphub-cache

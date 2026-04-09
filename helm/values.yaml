@@ -3,6 +3,8 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+storageClass: ""
+
 # --- Postgres ---
 postgres:
   user: zako3
@@ -54,6 +56,7 @@ taphub:
   # tlsSecret must reference an existing Secret with keys: cert.pem, key.pem
   tlsSecret: ""
   cacheDir: "/cache"
+  cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"
   metricsPort: "9092"
 
