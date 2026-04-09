@@ -96,7 +96,7 @@ web:
 cacheGc:
   nodeAffinity: {}
   schedule: "*/30 * * * *"
-  maxCacheBytes: ""
+  maxCacheBytes: "10737418240"
   cacheDir: "/cache"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
