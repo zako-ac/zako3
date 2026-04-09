@@ -56,6 +56,20 @@ secretKeyRef:
 {{- end }}
 
 {{/*
+nodeAffinity helper — renders affinity.nodeAffinity block.
+Local (per-service) value takes precedence over global; both empty = nothing rendered.
+Usage: include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.hq.nodeAffinity)
+*/}}
+{{- define "zako3.nodeAffinity" -}}
+{{- $aff := coalesce .local .global -}}
+{{- with $aff }}
+affinity:
+  nodeAffinity:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}
+
+{{/*
 OTLP + NATS + Redis shared env vars
 */}}
 {{- define "zako3.sharedEnv" -}}

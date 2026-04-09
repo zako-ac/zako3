@@ -17,6 +17,7 @@ spec:
           labels:
             {{- include "zako3.selectorLabels" (dict "component" "cache-gc" "Release" .Release) | nindent 12 }}
         spec:
+          {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.cacheGc.nodeAffinity) | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: cache-gc
