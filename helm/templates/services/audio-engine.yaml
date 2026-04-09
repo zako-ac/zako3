@@ -39,6 +39,8 @@ spec:
               value: "nats://{{ $fullname }}-nats:4222"
             - name: TAPHUB_URL
               value: "{{ $fullname }}-taphub:{{ $.Values.ports.taphubTransport }}"
+            - name: TAPHUB_SNI
+              value: "{{ $fullname }}-taphub"
             - name: OTLP_ENDPOINT
               value: "http://{{ $fullname }}-otel-lgtm:4317"
             - name: METRICS_PORT

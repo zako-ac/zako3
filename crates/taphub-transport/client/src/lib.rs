@@ -6,7 +6,7 @@ use rustls::pki_types::CertificateDer;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,10 +23,15 @@ pub struct TransportClient {
 impl TransportClient {
     pub async fn connect(
         bind_addr: SocketAddr,
-        server_addr: SocketAddr,
+        server_addr: &str,
         server_name: String,
         root_certificates: Vec<CertificateDer<'static>>,
     ) -> Result<Self, String> {
+        let server_addr = server_addr
+            .to_socket_addrs()
+            .map_err(|e| format!("Failed to resolve '{}': {}", server_addr, e))?
+            .next()
+            .ok_or_else(|| format!("No addresses resolved for '{}'", server_addr))?;
         let protofish_config = ProtofishConfig::default();
 
         let config = ClientConfig {

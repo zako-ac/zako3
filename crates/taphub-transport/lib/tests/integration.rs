@@ -116,7 +116,7 @@ async fn test_transport_integration() {
     let client_bind_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
     let client = TransportClient::connect(
         client_bind_addr,
-        bound_addr,
+        &bound_addr.to_string(),
         "localhost".to_string(),
         client_certs,
     )

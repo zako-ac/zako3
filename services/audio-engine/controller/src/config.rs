@@ -8,6 +8,8 @@ pub struct AppConfig {
     pub nats_url: String,
     #[serde(default = "default_taphub_url")]
     pub taphub_url: String,
+    #[serde(default = "default_taphub_sni")]
+    pub taphub_sni: String,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]
@@ -23,6 +25,10 @@ fn default_nats_url() -> String {
 
 fn default_taphub_url() -> String {
     "127.0.0.1:4000".to_string()
+}
+
+fn default_taphub_sni() -> String {
+    "localhost".to_string()
 }
 
 fn default_service_name() -> String {
