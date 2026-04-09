@@ -53,8 +53,10 @@ taphub:
   existingSecret:
     name: ""
     key: "hq-rpc-admin-token"
-  # tlsSecret must reference an existing Secret with keys: cert.pem, key.pem
+  # tlsSecret must reference an existing Secret; configure key names below
   tlsSecret: ""
+  tlsCertFilename: "cert.pem"
+  tlsKeyFilename: "key.pem"
   cacheDir: "/cache"
   cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"

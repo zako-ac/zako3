@@ -39,9 +39,9 @@ spec:
             - name: ZK_TH_ZAKOFISH_BIND_ADDR
               value: "0.0.0.0:{{ .Values.ports.taphubZakofish }}"
             - name: ZK_TH_CERT_FILE
-              value: "/certs/cert.pem"
+              value: "/certs/{{ .Values.taphub.tlsCertFilename }}"
             - name: ZK_TH_KEY_FILE
-              value: "/certs/key.pem"
+              value: "/certs/{{ .Values.taphub.tlsKeyFilename }}"
             - name: ZK_TH_CACHE_DIR
               value: {{ .Values.taphub.cacheDir | quote }}
             - name: ZK_TH_REQUEST_TIMEOUT_MS
@@ -81,6 +81,11 @@ spec:
         - name: tls-certs
           secret:
             secretName: {{ required "taphub.tlsSecret is required" .Values.taphub.tlsSecret }}
+            items:
+              - key: {{ .Values.taphub.tlsCertFilename }}
+                path: {{ .Values.taphub.tlsCertFilename }}
+              - key: {{ .Values.taphub.tlsKeyFilename }}
+                path: {{ .Values.taphub.tlsKeyFilename }}
 ---
 apiVersion: v1
 kind: Service

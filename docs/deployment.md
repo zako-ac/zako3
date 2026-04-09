@@ -70,6 +70,17 @@ kubectl create secret generic taphub-tls \
 
 Then set `taphub.tlsSecret: taphub-tls` in your values. The chart never creates this Secret.
 
+By default the chart expects the Secret to have keys named `cert.pem` and `key.pem`. If your Secret uses different key names (e.g. a standard Kubernetes TLS secret with `tls.crt` / `tls.key`), override the filenames:
+
+```yaml
+taphub:
+  tlsSecret: "taphub-tls"
+  tlsCertFilename: "tls.crt"
+  tlsKeyFilename: "tls.key"
+```
+
+The corresponding `ZK_TH_CERT_FILE` and `ZK_TH_KEY_FILE` env vars are set automatically to `/certs/<tlsCertFilename>` and `/certs/<tlsKeyFilename>`.
+
 ### Using existing Secrets
 
 For each sensitive service, you can reference a pre-existing Secret instead of setting inline values:
