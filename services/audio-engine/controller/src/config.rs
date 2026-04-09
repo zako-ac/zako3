@@ -6,6 +6,8 @@ pub struct AppConfig {
     pub discord_token: String,
     #[serde(default = "default_nats_url")]
     pub nats_url: String,
+    #[serde(default = "default_taphub_url")]
+    pub taphub_url: String,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]
@@ -17,6 +19,10 @@ pub struct AppConfig {
 
 fn default_nats_url() -> String {
     "nats://127.0.0.1:4222".to_string()
+}
+
+fn default_taphub_url() -> String {
+    "127.0.0.1:4000".to_string()
 }
 
 fn default_service_name() -> String {
