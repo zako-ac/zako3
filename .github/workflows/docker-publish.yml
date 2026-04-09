@@ -109,6 +109,9 @@ jobs:
           name: ${{ matrix.artifact }}
           path: dist/
 
+      - name: Restore executable permissions
+        run: chmod +x dist/* || true
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
