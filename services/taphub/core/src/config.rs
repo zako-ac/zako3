@@ -6,8 +6,10 @@ pub struct AppConfig {
     pub zakofish_bind_addr: String,
     pub hq_rpc_url: String,
     pub hq_rpc_admin_token: String,
-    pub cert_file: String,
-    pub key_file: String,
+    pub zakofish_cert_file: String,
+    pub zakofish_key_file: String,
+    pub transport_cert_file: String,
+    pub transport_key_file: String,
     pub redis_url: String,
     pub cache_dir: PathBuf,
     pub request_timeout_ms: u64,
@@ -27,8 +29,14 @@ impl AppConfig {
             hq_rpc_url: env::var("ZK_TH_HQ_RPC_URL")
                 .unwrap_or_else(|_| "http://localhost:4002".to_string()),
             hq_rpc_admin_token: env::var("ZK_TH_HQ_RPC_ADMIN_TOKEN")?,
-            cert_file: env::var("ZK_TH_CERT_FILE").unwrap_or_else(|_| "cert.pem".to_string()),
-            key_file: env::var("ZK_TH_KEY_FILE").unwrap_or_else(|_| "key.pem".to_string()),
+            zakofish_cert_file: env::var("ZK_TH_ZAKOFISH_CERT_FILE")
+                .unwrap_or_else(|_| "cert.pem".to_string()),
+            zakofish_key_file: env::var("ZK_TH_ZAKOFISH_KEY_FILE")
+                .unwrap_or_else(|_| "key.pem".to_string()),
+            transport_cert_file: env::var("ZK_TH_TAPHUB_TRANSPORT_CERT_FILE")
+                .unwrap_or_else(|_| "cert.pem".to_string()),
+            transport_key_file: env::var("ZK_TH_TAPHUB_TRANSPORT_KEY_FILE")
+                .unwrap_or_else(|_| "key.pem".to_string()),
             redis_url: env::var("ZK_TH_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             cache_dir: PathBuf::from(

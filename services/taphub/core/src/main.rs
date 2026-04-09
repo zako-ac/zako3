@@ -13,8 +13,8 @@ use std::io::BufReader;
 fn load_certs(
     config: &AppConfig,
 ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn std::error::Error>> {
-    let cert_path = &config.cert_file;
-    let key_path = &config.key_file;
+    let cert_path = &config.transport_cert_file;
+    let key_path = &config.transport_key_file;
 
     let cert_file = &mut BufReader::new(File::open(cert_path)?);
     let key_file = &mut BufReader::new(File::open(key_path)?);
@@ -74,8 +74,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,
-        &config.cert_file,
-        &config.key_file,
+        &config.zakofish_cert_file,
+        &config.zakofish_key_file,
         config.cache_dir.clone(),
         config.request_timeout_ms,
     )
