@@ -100,8 +100,10 @@ spec:
     {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
   ports:
     - name: transport
+      protocol: UDP
       port: {{ .Values.ports.taphubTransport }}
       targetPort: transport
     - name: zakofish
+      protocol: UDP
       port: {{ .Values.ports.taphubZakofish }}
       targetPort: zakofish
