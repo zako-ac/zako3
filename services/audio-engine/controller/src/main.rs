@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use songbird::SerenityInit;
 
 use zako3_audio_engine_controller::{
-    config::AppConfig, ready_waiter::create_ready_waiter, server::AudioEngineServer,
+    config::AppConfig, id_loader, ready_waiter::create_ready_waiter, server::AudioEngineServer,
     voice_state::VoiceStateHandler,
 };
 
@@ -81,8 +81,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_consumers: session_consumers.clone(),
     });
 
+    let id = id_loader::load_id();
+    let discord_token = id_loader::load_discord_token(id, config.discord_token.to_string())
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to load Discord token: {}", e);
+            std::process::exit(1);
+        });
+
     let intents = GatewayIntents::GUILD_VOICE_STATES;
-    let mut client = Client::builder(&config.discord_token, intents)
+    let mut client = Client::builder(&discord_token, intents)
         .event_handler_arc(ready_waiter)
         .event_handler_arc(voice_state_handler)
         .register_songbird_with(songbird_manager)

@@ -1,34 +1,52 @@
 {{- $fullname := include "zako3.fullname" . }}
-{{- range .Values.audioEngines }}
-{{- $instanceSecretName := printf "%s-audio-engine-%s-secret" $fullname .name }}
-{{- $existingSecret := .existingSecret.name }}
+{{- $instanceSecretName := printf "%s-audio-engine-secret" $fullname }}
+{{- $existingSecret := .Values.audioEngine.existingSecret.name }}
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
 metadata:
-  name: {{ $fullname }}-audio-engine-{{ .name }}
+  name: {{ $fullname }}-audio-engine
   labels:
-    {{- include "zako3.labels" $ | nindent 4 }}
+    {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: audio-engine
     zako.ac/service: ae
-    audio-engine/instance: {{ .name | quote }}
 spec:
-  replicas: 1
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: audio-engine
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-audio-engine
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: audio-engine
+    zako.ac/service: ae
+spec:
+  serviceName: {{ $fullname }}-audio-engine
+  replicas: {{ .Values.audioEngine.replicas | default 1 }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: audio-engine-{{ .name }}
-      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/name: audio-engine
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: audio-engine-{{ .name }}
-        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/name: audio-engine
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        zako.ac/service: ae
     spec:
-      {{- include "zako3.nodeAffinity" (dict "global" $.Values.nodeAffinity "local" .nodeAffinity) | nindent 6 }}
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.audioEngine.nodeAffinity) | nindent 6 }}
       containers:
         - name: audio-engine
-          image: {{ include "zako3.imageRef" (dict "registry" $.Values.image.registry "name" "audio-engine" "tag" $.Values.image.tag) }}
-          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "audio-engine" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: metrics
               containerPort: 9090
@@ -38,11 +56,11 @@ spec:
             - name: NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
             - name: TAPHUB_URL
-              value: "{{ $fullname }}-taphub:{{ $.Values.ports.taphubTransport }}"
+              value: "{{ $fullname }}-taphub:{{ .Values.ports.taphubTransport }}"
             - name: TAPHUB_SNI
               value: "{{ $fullname }}-taphub"
             - name: TAPHUB_TRANSPORT_CERT_FILE
-              value: "/certs/transport/{{ $.Values.taphub.transportTlsCertFilename }}"
+              value: "/certs/transport/{{ .Values.taphub.transportTlsCertFilename }}"
             - name: OTLP_ENDPOINT
               value: "http://{{ $fullname }}-otel-lgtm:4317"
             - name: METRICS_PORT
@@ -52,13 +70,13 @@ spec:
                 {{- include "zako3.secretKeyRef" (dict
                     "secretName" $instanceSecretName
                     "existingName" $existingSecret
-                    "key" .existingSecret.discordTokenKey) | nindent 16 }}
+                    "key" .Values.audioEngine.existingSecret.discordTokenKey) | nindent 16 }}
             - name: AE_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
                     "secretName" $instanceSecretName
                     "existingName" $existingSecret
-                    "key" .existingSecret.aeTokenKey) | nindent 16 }}
+                    "key" .Values.audioEngine.existingSecret.aeTokenKey) | nindent 16 }}
           readinessProbe:
             httpGet:
               path: /health
@@ -78,8 +96,7 @@ spec:
       volumes:
         - name: transport-tls-cert
           secret:
-            secretName: {{ required "taphub.transportTlsSecret is required" $.Values.taphub.transportTlsSecret }}
+            secretName: {{ required "taphub.transportTlsSecret is required" .Values.taphub.transportTlsSecret }}
             items:
-              - key: {{ $.Values.taphub.transportTlsCertFilename }}
-                path: {{ $.Values.taphub.transportTlsCertFilename }}
-{{- end }}
+              - key: {{ .Values.taphub.transportTlsCertFilename }}
+                path: {{ .Values.taphub.transportTlsCertFilename }}

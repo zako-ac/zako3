@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "web" "Release" .Release) | nindent 8 }}
+        zako.ac/service: web
     spec:
       containers:
         - name: web
