@@ -234,6 +234,10 @@
       "signInDescription": "Sign in to continue to the dashboard.",
       "welcome": "Welcome"
     },
+    "notFound": {
+      "goHome": "Go Home",
+      "message": "The page you're looking for doesn't exist."
+    },
     "common": {
       "actions": "Actions",
       "back": "Back",

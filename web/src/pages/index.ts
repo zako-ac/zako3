@@ -12,6 +12,7 @@ export {
 export { SettingsPage } from './settings'
 export { VoiceChannelPage } from './voice'
 export { GuildSettingsPage, GuildMySettingsPage, GuildGuildSettingsPage } from './guild'
+export { NotFoundPage } from './not-found'
 export {
   AdminDashboardPage,
   AdminUsersPage,
