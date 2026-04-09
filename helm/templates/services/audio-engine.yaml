@@ -41,6 +41,8 @@ spec:
               value: "{{ $fullname }}-taphub:{{ $.Values.ports.taphubTransport }}"
             - name: TAPHUB_SNI
               value: "{{ $fullname }}-taphub"
+            - name: TAPHUB_TRANSPORT_CERT_FILE
+              value: "/certs/transport/{{ $.Values.taphub.transportTlsCertFilename }}"
             - name: OTLP_ENDPOINT
               value: "http://{{ $fullname }}-otel-lgtm:4317"
             - name: METRICS_PORT
@@ -69,4 +71,15 @@ spec:
               port: metrics
             initialDelaySeconds: 30
             periodSeconds: 15
+          volumeMounts:
+            - name: transport-tls-cert
+              mountPath: /certs/transport
+              readOnly: true
+      volumes:
+        - name: transport-tls-cert
+          secret:
+            secretName: {{ required "taphub.transportTlsSecret is required" $.Values.taphub.transportTlsSecret }}
+            items:
+              - key: {{ $.Values.taphub.transportTlsCertFilename }}
+                path: {{ $.Values.taphub.transportTlsCertFilename }}
 {{- end }}

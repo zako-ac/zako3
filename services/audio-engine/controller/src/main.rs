@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing::info!(ae_id, "Audio Engine starting");
 
-    let certs = load_certs("cert.pem").unwrap_or_else(|_| vec![]);
+    let certs = load_certs(&config.taphub_transport_cert_file).unwrap_or_else(|_| vec![]);
 
     let taphub_transport = match TransportClient::connect(
         "0.0.0.0:0".parse()?,

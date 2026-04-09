@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub taphub_url: String,
     #[serde(default = "default_taphub_sni")]
     pub taphub_sni: String,
+    #[serde(default = "default_taphub_transport_cert_file")]
+    pub taphub_transport_cert_file: String,
 
     // Telemetry configuration
     #[serde(default = "default_service_name")]
@@ -29,6 +31,10 @@ fn default_taphub_url() -> String {
 
 fn default_taphub_sni() -> String {
     "localhost".to_string()
+}
+
+fn default_taphub_transport_cert_file() -> String {
+    "cert.pem".to_string()
 }
 
 fn default_service_name() -> String {
