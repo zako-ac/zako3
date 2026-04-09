@@ -37,11 +37,9 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: SYNC_INTERVAL_SECONDS
               value: {{ .Values.metricsSync.syncIntervalSeconds | quote }}
-            - name: TIMESCALE_PASSWORD
+            - name: DATABASE_URL
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
                     "secretName" (printf "%s-timescale-secret" $fullname)
                     "existingName" .Values.timescale.existingSecret.name
-                    "key" .Values.timescale.existingSecret.key) | nindent 16 }}
-            - name: DATABASE_URL
-              value: "postgres://{{ .Values.timescale.user }}:$(TIMESCALE_PASSWORD)@{{ $fullname }}-timescale:5432/{{ .Values.timescale.db }}"
+                    "key" .Values.timescale.existingSecret.databaseUrlKey) | nindent 16 }}

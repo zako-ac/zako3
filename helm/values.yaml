@@ -27,6 +27,7 @@ timescale:
   existingSecret:
     name: ""
     key: "password"
+    databaseUrlKey: "database-url"
   storageSize: "20Gi"
 
 # --- HQ service ---
