@@ -86,6 +86,7 @@ refer hq todo
 - [ ] Add reload button and periodic reload in queue,
 - [ ] Add avatar and username to queue
 - [ ] Fix graph
+- [ ] use SSE for live update in queue and stats
 
 ## Mobile
 - [x] Tap card overflow
