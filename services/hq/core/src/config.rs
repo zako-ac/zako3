@@ -37,7 +37,7 @@ impl AppConfig {
             jwt_secret: env::var("JWT_SECRET")?,
             backend_address: env::var("BACKEND_ADDRESS")
                 .unwrap_or_else(|_| "127.0.0.1:8080".to_string()),
-            rpc_address: env::var("RPC_ADDRESS").unwrap_or_else(|_| "127.0.0.1:50051".to_string()),
+            rpc_address: env::var("RPC_ADDRESS")?,
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
