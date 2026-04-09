@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protofish2::compression::CompressionType;
+use protofish2::config::ProtofishConfig;
 use protofish2::connection::ClientConfig;
 use tokio::sync::mpsc;
 use zakofish::config::load_certs;
@@ -106,14 +107,15 @@ impl TapBuilder {
             result.certs
         };
 
+        let mut protofish_config = ProtofishConfig::default();
+        protofish_config.handshake_timeout = Duration::from_secs(10);
+
         let client_config = ClientConfig {
-            bind_address: "127.0.0.1:0"
-                .parse()
-                .map_err(SdkError::AddrParse)?,
+            bind_address: "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
             root_certificates,
             supported_compression_types: vec![CompressionType::None],
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
-            protofish_config: Default::default(),
+            protofish_config,
         };
 
         let hello = TapClientHello {

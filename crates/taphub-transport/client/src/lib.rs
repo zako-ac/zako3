@@ -32,7 +32,9 @@ impl TransportClient {
             .map_err(|e| format!("Failed to resolve '{}': {}", server_addr, e))?
             .next()
             .ok_or_else(|| format!("No addresses resolved for '{}'", server_addr))?;
-        let protofish_config = ProtofishConfig::default();
+
+        let mut protofish_config = ProtofishConfig::default();
+        protofish_config.handshake_timeout = Duration::from_secs(10);
 
         let config = ClientConfig {
             bind_address: bind_addr,
@@ -41,9 +43,7 @@ impl TransportClient {
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(30),
             protofish_config,
         };
-        let client = Arc::new(
-            ProtofishClient::bind(config).map_err(|e| e.to_string())?,
-        );
+        let client = Arc::new(ProtofishClient::bind(config).map_err(|e| e.to_string())?);
 
         let reconnect_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
@@ -133,7 +133,9 @@ impl TransportClient {
                             Err(e) => {
                                 tracing::error!("Jitter buffer error: {:?}", e);
                                 if format!("{:?}", e).contains("InvalidPacket") {
-                                    tracing::warn!("Invalid opus packet detected; invalidating cache");
+                                    tracing::warn!(
+                                        "Invalid opus packet detected; invalidating cache"
+                                    );
                                     send_invalidate_cache(conn_clone, req_clone).await;
                                 }
                                 break;
@@ -179,13 +181,14 @@ impl TransportClient {
     }
 }
 
-async fn send_invalidate_cache(
-    conn: Arc<Mutex<ReconnectingConnection>>,
-    req: CachedAudioRequest,
-) {
+async fn send_invalidate_cache(conn: Arc<Mutex<ReconnectingConnection>>, req: CachedAudioRequest) {
     let mut lock = conn.lock().await;
-    let Ok(mut stream) = lock.open_mani().await else { return };
-    let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else { return };
+    let Ok(mut stream) = lock.open_mani().await else {
+        return;
+    };
+    let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
+        return;
+    };
     if stream.send_payload(payload.into()).await.is_err() {
         return;
     }

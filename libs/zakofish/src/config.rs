@@ -1,5 +1,5 @@
-use protofish2::compression::CompressionType;
 use protofish2::connection::ServerConfig;
+use protofish2::{compression::CompressionType, config::ProtofishConfig};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::fs::File;
 use std::io::BufReader;
@@ -38,6 +38,8 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
     let cert_chain = load_certs(cert_file_path)?;
     let private_key = load_private_key(key_file_path)?;
 
+    let protofish_config = ProtofishConfig::default();
+
     Ok(ServerConfig {
         bind_address,
         cert_chain,
@@ -49,6 +51,6 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
             CompressionType::None,
         ],
         keepalive_interval: Duration::from_secs(3),
-        protofish_config: Default::default(),
+        protofish_config,
     })
 }
