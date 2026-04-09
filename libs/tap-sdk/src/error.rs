@@ -43,4 +43,7 @@ pub enum SdkError {
 
     #[error("invalid hub address: {0}")]
     AddrParse(#[from] std::net::AddrParseError),
+
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
 }

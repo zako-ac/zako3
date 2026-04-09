@@ -67,26 +67,50 @@ impl TapBuilder {
     /// Connect to the Hub and block until the connection is permanently lost.
     /// Reconnection with exponential backoff is handled internally by zakofish.
     pub async fn run(self, handler: Arc<dyn TapHandler>) -> Result<(), SdkError> {
-        let cert_path = self
-            .cert_pem
-            .as_ref()
-            .ok_or_else(|| SdkError::Tls("cert_pem is required".to_string()))?;
         let hub_addr = self
             .hub_addr
             .as_deref()
             .ok_or_else(|| SdkError::Tls("hub is required".to_string()))?;
 
-        // Parse "host:port"; use host as TLS server_name
+        // Append default port 7060 if no port is present
+        let hub_addr = if hub_addr
+            .rsplit_once(':')
+            .map(|(_, p)| p.parse::<u16>().is_ok())
+            .unwrap_or(false)
+        {
+            hub_addr.to_string()
+        } else {
+            format!("{}:7060", hub_addr)
+        };
+
+        // Extract host as TLS server_name (SNI); resolve domain to SocketAddr
         let (server_name, _) = hub_addr
             .rsplit_once(':')
             .ok_or_else(|| SdkError::Tls("hub must be host:port".to_string()))?;
+        let server_name = server_name.to_string();
 
-        let cert_chain = load_certs(cert_path)?;
+        let socket_addr = tokio::net::lookup_host(&hub_addr)
+            .await
+            .map_err(SdkError::Io)?
+            .next()
+            .ok_or_else(|| SdkError::Tls(format!("could not resolve: {}", hub_addr)))?;
+
+        // Use provided cert PEM or fall back to system trust store
+        let root_certificates = if let Some(cert_path) = &self.cert_pem {
+            load_certs(cert_path)?
+        } else {
+            let result = rustls_native_certs::load_native_certs();
+            if !result.errors.is_empty() {
+                tracing::warn!("some system certs failed to load: {:?}", result.errors);
+            }
+            result.certs
+        };
+
         let client_config = ClientConfig {
             bind_address: "127.0.0.1:0"
                 .parse()
                 .map_err(SdkError::AddrParse)?,
-            root_certificates: cert_chain,
+            root_certificates,
             supported_compression_types: vec![CompressionType::None],
             keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
             protofish_config: Default::default(),
@@ -107,7 +131,7 @@ impl TapBuilder {
         let bridge = Arc::new(HandlerBridge(handler));
         let zf_tap = ZakofishTap::new(client_config)?;
         zf_tap
-            .connect_and_run(hub_addr.parse()?, server_name, hello, bridge)
+            .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
             .await?;
         Ok(())
     }

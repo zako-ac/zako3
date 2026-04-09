@@ -49,16 +49,14 @@ export const VoiceSidebarSection = () => {
                                     </Avatar>
                                     <span>{guild.guildName || `Server ...${guild.guildId.slice(-6)}`}</span>
                                 </SidebarMenuButton>
-                                {guild.canManage && (
-                                    <SidebarMenuAction asChild>
-                                        <Link
-                                            to={ROUTES.GUILD_SETTINGS(guild.guildId)}
-                                            title={t('guilds.settings.action')}
-                                        >
-                                            <Settings className="h-3.5 w-3.5" />
-                                        </Link>
-                                    </SidebarMenuAction>
-                                )}
+                                <SidebarMenuAction asChild>
+                                    <Link
+                                        to={ROUTES.GUILD_SETTINGS(guild.guildId)}
+                                        title={t('guilds.settings.action')}
+                                    >
+                                        <Settings className="h-3.5 w-3.5" />
+                                    </Link>
+                                </SidebarMenuAction>
                                 {guild.activeChannelId && guild.activeChannelName && (
                                     <SidebarMenuSub>
                                         <SidebarMenuSubItem>

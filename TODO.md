@@ -84,8 +84,9 @@ refer hq todo
 - [x] Test Korean and refine i18n
 - [ ] Add "load failed" 
 - [x] Remove empty queue
-- [ ] Add reload button and periodic reload in queue,
-- [ ] Add avatar and username to queue
+- [x] Add reload button and periodic reload in queue,
+- [x] Add avatar and username to queue
+- [ ] reverse sort
 
 ## Mobile
 - [x] Tap card overflow

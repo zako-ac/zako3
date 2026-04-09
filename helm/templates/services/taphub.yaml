@@ -137,4 +137,4 @@ spec:
     - name: zakofish
       protocol: UDP
       port: {{ .Values.ports.taphubZakofish }}
-      targetPort: zakofish
+      targetPort: {{ .Values.ports.taphubZakofish }}
