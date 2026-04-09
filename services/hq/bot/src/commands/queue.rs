@@ -37,6 +37,7 @@ pub async fn music(
     ctx: Context<'_>,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, channel).await?;
@@ -66,6 +67,7 @@ pub async fn tts(
     ctx: Context<'_>,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, channel).await?;
@@ -127,6 +129,7 @@ pub async fn clear(
     target: Option<ClearTarget>,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let target = target.unwrap_or(ClearTarget::Music);

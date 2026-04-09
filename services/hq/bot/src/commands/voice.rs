@@ -62,6 +62,7 @@ pub async fn join(
     ctx: Context<'_>,
     #[description = "The voice channel to join (defaults to your current channel)"]
     #[description_localized("ko", "참가할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     // Extract guild/channel data before any await.
@@ -120,6 +121,7 @@ pub async fn leave(
     ctx: Context<'_>,
     #[description = "Voice channel to leave (defaults to your current channel)"]
     #[description_localized("ko", "나갈 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, channel).await?;
@@ -150,6 +152,7 @@ pub async fn move_to(
     ctx: Context<'_>,
     #[description = "The voice channel to move to"]
     #[description_localized("ko", "이동할 음성 채널")]
+    #[channel_types("Voice")]
     channel: serenity::GuildChannel,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, None).await?;

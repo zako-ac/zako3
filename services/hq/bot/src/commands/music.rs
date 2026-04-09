@@ -157,6 +157,7 @@ pub async fn stop(
     scope: Option<StopScope>,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let session = util::resolve_session(ctx, channel).await?;
@@ -200,6 +201,7 @@ pub async fn skip(
     count: Option<u32>,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     ctx.defer().await?; // In case skipping takes a moment, especially for multiple tracks.
@@ -238,6 +240,7 @@ pub async fn volume(
     level: u8,
     #[description = "Voice channel to use (defaults to your current channel)"]
     #[description_localized("ko", "사용할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     if level > 150 {
