@@ -3,6 +3,10 @@
 refer hq todo
 
 # Do Now
+- [ ] Fix graph
+- [ ] use SSE for live update in queue and stats
+
+# Done
 - [x] Implement multiple AE
 - [x] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [x] add reconnection logic
@@ -10,12 +14,8 @@ refer hq todo
 - [x] Add uptime and active users
 - [x] refactor TH
 - [x] implement cache: max cache size, score-based cache eviction worker
-
 - [x] Implement text preprocessing
-
 - [x] Make bot leave when VC is empty
-
-# Other
 - [x] AE Track proto handling (todo!)
 - [x] migrate AE-TH comms to jsonrpsee
 - [x] Make AE work without TH (atleast no crash)
@@ -39,20 +39,20 @@ refer hq todo
 - [x] otel and prometheus and logging(promtail)
 - [x] Plan proper logging with context
 - [x] Refine errors
+- [x] Make tap-sdk
+- [x] tts commands TODO resolve
+- [x] Remove dependencies of Zakofish
+- [x] Make cache get removed when early stop
+- [x] Async decoding performance issue in pf2 maybe?
 
+# Other
 - [ ] merge migrations
 - [ ] /api/v1/taps/299197284933963776/report endpoint
 
 - [ ] Cache management admin panel
 - [ ] emoji matching service
 - [ ] Emoji/Text mapping scope elevation request
-- [x] Make tap-sdk
-- [x] tts commands TODO resolve
-- [x] Remove dependencies of Zakofish
 - [ ] Standardize service folder structure to "boot"
-
-- [x] Make cache get removed when early stop
-- [x] Async decoding performance issue in pf2 maybe?
 - [ ] pre-settings: Admin can change UserSettings even user is not registered
 
 ## Do before production
@@ -86,8 +86,6 @@ refer hq todo
 - [x] Remove empty queue
 - [ ] Add reload button and periodic reload in queue,
 - [ ] Add avatar and username to queue
-- [ ] Fix graph
-- [ ] use SSE for live update in queue and stats
 
 ## Mobile
 - [x] Tap card overflow

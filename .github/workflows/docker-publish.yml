@@ -55,20 +55,27 @@ jobs:
           run_install: false
 
       - name: Install dependencies
-        run: pnpm install --filter @zako-ac/web...
+        run: pnpm install --frozen-lockfile
 
       - name: Build web
         env:
           VITE_API_BASE_URL: /api/v1
           VITE_WS_BASE_URL: wss://zako.ac
           VITE_GRAFANA_URL: https://dash.zako.ac
-        run: pnpm --filter @zako-ac/web build
+          NEXT_PUBLIC_DISCORD_INVITE: "https://discord.com/oauth2/authorize?client_id=1365312197613453322&permissions=4613826774359104&integration_type=0&scope=applications.commands+bot"
+          NEXT_PUBLIC_DOCS_URL: "https://docs.zako.ac/docs"
+        run: |
+          pnpm --filter @zako-ac/web --filter @zako-ac/landing-page build
+
+          mkdir dist
+          cp -r web/app/dist dist/app
+          cp -r web/landing-page/out dist/landing
 
       - name: Upload web dist
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: web/dist/
+          path: dist/
 
   publish:
     needs: [build-rust, build-web]
