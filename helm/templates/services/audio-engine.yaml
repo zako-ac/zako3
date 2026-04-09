@@ -10,6 +10,7 @@ metadata:
   labels:
     {{- include "zako3.labels" $ | nindent 4 }}
     app.kubernetes.io/component: audio-engine
+    zako.ac/service: ae
     audio-engine/instance: {{ .name | quote }}
 spec:
   replicas: 1

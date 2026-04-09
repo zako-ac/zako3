@@ -8,6 +8,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: taphub
+    zako.ac/service: th
 spec:
   replicas: 1
   selector:
