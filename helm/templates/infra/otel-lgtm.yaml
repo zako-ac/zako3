@@ -1,3 +1,51 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zako3.fullname" . }}-otel-lgtm-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.otelLgtm.storageSize }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zako3.fullname" . }}-prometheus-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.otelLgtm.prometheusStorageSize }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zako3.fullname" . }}-tempo-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.otelLgtm.tempoStorageSize }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,6 +74,36 @@ spec:
               containerPort: 4318
             - name: grafana
               containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-otel-lgtm-secret" (include "zako3.fullname" .))
+                    "existingName" .Values.otelLgtm.existingSecret.name
+                    "key" .Values.otelLgtm.existingSecret.adminUserKey) | nindent 16 }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-otel-lgtm-secret" (include "zako3.fullname" .))
+                    "existingName" .Values.otelLgtm.existingSecret.name
+                    "key" .Values.otelLgtm.existingSecret.adminPasswordKey) | nindent 16 }}
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+            - name: prometheus-data
+              mountPath: /data/prometheus
+            - name: tempo-data
+              mountPath: /data/tempo
+      volumes:
+        - name: grafana-data
+          persistentVolumeClaim:
+            claimName: {{ include "zako3.fullname" . }}-otel-lgtm-data
+        - name: prometheus-data
+          persistentVolumeClaim:
+            claimName: {{ include "zako3.fullname" . }}-prometheus-data
+        - name: tempo-data
+          persistentVolumeClaim:
+            claimName: {{ include "zako3.fullname" . }}-tempo-data
 ---
 apiVersion: v1
 kind: Service

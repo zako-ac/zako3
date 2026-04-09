@@ -33,7 +33,7 @@ timescale:
 # --- HQ service ---
 hq:
   nodeAffinity: {}
-  discordRedirectUri: "http://localhost:8080/api/v1/auth/callback"
+  discordRedirectUri: "http://localhost:8080/auth/callback"
   # Inline values — chart creates a Secret from these if existingSecret.name is not set
   rpcAdminToken: ""
   discordClientId: ""
@@ -124,3 +124,12 @@ redis:
 # --- Otel-LGTM ---
 otelLgtm:
   image: grafana/otel-lgtm:latest
+  adminUser: "admin"
+  adminPassword: ""
+  existingSecret:
+    name: ""
+    adminUserKey: "admin-user"
+    adminPasswordKey: "admin-password"
+  storageSize: "2Gi"
+  prometheusStorageSize: "10Gi"
+  tempoStorageSize: "10Gi"

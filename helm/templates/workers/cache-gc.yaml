@@ -23,6 +23,7 @@ spec:
             - name: cache-gc
               image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "cache-gc" "tag" .Values.image.tag) }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args: ["run-all"]
               env:
                 - name: REDIS_URL
                   value: "redis://{{ $fullname }}-redis:6379"
