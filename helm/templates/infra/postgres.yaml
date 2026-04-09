@@ -51,7 +51,8 @@ spec:
                     "key" .Values.postgres.existingSecret.key) | nindent 16 }}
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}]
