@@ -27,6 +27,7 @@ import {
   GuildSettingsPage,
   GuildMySettingsPage,
   GuildGuildSettingsPage,
+  NotFoundPage,
 } from '@/pages'
 import { HotkeyTest } from '@/pages/hotkey-test'
 import { ROUTES } from '@/lib/constants'
@@ -122,7 +123,7 @@ export const AppRouter = () => {
           path={ROUTES.HOME}
           element={<Navigate to={ROUTES.DASHBOARD} replace />}
         />
-        <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   )
