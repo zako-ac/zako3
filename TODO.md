@@ -6,6 +6,8 @@ refer hq todo
 - [ ] Fix graph
 - [ ] use SSE for live update in queue and stats
 
+- [ ] Show Duration: maybe Tap capabilities?
+
 # Done
 - [x] Implement multiple AE
 - [x] Implement settings `~/projects/zako3/docs/en/settings.md`
