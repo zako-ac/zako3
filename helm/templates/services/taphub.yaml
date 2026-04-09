@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 8 }}
+        zako.ac/service: th
     spec:
       {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.taphub.nodeAffinity) | nindent 6 }}
       containers:
@@ -26,8 +27,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: transport
+              protocol: UDP
               containerPort: {{ .Values.ports.taphubTransport }}
             - name: zakofish
+              protocol: UDP
               containerPort: {{ .Values.ports.taphubZakofish }}
             - name: metrics
               containerPort: {{ .Values.taphub.metricsPort | int }}

@@ -74,25 +74,17 @@ taphub:
   requestTimeoutMs: "13000"
   metricsPort: "9092"
 
-# --- Audio Engine instances ---
-# Each entry creates a separate Deployment.
+# --- Audio Engine ---
 # Use existingSecret.name to reference a pre-existing Secret; otherwise inline values are used.
-audioEngines:
-  - name: "instance-1"
-    nodeAffinity: {}
-    discordToken: ""
-    aeToken: "changeme"
-    existingSecret:
-      name: ""
-      discordTokenKey: "discord-token"
-      aeTokenKey: "ae-token"
-  # - name: "instance-2"
-  #   discordToken: ""
-  #   aeToken: "changeme"
-  #   existingSecret:
-  #     name: "audio-engine-2-secret"
-  #     discordTokenKey: "discord-token"
-  #     aeTokenKey: "ae-token"
+audioEngine:
+  replicas: 1
+  nodeAffinity: {}
+  discordToken: ""
+  aeToken: "changeme"
+  existingSecret:
+    name: ""
+    discordTokenKey: "discord-token"
+    aeTokenKey: "ae-token"
 
 # --- Web frontend ---
 web:

@@ -26,3 +26,4 @@ anyhow.workspace = true
 sha2 = "0.10"
 opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
+hostname = "0.4.2"

@@ -34,6 +34,7 @@ spec:
     metadata:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "hq" "Release" .Release) | nindent 8 }}
+        zako.ac/service: hq
     spec:
       {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.hq.nodeAffinity) | nindent 6 }}
       containers:
