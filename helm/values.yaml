@@ -16,6 +16,7 @@ postgres:
   existingSecret:
     name: ""
     key: "password"
+    databaseUrlKey: "database-url"
   storageSize: "10Gi"
 
 # --- TimescaleDB ---
@@ -47,9 +48,10 @@ hq:
       discordClientSecret: "discord-client-secret"
       discordBotToken: "discord-bot-token"
       jwtSecret: "jwt-secret"
-  mapperWasmDir: "/tmp/hq-mappers"
-  mapperDbPath: "/tmp/hq-mappers.db"
+  mapperWasmDir: "/var/hq/hq-mappers"
+  mapperDbPath: "/var/hq/hq-mappers.db"
   metricsPort: "9091"
+  storageSize: "1Gi"
 
 # --- TapHub service ---
 taphub:

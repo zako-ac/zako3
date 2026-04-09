@@ -1,6 +1,22 @@
 {{- $fullname := include "zako3.fullname" . }}
 {{- $hqSecretName := printf "%s-hq-secret" $fullname }}
 {{- $existingSecret := .Values.hq.existingSecret.name }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-hq-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.hq.storageSize }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,13 +49,11 @@ spec:
               containerPort: {{ .Values.hq.metricsPort | int }}
           env:
             - name: DATABASE_URL
-              value: "postgres://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/{{ .Values.postgres.db }}"
-            - name: POSTGRES_PASSWORD
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
                     "secretName" (printf "%s-postgres-secret" $fullname)
                     "existingName" .Values.postgres.existingSecret.name
-                    "key" .Values.postgres.existingSecret.key) | nindent 16 }}
+                    "key" .Values.postgres.existingSecret.databaseUrlKey) | nindent 16 }}
             - name: BACKEND_ADDRESS
               value: "0.0.0.0:{{ .Values.ports.hqBackend }}"
             - name: RPC_ADDRESS
@@ -98,6 +112,13 @@ spec:
               port: metrics
             initialDelaySeconds: 30
             periodSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /var/hq
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-hq-data
 ---
 apiVersion: v1
 kind: Service
