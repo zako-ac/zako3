@@ -19,6 +19,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 8 }}
     spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.taphub.nodeAffinity) | nindent 6 }}
       containers:
         - name: taphub
           image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "taphub" "tag" .Values.image.tag) }}

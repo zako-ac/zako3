@@ -16,6 +16,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "metrics-sync" "Release" .Release) | nindent 8 }}
     spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.metricsSync.nodeAffinity) | nindent 6 }}
       initContainers:
         - name: wait-for-redis
           image: busybox:latest

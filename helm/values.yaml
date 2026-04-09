@@ -3,6 +3,9 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+# Global nodeAffinity applied to all pods unless overridden per-service
+nodeAffinity: {}
+
 storageClass: ""
 
 # --- Postgres ---
@@ -27,6 +30,7 @@ timescale:
 
 # --- HQ service ---
 hq:
+  nodeAffinity: {}
   discordRedirectUri: "http://localhost:8080/auth/callback"
   # Inline values — chart creates a Secret from these if existingSecret.name is not set
   rpcAdminToken: ""
@@ -49,6 +53,7 @@ hq:
 
 # --- TapHub service ---
 taphub:
+  nodeAffinity: {}
   hqRpcAdminToken: ""
   existingSecret:
     name: ""
@@ -67,6 +72,7 @@ taphub:
 # Use existingSecret.name to reference a pre-existing Secret; otherwise inline values are used.
 audioEngines:
   - name: "instance-1"
+    nodeAffinity: {}
     discordToken: ""
     aeToken: "changeme"
     existingSecret:
@@ -89,6 +95,7 @@ web:
 
 # --- Workers ---
 cacheGc:
+  nodeAffinity: {}
   schedule: "*/30 * * * *"
   maxCacheBytes: ""
   cacheDir: "/cache"
@@ -96,6 +103,7 @@ cacheGc:
   failedJobsHistoryLimit: 1
 
 metricsSync:
+  nodeAffinity: {}
   syncIntervalSeconds: 60
 
 # --- Ports ---
