@@ -75,6 +75,8 @@ spec:
             - name: grafana
               containerPort: 3000
           env:
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "false"
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
