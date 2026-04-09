@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let taphub_transport = match TransportClient::connect(
         "0.0.0.0:0".parse()?,
-        "127.0.0.1:4000".parse()?,
+        config.taphub_url.parse()?,
         "localhost".to_string(),
         certs,
     )
