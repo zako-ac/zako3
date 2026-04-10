@@ -5,17 +5,17 @@ use hq_types::{
     SessionState, TapName, TrackId, Volume,
 };
 use tracing::instrument;
-use zako3_audio_engine_client::client::AudioEngineRpcClient;
+use zako3_tl_client::TlClient;
 
 use crate::{CoreError, CoreResult};
 
 #[derive(Clone)]
 pub struct AudioEngineService {
-    client: Arc<AudioEngineRpcClient>,
+    client: Arc<TlClient>,
 }
 
 impl AudioEngineService {
-    pub fn new(client: Arc<AudioEngineRpcClient>) -> Self {
+    pub fn new(client: Arc<TlClient>) -> Self {
         Self { client }
     }
 
@@ -24,6 +24,7 @@ impl AudioEngineService {
         self.client
             .join(guild_id, channel_id)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -32,6 +33,7 @@ impl AudioEngineService {
         self.client
             .leave(guild_id, channel_id)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -46,7 +48,7 @@ impl AudioEngineService {
         audio_request_string: AudioRequestString,
         volume: Volume,
         discord_user_id: DiscordUserId,
-    ) -> CoreResult<TrackId> {
+    ) -> CoreResult<()> {
         self.client
             .play(
                 guild_id,
@@ -71,6 +73,7 @@ impl AudioEngineService {
         self.client
             .set_volume(guild_id, channel_id, track_id, volume)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -84,6 +87,7 @@ impl AudioEngineService {
         self.client
             .stop(guild_id, channel_id, track_id)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -97,6 +101,7 @@ impl AudioEngineService {
         self.client
             .stop_many(guild_id, channel_id, filter)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -105,6 +110,7 @@ impl AudioEngineService {
         self.client
             .next_music(guild_id, channel_id)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -113,11 +119,12 @@ impl AudioEngineService {
         &self,
         guild_id: GuildId,
         channel_id: ChannelId,
-        track_id: TrackId,
+        queue_name: QueueName,
     ) -> CoreResult<bool> {
         self.client
-            .pause(guild_id, channel_id, track_id)
+            .pause(guild_id, channel_id, queue_name)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 
@@ -126,11 +133,12 @@ impl AudioEngineService {
         &self,
         guild_id: GuildId,
         channel_id: ChannelId,
-        track_id: TrackId,
+        queue_name: QueueName,
     ) -> CoreResult<bool> {
         self.client
-            .resume(guild_id, channel_id, track_id)
+            .resume(guild_id, channel_id, queue_name)
             .await
+            .map(|_| true)
             .map_err(|e| CoreError::Internal(e.to_string()))
     }
 

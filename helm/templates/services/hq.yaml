@@ -69,8 +69,8 @@ spec:
               value: "http://{{ $fullname }}-otel-lgtm:4317"
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
-            - name: NATS_URL
-              value: "nats://{{ $fullname }}-nats:4222"
+            - name: TRAFFIC_LIGHT_URL
+              value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlTarpc }}"
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
             - name: RPC_ADMIN_TOKEN

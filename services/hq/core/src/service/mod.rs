@@ -34,7 +34,7 @@ use crate::repo::{
 use crate::{AppConfig, CoreError, CoreResult};
 use sqlx::PgPool;
 use std::sync::Arc;
-use zako3_audio_engine_client::client::AudioEngineRpcClient;
+use zako3_tl_client::TlClient;
 use zako3_states::{
     IntendedVoiceChannelService, TapHubStateService, TapMetricsStateService,
     UserSettingsStateService, VoiceStateService,
@@ -101,7 +101,7 @@ impl Service {
         );
 
         let audio_engine = Arc::new(
-            AudioEngineRpcClient::new(&config.nats_url)
+            TlClient::connect(&config.traffic_light_url)
                 .await
                 .map_err(|e| CoreError::Internal(e.to_string()))?,
         );

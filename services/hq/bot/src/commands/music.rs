@@ -113,28 +113,24 @@ async fn do_play<'a>(
 ) -> Result<poise::CreateReply, Error> {
     let ae = &ctx.data().service.audio_engine;
 
-    let track_id = ae
-        .play(
-            guild_id,
-            channel_id,
-            queue_name.clone(),
-            tap_name,
-            audio_request,
-            Volume::from(1.0f32),
-            discord_user_id,
-        )
-        .await?;
+    ae.play(
+        guild_id,
+        channel_id,
+        queue_name.clone(),
+        tap_name,
+        audio_request,
+        Volume::from(1.0f32),
+        discord_user_id,
+    )
+    .await?;
 
     // The engine confirms the track synchronously, so session state is current.
     let state = ae.get_session_state(guild_id, channel_id).await?;
     let music_q = QueueName::from(MUSIC_QUEUE.to_string());
 
     if let Some(tracks) = state.queues.get(&music_q) {
-        if let Some(pos) = tracks
-            .iter()
-            .position(|t| t.track_id == track_id)
-            .map(|i| i + 1)
-        {
+        let pos = tracks.len();
+        if pos > 0 {
             let embed = ui::embeds::track_queued_embed(&tracks[pos - 1], pos);
             return Ok(poise::CreateReply::default().content("").embed(embed));
         }

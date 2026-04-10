@@ -1,4 +1,3 @@
-use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
 use hq_core::{get_pool, run_migrations, AppConfig, Service};
 use std::sync::Arc;
@@ -27,31 +26,9 @@ async fn main() -> anyhow::Result<()> {
 
     let service = Service::new(pool, config.clone()).await?;
 
-    // Set up NATS→broadcast channel for playback state events
+    // Broadcast channel for playback state events (WebSocket clients subscribe here).
+    // Events are not currently pushed; clients should poll /api/v1/playback/state.
     let (event_tx, _) = broadcast::channel::<String>(128);
-    let event_tx_nats = event_tx.clone();
-    let nats_url = config.nats_url.clone();
-    tokio::spawn(async move {
-        let nc = match async_nats::connect(&nats_url).await {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("Failed to connect NATS for playback events: {}", e);
-                return;
-            }
-        };
-        let mut sub = match nc.subscribe("playback.state_changed.>").await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("Failed to subscribe to playback NATS events: {}", e);
-                return;
-            }
-        };
-        info!("Listening for playback state changes on NATS");
-        while let Some(msg) = sub.next().await {
-            let payload = String::from_utf8_lossy(&msg.payload).into_owned();
-            let _ = event_tx_nats.send(payload);
-        }
-    });
 
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();

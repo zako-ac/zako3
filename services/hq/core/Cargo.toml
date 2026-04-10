@@ -26,5 +26,5 @@ sha2 = "0.10"
 hex = "0.4.3"
 jsonrpsee.workspace = true
 zako3-states = { workspace = true, features = ["redis"] }
-zako3-audio-engine-client = { workspace = true }
+zako3-tl-client = { workspace = true }
 zako3-tts-matching.workspace = true

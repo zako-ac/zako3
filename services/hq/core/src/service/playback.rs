@@ -419,7 +419,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine.pause(g, c, TrackId::from(tid)).await?;
+        self.audio_engine.pause(g, c, track.queue_name.clone()).await?;
 
         let action = self
             .repo
@@ -457,7 +457,7 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine.resume(g, c, TrackId::from(tid)).await?;
+        self.audio_engine.resume(g, c, track.queue_name.clone()).await?;
 
         let action = self
             .repo

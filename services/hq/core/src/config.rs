@@ -17,7 +17,7 @@ pub struct AppConfig {
     pub redis_url: String,
     pub rpc_admin_token: String,
     pub zako_website_url: String,
-    pub nats_url: String,
+    pub traffic_light_url: String,
     pub mapper_wasm_dir: PathBuf,
     pub mapper_db_path: PathBuf,
     pub otlp_endpoint: Option<String>,
@@ -43,7 +43,8 @@ impl AppConfig {
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
             zako_website_url: env::var("ZAKO_WEBSITE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-            nats_url: env::var("NATS_URL").unwrap_or_else(|_| "nats://127.0.0.1:4222".to_string()),
+            traffic_light_url: env::var("TRAFFIC_LIGHT_URL")
+                .unwrap_or_else(|_| "127.0.0.1:7070".to_string()),
             mapper_wasm_dir: env::var("MAPPER_WASM_DIR").map(PathBuf::from)?,
             mapper_db_path: env::var("MAPPER_DB_PATH").map(PathBuf::from)?,
             otlp_endpoint: env::var("OTLP_ENDPOINT").ok(),
