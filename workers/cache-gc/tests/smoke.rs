@@ -2,7 +2,6 @@ use std::path::Path;
 use zako3_cache_gc::actions;
 use zako3_preload_cache::FileAudioCache;
 use zako3_types::cache::AudioCacheItemKey;
-use zako3_types::{AudioCachePolicy, AudioCacheType, AudioMetadata};
 
 // ============================================================================
 // Helpers
@@ -23,21 +22,21 @@ fn make_entry(
     is_downloading: bool,
 ) -> zako3_preload_cache::db::DbEntry {
     let key = AudioCacheItemKey::CacheKey(key_suffix.to_string());
-    let policy = AudioCachePolicy {
-        cache_type: AudioCacheType::None,
-        ttl_seconds: None,
-    };
+
+    // json_path is not exercised by GC logic tests; use a predictable dummy path.
+    let json_path = opus_path
+        .as_deref()
+        .map(|p| p.replace(".opus", ".json"))
+        .unwrap_or_else(|| format!("/tmp/{key_suffix}.json"));
 
     zako3_preload_cache::db::DbEntry {
         tap_id: tap_id.to_string(),
         cache_key: serde_json::to_string(&key).expect("serialize AudioCacheItemKey"),
         opus_path,
+        json_path,
         expire_at,
         use_count,
         last_used_at: None,
-        metadatas: serde_json::to_string(&Vec::<AudioMetadata>::new())
-            .expect("serialize metadatas"),
-        cache_policy: serde_json::to_string(&policy).expect("serialize AudioCachePolicy"),
         created_at: chrono::Utc::now().timestamp(),
         gdsf_priority: 0.0,
         is_downloading,

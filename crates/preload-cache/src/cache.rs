@@ -21,6 +21,24 @@ use crate::{
 };
 
 // ---------------------------------------------------------------------------
+// MetaSidecar — written as JSON next to the .opus file
+// Contains enough information to rebuild the SQLite index entry if the DB is lost.
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct MetaSidecar {
+    tap_id: String,
+    /// serde_json of `AudioCacheItemKey`
+    cache_key: String,
+    metadatas: Vec<AudioMetadata>,
+    cache_policy: AudioCachePolicy,
+    /// Unix seconds UTC; `None` means no expiry.
+    expire_at: Option<i64>,
+    /// Unix seconds UTC.
+    created_at: i64,
+}
+
+// ---------------------------------------------------------------------------
 // PreloadReadEndAction
 // ---------------------------------------------------------------------------
 
@@ -148,6 +166,30 @@ impl FileAudioCache {
     fn new_opus_path(&self) -> PathBuf {
         self.dir.join(format!("{}.opus", uuid::Uuid::new_v4()))
     }
+
+    fn new_json_path(&self) -> PathBuf {
+        self.dir.join(format!("{}.json", uuid::Uuid::new_v4()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sidecar helpers
+// ---------------------------------------------------------------------------
+
+async fn write_json_sidecar(path: &Path, sidecar: &MetaSidecar) -> io::Result<()> {
+    let json = serde_json::to_vec(sidecar)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let mut file = fs::File::create(path).await?;
+    file.write_all(&json).await?;
+    file.flush().await?;
+    file.sync_data().await?;
+    Ok(())
+}
+
+async fn read_json_sidecar(path: &str) -> io::Result<MetaSidecar> {
+    let bytes = fs::read(path).await?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -165,27 +207,36 @@ impl AudioCache for FileAudioCache {
         done: oneshot::Receiver<()>,
     ) -> io::Result<()> {
         let opus_path = self.new_opus_path();
+        let json_path = opus_path.with_extension("json");
         let key_json = key_to_json(&item.key);
 
         let db_entry = DbEntry {
             tap_id: item.tap_id.to_string(),
             cache_key: key_json.clone(),
             opus_path: Some(opus_path.to_string_lossy().into_owned()),
+            json_path: json_path.to_string_lossy().into_owned(),
             expire_at: item.expire_at.map(|t| t.timestamp()),
             use_count: 0,
             last_used_at: None,
-            metadatas: serde_json::to_string(&metadatas)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            cache_policy: serde_json::to_string(&cache_key)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
             created_at: chrono::Utc::now().timestamp(),
             gdsf_priority: 0.0,
             is_downloading: true,
         };
 
+        let created_at = db_entry.created_at;
+        let expire_at = db_entry.expire_at;
         self.db.insert(db_entry).await?;
 
         let tap_id_str = item.tap_id.to_string();
+        let sidecar = MetaSidecar {
+            tap_id: tap_id_str.clone(),
+            cache_key: key_json.clone(),
+            metadatas,
+            cache_policy: cache_key,
+            expire_at,
+            created_at,
+        };
+
         let result: io::Result<()> = async {
             let mut file = fs::File::create(&opus_path).await?;
             let mut total_bytes: u64 = 0;
@@ -215,6 +266,7 @@ impl AudioCache for FileAudioCache {
                 ));
             }
 
+            write_json_sidecar(&json_path, &sidecar).await?;
             self.db.mark_complete(tap_id_str.clone(), key_json.clone()).await?;
             tracing::info!(tap_id = %item.tap_id, key = %item.key, "audio cached successfully");
             Ok(())
@@ -223,6 +275,7 @@ impl AudioCache for FileAudioCache {
 
         if let Err(e) = result {
             let _ = fs::remove_file(&opus_path).await;
+            let _ = fs::remove_file(&json_path).await;
             let _ = self.db.delete(tap_id_str, key_json).await;
             return Err(e);
         }
@@ -249,21 +302,22 @@ impl AudioCache for FileAudioCache {
         }
 
         let dest_opus = self.new_opus_path();
+        let dest_json = dest_opus.with_extension("json");
         let key_json = key_to_json(&item.key);
         let tap_id_str = item.tap_id.to_string();
+
+        let expire_at = item.expire_at.map(|t| t.timestamp());
+        let created_at = chrono::Utc::now().timestamp();
 
         let db_entry = DbEntry {
             tap_id: tap_id_str.clone(),
             cache_key: key_json.clone(),
             opus_path: Some(dest_opus.to_string_lossy().into_owned()),
-            expire_at: item.expire_at.map(|t| t.timestamp()),
+            json_path: dest_json.to_string_lossy().into_owned(),
+            expire_at,
             use_count: 0,
             last_used_at: None,
-            metadatas: serde_json::to_string(&metadatas)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            cache_policy: serde_json::to_string(&cache_key)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            created_at: chrono::Utc::now().timestamp(),
+            created_at,
             gdsf_priority: 0.0,
             is_downloading: true,
         };
@@ -286,8 +340,23 @@ impl AudioCache for FileAudioCache {
             }
         }
 
+        let sidecar = MetaSidecar {
+            tap_id: tap_id_str.clone(),
+            cache_key: key_json.clone(),
+            metadatas,
+            cache_policy: cache_key,
+            expire_at,
+            created_at,
+        };
+        if let Err(e) = write_json_sidecar(&dest_json, &sidecar).await {
+            let _ = fs::remove_file(&dest_opus).await;
+            let _ = self.db.delete(tap_id_str, key_json).await;
+            return Err(e);
+        }
+
         if let Err(e) = self.db.mark_complete(tap_id_str.clone(), key_json.clone()).await {
             let _ = fs::remove_file(&dest_opus).await;
+            let _ = fs::remove_file(&dest_json).await;
             let _ = self.db.delete(tap_id_str, key_json).await;
             return Err(e);
         }
@@ -322,8 +391,7 @@ impl AudioCache for FileAudioCache {
         if is_expired(entry.expire_at) {
             return None;
         }
-        let metadatas: Vec<AudioMetadata> = serde_json::from_str(&entry.metadatas).ok()?;
-        let cache_key: AudioCachePolicy = serde_json::from_str(&entry.cache_policy).ok()?;
+        let sidecar = read_json_sidecar(&entry.json_path).await.ok()?;
         let item_key: AudioCacheItemKey = serde_json::from_str(&entry.cache_key).ok()?;
         let expire_at = entry.expire_at.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
             .map(|dt| dt.with_timezone(&chrono::Utc));
@@ -337,7 +405,7 @@ impl AudioCache for FileAudioCache {
         } else {
             CacheEntryKind::Metadata
         };
-        Some(CacheEntry { item, metadatas, cache_key, kind })
+        Some(CacheEntry { item, metadatas: sidecar.metadatas, cache_key: sidecar.cache_policy, kind })
     }
 
     async fn store_metadata(
@@ -346,31 +414,48 @@ impl AudioCache for FileAudioCache {
         metadatas: Vec<AudioMetadata>,
         cache_key: AudioCachePolicy,
     ) -> io::Result<()> {
+        let json_path = self.new_json_path();
         let key_json = key_to_json(&item.key);
+        let tap_id_str = item.tap_id.to_string();
+        let expire_at = item.expire_at.map(|t| t.timestamp());
+        let created_at = chrono::Utc::now().timestamp();
+
+        let sidecar = MetaSidecar {
+            tap_id: tap_id_str.clone(),
+            cache_key: key_json.clone(),
+            metadatas,
+            cache_policy: cache_key,
+            expire_at,
+            created_at,
+        };
+        write_json_sidecar(&json_path, &sidecar).await?;
+
         let db_entry = DbEntry {
-            tap_id: item.tap_id.to_string(),
+            tap_id: tap_id_str,
             cache_key: key_json,
             opus_path: None,
-            expire_at: item.expire_at.map(|t| t.timestamp()),
+            json_path: json_path.to_string_lossy().into_owned(),
+            expire_at,
             use_count: 0,
             last_used_at: None,
-            metadatas: serde_json::to_string(&metadatas)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            cache_policy: serde_json::to_string(&cache_key)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            created_at: chrono::Utc::now().timestamp(),
+            created_at,
             gdsf_priority: 0.0,
             is_downloading: false,
         };
-        self.db.insert(db_entry).await
+        if let Err(e) = self.db.insert(db_entry).await {
+            let _ = fs::remove_file(&json_path).await;
+            return Err(e);
+        }
+        Ok(())
     }
 
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()> {
         let key_json = key_to_json(key);
-        if let Ok(Some(entry)) = self.db.get(tap_id.to_string(), key_json.clone()).await
-            && let Some(path) = entry.opus_path
-        {
-            let _ = remove_if_exists(&PathBuf::from(path)).await;
+        if let Ok(Some(entry)) = self.db.get(tap_id.to_string(), key_json.clone()).await {
+            if let Some(path) = entry.opus_path {
+                let _ = remove_if_exists(&PathBuf::from(path)).await;
+            }
+            let _ = remove_if_exists(&PathBuf::from(&entry.json_path)).await;
         }
         self.db.delete(tap_id.to_string(), key_json).await
     }
