@@ -84,6 +84,10 @@ impl CacheDb {
             .map_err(|e| rusqlite_to_io(e, "open"))?;
         conn.execute_batch(&format!("PRAGMA journal_mode = WAL;\n{}", SCHEMA))
             .map_err(|e| rusqlite_to_io(e, "schema"))?;
+        // Migration: add json_path if missing (pre-existing databases).
+        let _ = conn.execute_batch(
+            "ALTER TABLE cache_entries ADD COLUMN json_path TEXT NOT NULL DEFAULT '';",
+        );
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
