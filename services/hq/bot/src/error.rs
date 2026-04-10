@@ -6,21 +6,21 @@ use zako3_states::StateServiceError;
 #[derive(Debug, Error)]
 pub enum BotError {
     // ── User-facing domain errors ───────────────────────────────────────────
-    #[error("You need to be in a voice channel to use this command.")]
+    #[error("이 명령어를 사용하려면 음성 채널에 있어야 해요.")]
     NotInVoiceChannel,
-    #[error("I'm not currently in a voice channel.")]
+    #[error("저는 현재 음성 채널에 있지 않아요.")]
     BotNotInVoiceChannel,
-    #[error("You're not in a voice channel where I'm active.")]
+    #[error("제가 활동 중인 음성 채널에 있지 않으세요.")]
     UserNotInSession,
-    #[error("Volume must be between 0 and 150.")]
+    #[error("볼륨은 0에서 150 사이여야 해요.")]
     InvalidVolume,
-    #[error("You don't have permission to do that.")]
+    #[error("이 작업을 수행할 권한이 없어요.")]
     Forbidden,
-    #[error("You need to log in first. Use `/settings` to get a login link.")]
+    #[error("먼저 로그인이 필요해요. `/settings`에서 로그인 링크를 확인하세요.")]
     Unauthorized,
-    #[error("Nothing is currently playing.")]
+    #[error("현재 재생 중인 항목이 없어요.")]
     NothingPlaying,
-    #[error("The queue is empty.")]
+    #[error("대기열이 비어 있어요.")]
     QueueEmpty,
     // ── Transparent infrastructure errors ──────────────────────────────────
     #[error(transparent)]
@@ -37,19 +37,19 @@ impl BotError {
     /// Returns a short, user-friendly message suitable for a Discord reply.
     pub fn to_user_message(&self) -> &str {
         match self {
-            BotError::NotInVoiceChannel => "You need to be in a voice channel to use this command.",
-            BotError::BotNotInVoiceChannel => "I'm not currently in a voice channel.",
-            BotError::UserNotInSession => "You're not in a voice channel where I'm active.",
-            BotError::InvalidVolume => "Volume must be between 0 and 150.",
-            BotError::Forbidden => "You don't have permission to do that.",
+            BotError::NotInVoiceChannel => "이 명령어를 사용하려면 음성 채널에 있어야 해요.",
+            BotError::BotNotInVoiceChannel => "저는 현재 음성 채널에 있지 않아요.",
+            BotError::UserNotInSession => "제가 활동 중인 음성 채널에 있지 않으세요.",
+            BotError::InvalidVolume => "볼륨은 0에서 150 사이여야 해요.",
+            BotError::Forbidden => "이 작업을 수행할 권한이 없어요.",
             BotError::Unauthorized => {
-                "You need to log in first. Use `/settings` to get a login link."
+                "먼저 로그인이 필요해요. `/settings`에서 로그인 링크를 확인하세요."
             }
-            BotError::NothingPlaying => "Nothing is currently playing.",
-            BotError::QueueEmpty => "The queue is empty.",
+            BotError::NothingPlaying => "현재 재생 중인 항목이 없어요.",
+            BotError::QueueEmpty => "대기열이 비어 있어요.",
             BotError::Core(inner) => core_error_message(inner),
-            BotError::Serenity(_) => "Something went wrong communicating with Discord.",
-            BotError::State(_) => "Something went wrong on our end. Please try again.",
+            BotError::Serenity(_) => "Discord와 통신하는 중 문제가 발생했어요.",
+            BotError::State(_) => "서버에서 문제가 발생했어요. 다시 시도해 주세요.",
             BotError::Other(msg) => msg.as_str(),
         }
     }
@@ -77,14 +77,14 @@ impl BotError {
 
 fn core_error_message(err: &CoreError) -> &str {
     match err {
-        CoreError::NotFound(_) => "That item couldn't be found.",
+        CoreError::NotFound(_) => "해당 항목을 찾을 수 없어요.",
         CoreError::Unauthorized(_) => {
-            "You need to log in first. Use `/settings` to get a login link."
+            "먼저 로그인이 필요해요. `/settings`에서 로그인 링크를 확인하세요."
         }
-        CoreError::Forbidden(_) => "You don't have permission to do that.",
+        CoreError::Forbidden(_) => "이 작업을 수행할 권한이 없어요.",
         CoreError::Conflict(msg) => msg.as_str(),
         CoreError::InvalidInput(msg) => msg.as_str(),
-        _ => "Something went wrong on our end. Please try again.",
+        _ => "서버에서 문제가 발생했어요. 다시 시도해 주세요.",
     }
 }
 

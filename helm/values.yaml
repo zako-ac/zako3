@@ -52,6 +52,8 @@ hq:
   mapperWasmDir: "/var/hq/hq-mappers"
   mapperDbPath: "/var/hq/hq-mappers.db"
   metricsPort: "9091"
+  subBotIds: ""                         # Comma-separated sub-bot client IDs
+  botInvitePermissions: "4895026873161728"
   storageSize: "1Gi"
 
 # --- TapHub service ---

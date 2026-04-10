@@ -1,5 +1,6 @@
 pub mod channel;
 pub mod emoji_map;
+pub mod invites;
 pub mod help;
 pub mod music;
 pub mod queue;

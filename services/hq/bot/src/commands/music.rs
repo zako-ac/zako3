@@ -9,9 +9,9 @@ const MUSIC_QUEUE: &str = "music";
 
 #[derive(Debug, poise::ChoiceParameter)]
 pub enum StopScope {
-    #[name = "Current track"]
+    #[name = "현재 트랙"]
     Current,
-    #[name = "Queue (stop and clear)"]
+    #[name = "전체 대기열 (정지 및 초기화)"]
     Queue,
 }
 
@@ -35,7 +35,7 @@ pub async fn play(
     let (guild_id, user_serenity_cid) = {
         let guild = ctx
             .guild()
-            .ok_or_else(|| Error::Other("This command must be used in a server.".to_string()))?;
+            .ok_or_else(|| Error::Other("이 명령어는 서버에서만 사용할 수 있어요.".to_string()))?;
         let user_cid = guild
             .voice_states
             .get(&ctx.author().id)
@@ -67,7 +67,7 @@ pub async fn play(
 
     // Send "Loading…" immediately so the user sees a response while the engine works.
     let reply_handle = ctx
-        .send(poise::CreateReply::default().content("Loading…"))
+        .send(poise::CreateReply::default().content("로딩 중…"))
         .await?;
 
     // Run the engine call and state fetch. Any error edits the existing reply rather
@@ -136,7 +136,7 @@ async fn do_play<'a>(
         }
     }
 
-    Ok(poise::CreateReply::default().content(format!("Added to queue: *{query}*")))
+    Ok(poise::CreateReply::default().content(format!("대기열에 추가했어요: *{query}*")))
 }
 
 /// Stop playback.

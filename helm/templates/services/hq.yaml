@@ -79,6 +79,10 @@ spec:
               value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlTarpc }}"
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
+            - name: SUB_BOT_IDS
+              value: {{ .Values.hq.subBotIds | quote }}
+            - name: BOT_INVITE_PERMISSIONS
+              value: {{ .Values.hq.botInvitePermissions | quote }}
             - name: RPC_ADMIN_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict

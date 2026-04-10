@@ -81,6 +81,7 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
                 commands::tts::voice(),
                 commands::help::help(),
                 commands::emoji_map::emoji_map(),
+                commands::invites::invites(),
             ]
             .into_iter()
             .map(commands::tracing::with_tracing)

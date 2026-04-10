@@ -23,6 +23,8 @@ pub struct AppConfig {
     pub mapper_db_path: PathBuf,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
+    pub sub_bot_ids: Vec<String>,
+    pub bot_invite_permissions: String,
 }
 
 impl AppConfig {
@@ -54,6 +56,15 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .or(Some(9091)),
+            sub_bot_ids: env::var("SUB_BOT_IDS")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
+            bot_invite_permissions: env::var("BOT_INVITE_PERMISSIONS")
+                .unwrap_or_else(|_| "4895026873161728".to_string()),
         })
     }
 }
