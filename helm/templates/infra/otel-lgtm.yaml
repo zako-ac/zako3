@@ -77,6 +77,8 @@ spec:
           env:
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict

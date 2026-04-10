@@ -35,11 +35,7 @@ impl SessionManager {
     }
 
     #[instrument(skip(self), fields(guild_id = %guild_id, channel_id = %channel_id))]
-    async fn initiate_session(
-        &self,
-        guild_id: GuildId,
-        channel_id: ChannelId,
-    ) -> ZakoResult<()> {
+    async fn initiate_session(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
         tracing::debug!("Initiating audio session");
 
         let (prod, cons) = create_opus_ringbuf_pair();
@@ -115,7 +111,9 @@ impl SessionManager {
         tracing::info!("Leaving voice channel");
 
         self.discord_service.leave_voice_channel(guild_id).await?;
-        self.state_service.delete_session(guild_id, channel_id).await?;
+        self.state_service
+            .delete_session(guild_id, channel_id)
+            .await?;
 
         if self.sessions.remove(&(guild_id, channel_id)).is_some() {
             metrics::dec_session_active();
@@ -135,7 +133,9 @@ impl SessionManager {
     ) -> ZakoResult<()> {
         tracing::info!("Cleaning up externally-disconnected session");
 
-        self.state_service.delete_session(guild_id, channel_id).await?;
+        self.state_service
+            .delete_session(guild_id, channel_id)
+            .await?;
 
         if self.sessions.remove(&(guild_id, channel_id)).is_some() {
             metrics::dec_session_active();
@@ -155,10 +155,7 @@ impl SessionManager {
             .map(|s| s.clone())
     }
 
-    pub fn get_sessions_in_guild_local(
-        &self,
-        guild_id: GuildId,
-    ) -> Vec<Arc<SessionControl>> {
+    pub fn get_sessions_in_guild_local(&self, guild_id: GuildId) -> Vec<Arc<SessionControl>> {
         self.sessions
             .iter()
             .filter(|entry| entry.key().0 == guild_id)

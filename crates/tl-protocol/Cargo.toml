@@ -1,0 +1,10 @@
+[package]
+name = "tl-protocol"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rkyv = "0.8.15"
+serde = { workspace = true, features = ["derive"] }
+zako3-types.workspace = true
+tarpc = { workspace = true }

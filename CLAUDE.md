@@ -10,7 +10,7 @@
 
 ## Tool Usage: `opencode` MCP
 - Use `plan` as the agent name for all `opencode` tasks.
-- Use "ollama" for providerID and `qwen3.5-code` for modelID in `opencode` calls.
+- Use "ollama" for providerID and `qwen3.5-code` (exact qwen3.5-code NOT -coder.) for modelID in `opencode` calls.
 
 For tasks that require fast speed and repetition, use `build` agent with `opencode_run` for quick execution.
 For task that require fast speed and repetition and is READ ONLY, use `plan` agent with `opencode`. Also use it for exploring codebase.

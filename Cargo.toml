@@ -13,7 +13,7 @@ members = [
     "libs/*",
     "services/*/*",
     "workers/*",
-    "zakoctl",
+    "zakoctl", "crates/tl-protocol", "crates/ae-transport", "crates/tl-client",
 ]
 
 [workspace.dependencies]
@@ -30,7 +30,6 @@ zako3-tts-matching = { path = "crates/tts-matching" }
 
 zakofish = { path = "libs/zakofish", version = "0.1.0" }
 zakofish-taphub = { path = "crates/zakofish-taphub" }
-zako3-tap-sdk = { path = "libs/tap-sdk" }
 
 # HQ Dependencies
 hq-types = { path = "crates/types", package = "zako3-types" }
@@ -61,10 +60,17 @@ config = "0.13"
 anyhow = "1.0"
 mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
-jsonrpsee-proc-macros = "0.24"
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 protofish2 = { version = "0.6.1", features = ["opus", "jitter"] }
 async-nats = "0.45.0"
+tarpc = { version = "0.34", features = ["full"] }
+dashmap = "6"
+envy = "0.4"
+zako3-ae-transport = { path = "crates/ae-transport" }
+tl-protocol = { path = "crates/tl-protocol" }
+zako3-tl-core = { path = "services/traffic-light/core" }
+zako3-tl-infra = { path = "services/traffic-light/infra" }
+zako3-tl-client = { path = "crates/tl-client" }
 
 [profile.dev]
 incremental = false

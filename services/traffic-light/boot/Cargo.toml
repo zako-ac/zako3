@@ -1,0 +1,23 @@
+[package]
+name = "zako3-tl-boot"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "traffic-light"
+path = "src/main.rs"
+
+[dependencies]
+zako3-tl-core.workspace = true
+zako3-tl-infra.workspace = true
+tl-protocol.workspace = true
+zako3-telemetry.workspace = true
+tarpc = { workspace = true }
+tokio = { workspace = true }
+tracing.workspace = true
+serde = { workspace = true, features = ["derive"] }
+dotenvy.workspace = true
+envy.workspace = true
+anyhow.workspace = true
+futures = "0.3"
+zako3-types.workspace = true

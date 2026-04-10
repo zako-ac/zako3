@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
 use serenity::{async_trait, model::voice::VoiceState, prelude::*};
 
 use zako3_audio_engine_core::{
@@ -10,7 +9,6 @@ use zako3_audio_engine_core::{
 
 pub struct VoiceStateHandler {
     pub session_manager: Arc<SessionManager>,
-    pub session_consumers: Arc<DashMap<(GuildId, ChannelId), tokio::task::JoinHandle<()>>>,
 }
 
 #[async_trait]
@@ -70,10 +68,6 @@ impl EventHandler for VoiceStateHandler {
                 channel_id = %channel_id,
                 "Failed to clean up session after external disconnect: {e}"
             );
-        }
-
-        if let Some((_, handle)) = self.session_consumers.remove(&(guild_id, channel_id)) {
-            handle.abort();
         }
     }
 }

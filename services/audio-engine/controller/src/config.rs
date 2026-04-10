@@ -2,10 +2,10 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct AppConfig {
-    pub redis_url: String,
-    pub discord_token: String,
-    #[serde(default = "default_nats_url")]
-    pub nats_url: String,
+    #[serde(default = "default_ae_transport_addr")]
+    pub ae_transport_addr: String,
+    #[serde(default = "default_tl_tarpc_addr")]
+    pub tl_tarpc_addr: String,
     #[serde(default = "default_taphub_url")]
     pub taphub_url: String,
     #[serde(default = "default_taphub_sni")]
@@ -21,8 +21,12 @@ pub struct AppConfig {
     pub metrics_port: u16,
 }
 
-fn default_nats_url() -> String {
-    "nats://127.0.0.1:4222".to_string()
+fn default_ae_transport_addr() -> String {
+    "127.0.0.1:5700".to_string()
+}
+
+fn default_tl_tarpc_addr() -> String {
+    "127.0.0.1:7070".to_string()
 }
 
 fn default_taphub_url() -> String {

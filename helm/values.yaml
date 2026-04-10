@@ -86,6 +86,15 @@ audioEngine:
     discordTokenKey: "discord-token"
     aeTokenKey: "ae-token"
 
+# --- Traffic Light ---
+trafficLight:
+  nodeAffinity: {}
+  discordTokens: ""
+  existingSecret:
+    name: ""
+    discordTokensKey: "discord-tokens"
+  metricsPort: "9090"
+
 # --- Web frontend ---
 web:
   viteApiBaseUrl: "/api/v1"
@@ -111,6 +120,8 @@ ports:
   hqRpc: 50052
   taphubTransport: 4000
   taphubZakofish: 7060
+  tlTarpc: 7070
+  tlAeTransport: 7071
   web: 80
 
 # --- NATS ---

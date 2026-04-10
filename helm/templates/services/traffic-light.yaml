@@ -1,0 +1,85 @@
+{{- $fullname := include "zako3.fullname" . }}
+{{- $instanceSecretName := printf "%s-traffic-light-secret" $fullname }}
+{{- $existingSecret := .Values.trafficLight.existingSecret.name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-traffic-light
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: traffic-light
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: traffic-light
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+    - name: tarpc
+      port: {{ .Values.ports.tlTarpc }}
+      targetPort: tarpc
+    - name: ae-transport
+      port: {{ .Values.ports.tlAeTransport }}
+      targetPort: ae-transport
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-traffic-light
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: traffic-light
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traffic-light
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: traffic-light
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.trafficLight.nodeAffinity) | nindent 6 }}
+      containers:
+        - name: traffic-light
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "traffic-light" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+            - name: tarpc
+              containerPort: {{ .Values.ports.tlTarpc }}
+            - name: ae-transport
+              containerPort: {{ .Values.ports.tlAeTransport }}
+          env:
+            - name: METRICS_PORT
+              value: {{ .Values.trafficLight.metricsPort | quote }}
+            - name: TARPC_ADDR
+              value: "0.0.0.0:{{ .Values.ports.tlTarpc }}"
+            - name: AE_TRANSPORT_ADDR
+              value: "0.0.0.0:{{ .Values.ports.tlAeTransport }}"
+            - name: OTLP_ENDPOINT
+              value: "http://{{ $fullname }}-otel-lgtm:4317"
+            - name: DISCORD_TOKENS
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $instanceSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.trafficLight.existingSecret.discordTokensKey) | nindent 16 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15

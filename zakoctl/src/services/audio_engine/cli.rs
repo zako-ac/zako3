@@ -80,23 +80,23 @@ pub enum AudioEngineSubcommands {
         #[arg(short = 'c', long, help = "The Channel ID")]
         channel_id: String,
     },
-    /// Pause a track
+    /// Pause a queue
     Pause {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
         #[arg(short = 'c', long, help = "The Channel ID")]
         channel_id: String,
-        #[arg(help = "The Track ID")]
-        track_id: u64,
+        #[arg(help = "Queue name", default_value = "default")]
+        queue: String,
     },
-    /// Resume a paused track
+    /// Resume a paused queue
     Resume {
         #[arg(short = 'g', long, help = "The Guild ID")]
         guild_id: Option<String>,
         #[arg(short = 'c', long, help = "The Channel ID")]
         channel_id: String,
-        #[arg(help = "The Track ID")]
-        track_id: u64,
+        #[arg(help = "Queue name", default_value = "default")]
+        queue: String,
     },
     /// Get the current session state
     #[command(name = "get-session-state", alias = "gss")]

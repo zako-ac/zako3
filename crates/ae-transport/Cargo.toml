@@ -1,0 +1,20 @@
+[package]
+name = "zako3-ae-transport"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tl-protocol = { path = "../tl-protocol" }
+tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["codec"] }
+bytes = "1"
+futures = "0.3"
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+backon = "1"
+tracing = { workspace = true }
+
+[dev-dependencies]
+zako3-types = { workspace = true }

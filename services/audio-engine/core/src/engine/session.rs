@@ -290,6 +290,60 @@ impl SessionControl {
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn pause_queue(&self, queue_name: QueueName) -> ZakoResult<()> {
+        tracing::info!(queue_name = %queue_name, "Pausing queue");
+        let track_ids = self
+            .state_service
+            .get_session(self.guild_id, self.channel_id)
+            .await?
+            .map(|s| {
+                s.queues
+                    .get(&queue_name)
+                    .map(|tracks| {
+                        tracks
+                            .iter()
+                            .filter(|t| !t.paused)
+                            .map(|t| t.track_id)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        for track_id in track_ids {
+            self.pause(track_id).await?;
+        }
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
+    pub async fn resume_queue(&self, queue_name: QueueName) -> ZakoResult<()> {
+        tracing::info!(queue_name = %queue_name, "Resuming queue");
+        let track_ids = self
+            .state_service
+            .get_session(self.guild_id, self.channel_id)
+            .await?
+            .map(|s| {
+                s.queues
+                    .get(&queue_name)
+                    .map(|tracks| {
+                        tracks
+                            .iter()
+                            .filter(|t| t.paused)
+                            .map(|t| t.track_id)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        for track_id in track_ids {
+            self.resume(track_id).await?;
+        }
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub async fn session_state(&self) -> ZakoResult<Option<SessionState>> {
         self.state_service
             .get_session(self.guild_id, self.channel_id)

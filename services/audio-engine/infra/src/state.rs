@@ -1,109 +1,63 @@
 use async_trait::async_trait;
-use redis::AsyncCommands;
+use dashmap::DashMap;
 use zako3_audio_engine_core::{
     error::ZakoResult,
     service::state::StateService,
     types::{ChannelId, GuildId, SessionState},
 };
 
-pub struct RedisStateService {
-    conn: redis::aio::MultiplexedConnection,
-    ae_id: String,
+pub struct InMemoryStateService {
+    sessions: DashMap<(GuildId, ChannelId), SessionState>,
 }
 
-impl RedisStateService {
-    pub async fn new(redis_url: &str, ae_id: String) -> ZakoResult<Self> {
-        let client = redis::Client::open(redis_url)?;
-        let conn = client.get_multiplexed_async_connection().await?;
-        Ok(Self { conn, ae_id })
+impl InMemoryStateService {
+    pub fn new() -> Self {
+        Self {
+            sessions: DashMap::new(),
+        }
     }
+}
 
-    fn get_key(&self, guild_id: GuildId, channel_id: ChannelId) -> String {
-        format!(
-            "session:{}:{}:{}",
-            self.ae_id,
-            u64::from(guild_id),
-            u64::from(channel_id)
-        )
-    }
-
-    fn guild_pattern(&self, guild_id: GuildId) -> String {
-        format!("session:{}:{}:*", self.ae_id, u64::from(guild_id))
+impl Default for InMemoryStateService {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[async_trait]
-impl StateService for RedisStateService {
+impl StateService for InMemoryStateService {
     async fn get_session(
         &self,
         guild_id: GuildId,
         channel_id: ChannelId,
     ) -> ZakoResult<Option<SessionState>> {
-        let mut conn = self.conn.clone();
-        let key = self.get_key(guild_id, channel_id);
-        let data: Option<String> = conn.get(key).await?;
-
-        match data {
-            Some(json) => {
-                let session: SessionState = serde_json::from_str(&json)?;
-                Ok(Some(session))
-            }
-            None => Ok(None),
-        }
+        Ok(self
+            .sessions
+            .get(&(guild_id, channel_id))
+            .map(|s| s.value().clone()))
     }
 
     async fn save_session(&self, session: &SessionState) -> ZakoResult<()> {
-        let mut conn = self.conn.clone();
-        let key = self.get_key(session.guild_id, session.channel_id);
-        let json = serde_json::to_string(session)?;
-        let _: () = conn.set(key, json).await?;
+        self.sessions
+            .insert((session.guild_id, session.channel_id), session.clone());
         Ok(())
     }
 
     async fn delete_session(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
-        let mut conn = self.conn.clone();
-        let key = self.get_key(guild_id, channel_id);
-        let _: () = conn.del(key).await?;
+        self.sessions.remove(&(guild_id, channel_id));
         Ok(())
     }
 
     async fn list_sessions(&self) -> ZakoResult<Vec<SessionState>> {
-        let mut conn = self.conn.clone();
-        let pattern = format!("session:{}:*", self.ae_id);
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(&pattern)
-            .query_async(&mut conn)
-            .await?;
-
-        let mut sessions = Vec::with_capacity(keys.len());
-        for key in keys {
-            let data: Option<String> = conn.get(&key).await?;
-            if let Some(json) = data {
-                let session: SessionState = serde_json::from_str(&json)?;
-                sessions.push(session);
-            }
-        }
-
-        Ok(sessions)
+        Ok(self.sessions.iter().map(|s| s.value().clone()).collect())
     }
 
     async fn list_sessions_in_guild(&self, guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
-        let mut conn = self.conn.clone();
-        let pattern = self.guild_pattern(guild_id);
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(&pattern)
-            .query_async(&mut conn)
-            .await?;
-
-        let mut sessions = Vec::with_capacity(keys.len());
-        for key in keys {
-            let data: Option<String> = conn.get(&key).await?;
-            if let Some(json) = data {
-                let session: SessionState = serde_json::from_str(&json)?;
-                sessions.push(session);
-            }
-        }
-
-        Ok(sessions)
+        Ok(self
+            .sessions
+            .iter()
+            .filter(|s| s.key().0 == guild_id)
+            .map(|s| s.value().clone())
+            .collect())
     }
 }

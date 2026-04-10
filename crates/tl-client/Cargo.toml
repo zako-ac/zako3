@@ -1,0 +1,11 @@
+[package]
+name = "zako3-tl-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tl-protocol.workspace = true
+tarpc.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+zako3-types.workspace = true

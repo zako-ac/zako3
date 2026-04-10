@@ -1,30 +1,33 @@
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
-use dashmap::DashMap;
 use serenity::Client;
 use serenity::all::GatewayIntents;
-use sha2::{Digest, Sha256};
 use songbird::SerenityInit;
 
 use zako3_audio_engine_controller::{
-    config::AppConfig, id_loader, ready_waiter::create_ready_waiter, server::AudioEngineServer,
+    config::AppConfig,
+    guild_reporter::{report_guilds_once, run_guild_reporter},
+    ready_waiter::create_ready_waiter,
+    server::AeTransportHandler,
     voice_state::VoiceStateHandler,
 };
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
-    discord::SongbirdDiscordService, state::RedisStateService, taphub::RealTapHubService,
+    InMemoryStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
 use zako3_audio_engine_telemetry::TelemetryConfig;
+use zako3_ae_transport::TlClient;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load();
-    let nats_url = config.nats_url.clone();
 
-    println!("Starting zako3 audio engine (NATS)...");
+    println!("Starting zako3 audio engine...");
 
     let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -35,14 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;
-
-    let (ready_waiter, mut ready_recv) = create_ready_waiter();
-
-    let ae_id = {
-        let hash = Sha256::digest(config.discord_token.as_bytes());
-        format!("{:x}", hash)[..16].to_string()
-    };
-    tracing::info!(ae_id, "Audio Engine starting");
 
     let certs = load_certs(&config.taphub_transport_cert_file).unwrap_or_else(|_| vec![]);
 
@@ -62,9 +57,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
-    let state_service = Arc::new(RedisStateService::new(&config.redis_url, ae_id).await?);
+    let state_service = Arc::new(InMemoryStateService::new());
 
-    // Pre-create Songbird so we can build the session manager before the Discord client
+    let addr: std::net::SocketAddr = config.ae_transport_addr.parse()?;
+
+    // Step 1: Connect to TL to receive our assigned Discord token.
+    tracing::info!("Connecting to TL server at {} to receive Discord token", addr);
+    let (token, _, connected) = loop {
+        match TlClient::connect(addr, HashMap::new()).await {
+            Ok(result) => break result,
+            Err(e) => {
+                tracing::warn!("Failed to connect to TL server: {e}, retrying in 2s");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
+    };
+    tracing::info!("Received Discord token from TL server");
+
+    // Step 2: Build the Discord / audio infrastructure with the assigned token.
     let songbird_manager = songbird::Songbird::serenity();
     let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager.clone()));
 
@@ -74,54 +84,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         taphub_service,
     ));
 
-    let session_consumers = Arc::new(DashMap::new());
-
     let voice_state_handler = Arc::new(VoiceStateHandler {
         session_manager: session_manager.clone(),
-        session_consumers: session_consumers.clone(),
     });
 
-    let id = id_loader::load_id();
-    let discord_token = id_loader::load_discord_token(id, config.discord_token.to_string())
-        .unwrap_or_else(|e| {
-            tracing::error!("Failed to load Discord token: {}", e);
-            std::process::exit(1);
-        });
+    let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
-    let intents = GatewayIntents::GUILD_VOICE_STATES;
-    let mut client = Client::builder(&discord_token, intents)
+    let intents = GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILDS;
+    let mut discord_client = Client::builder(&token.0, intents)
         .event_handler_arc(ready_waiter)
         .event_handler_arc(voice_state_handler)
         .register_songbird_with(songbird_manager)
         .await
-        .expect("Err creating client");
+        .expect("Failed to create Discord client");
 
     tokio::spawn(async move {
-        let _ = client.start().await.map_err(|why| {
-            tracing::error!("Client ended: {:?}", why);
+        let _ = discord_client.start().await.map_err(|e| {
+            tracing::error!("Discord client ended: {:?}", e);
             panic!();
         });
     });
 
-    tracing::info!("Audio Engine connecting to NATS at {}", nats_url);
-
-    let engine_server = Arc::new(AudioEngineServer::new(
-        session_manager,
-        nats_url,
-        session_consumers,
-    ));
-
+    // Step 3: Wait for Discord to be ready.
     ready_recv.recv().await;
-
+    let serenity_ctx = ctx_recv.recv().await.expect("ctx channel closed before ready");
     tracing::info!("Audio Engine is ready and connected to Discord!");
-
     telemetry.healthy();
 
-    // Start consuming
-    if let Err(e) = engine_server.run().await {
-        tracing::error!("RabbitMQ server error: {:?}", e);
-        panic!();
+    // Step 3b: Spawn background guild reporter.
+    tokio::spawn(run_guild_reporter(
+        serenity_ctx.clone(),
+        config.tl_tarpc_addr.clone(),
+        token.0.clone(),
+    ));
+
+    // Step 4: Serve requests. On TL disconnect, reconnect TL only (Discord stays alive).
+    report_guilds_once(&serenity_ctx, &config.tl_tarpc_addr, &token.0).await;
+    let handler = AeTransportHandler::new(session_manager.clone());
+    if let Err(e) = connected.serve(handler).await {
+        tracing::warn!("TL connection lost: {e}, reconnecting...");
     }
 
-    Ok(())
+    // Step 5: Reconnect loop — TL only, Discord client continues running.
+    loop {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        match TlClient::connect(addr, HashMap::new()).await {
+            Ok((_, _, connected)) => {
+                tracing::info!("Reconnected to TL server");
+                report_guilds_once(&serenity_ctx, &config.tl_tarpc_addr, &token.0).await;
+                let handler = AeTransportHandler::new(session_manager.clone());
+                if let Err(e) = connected.serve(handler).await {
+                    tracing::warn!("TL connection lost: {e}, reconnecting...");
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to reconnect to TL: {e}");
+            }
+        }
+    }
 }
