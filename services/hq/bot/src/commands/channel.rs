@@ -1,4 +1,4 @@
-use crate::{ui, Context, Error};
+use crate::{Context, Error, ui};
 use hq_types::{ChannelId, GuildId};
 use poise::serenity_prelude as serenity;
 
@@ -16,8 +16,7 @@ pub async fn channel(_ctx: Context<'_>) -> Result<(), Error> {
     slash_command,
     name_localized("ko", "활성화"),
     description_localized("en-US", "Enable TTS in a channel"),
-    description_localized("ko", "채널에서 TTS 활성화"),
-    required_permissions = "MANAGE_CHANNELS"
+    description_localized("ko", "채널에서 TTS 활성화")
 )]
 pub async fn enable(
     ctx: Context<'_>,
@@ -43,8 +42,7 @@ pub async fn enable(
     slash_command,
     name_localized("ko", "비활성화"),
     description_localized("en-US", "Disable TTS in a channel"),
-    description_localized("ko", "채널에서 TTS 비활성화"),
-    required_permissions = "MANAGE_CHANNELS"
+    description_localized("ko", "채널에서 TTS 비활성화")
 )]
 pub async fn disable(
     ctx: Context<'_>,
@@ -70,8 +68,7 @@ pub async fn disable(
     slash_command,
     name_localized("ko", "목록"),
     description_localized("en-US", "List all TTS-enabled channels"),
-    description_localized("ko", "TTS 활성화된 채널 목록"),
-    required_permissions = "MANAGE_CHANNELS"
+    description_localized("ko", "TTS 활성화된 채널 목록")
 )]
 pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx
