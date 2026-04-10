@@ -26,6 +26,7 @@ pub fn tap() -> TapBuilder {
 pub struct TapBuilder {
     cert_pem: Option<PathBuf>,
     hub_addr: Option<String>,
+    server_name: Option<String>,
     tap_id: Option<String>,
     friendly_name: Option<String>,
     api_token: Option<String>,
@@ -39,9 +40,15 @@ impl TapBuilder {
         self
     }
 
-    /// Hub address as "host:port". The host part is also used as the TLS server name.
+    /// Hub address as "host:port". The host part is also used as the TLS server name if not
+    /// specified separately. Default is api.zako.ac:7060.
     pub fn hub(mut self, addr: impl Into<String>) -> Self {
         self.hub_addr = Some(addr.into());
+        self
+    }
+
+    pub fn server_name(mut self, name: impl Into<String>) -> Self {
+        self.server_name = Some(name.into());
         self
     }
 
@@ -68,10 +75,7 @@ impl TapBuilder {
     /// Connect to the Hub and block until the connection is permanently lost.
     /// Reconnection with exponential backoff is handled internally by zakofish.
     pub async fn run(self, handler: Arc<dyn TapHandler>) -> Result<(), SdkError> {
-        let hub_addr = self
-            .hub_addr
-            .as_deref()
-            .ok_or_else(|| SdkError::Tls("hub is required".to_string()))?;
+        let hub_addr = self.hub_addr.as_deref().unwrap_or("api.zako.ac:7060");
 
         // Append default port 7060 if no port is present
         let hub_addr = if hub_addr
@@ -85,10 +89,10 @@ impl TapBuilder {
         };
 
         // Extract host as TLS server_name (SNI); resolve domain to SocketAddr
-        let (server_name, _) = hub_addr
-            .rsplit_once(':')
-            .ok_or_else(|| SdkError::Tls("hub must be host:port".to_string()))?;
-        let server_name = server_name.to_string();
+        let server_name = self
+            .server_name
+            .clone()
+            .unwrap_or_else(|| hub_addr.split(':').next().unwrap_or_default().to_string());
 
         let socket_addr = tokio::net::lookup_host(&hub_addr)
             .await

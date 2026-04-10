@@ -6,7 +6,7 @@ refer hq todo
 - [ ] Fix graph
 - [ ] use SSE for live update in queue and stats
 
-- [ ] Show Duration: maybe Tap capabilities?
+- [ ] Show Duration: maybe Tap "capabilities"?
 
 # Done
 - [x] Implement multiple AE
@@ -81,7 +81,7 @@ refer hq todo
 - [x] Dashboard status (my taps, total uses, active users, uptime)
 - [x] Add admin UI/API to change tap settings
 - [x] Make admin tap details UI use StatsCard component instead of manual impl
-- [ ] Localhost CA change
+- [x] Localhost CA change
 
 - [x] Test Korean and refine i18n
 - [ ] Add "load failed" 
