@@ -61,12 +61,18 @@ impl ZakofishHub {
             let incoming = self.server.accept().await.ok_or_else(|| {
                 ZakofishError::ProtocolError("Protofish server closed".to_string())
             })?;
-            let conn = incoming.accept().await?;
             let handler = self.handler.clone();
             let sessions = self.sessions.clone();
             let next_connection_id = self.next_connection_id.clone();
 
             tokio::spawn(async move {
+                let conn = match incoming.accept().await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!("QUIC handshake failed: {e}");
+                        return;
+                    }
+                };
                 let span = tracing::info_span!(
                     "tap.connection",
                     tap_id = tracing::field::Empty,

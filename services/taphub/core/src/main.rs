@@ -1,4 +1,5 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use std::process;
 use std::sync::Arc;
 use zako3_states::{RedisCacheRepository, TapHubStateService, TapMetricsStateService};
 use zako3_taphub_core::app::App;
@@ -89,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Starting TapHub...");
         if let Err(e) = tap_hub_clone.run().await {
             tracing::error!(%e, "Error running TapHub");
-            panic!("TapHub failed to run: {}", e);
+            process::exit(1);
         }
     });
 
