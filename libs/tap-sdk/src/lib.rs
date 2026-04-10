@@ -7,6 +7,9 @@ pub mod stream;
 #[cfg(feature = "auto-encode")]
 pub mod encode;
 
+#[cfg(feature = "healthcheck")]
+pub(crate) mod healthcheck;
+
 pub use builder::{tap, TapBuilder};
 pub use error::{SdkError, TapError};
 pub use handler::TapHandler;

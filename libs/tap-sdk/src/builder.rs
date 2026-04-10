@@ -31,6 +31,8 @@ pub struct TapBuilder {
     friendly_name: Option<String>,
     api_token: Option<String>,
     selection_weight: f32,
+    #[cfg(feature = "healthcheck")]
+    healthcheck_port: Option<u16>,
 }
 
 impl TapBuilder {
@@ -69,6 +71,17 @@ impl TapBuilder {
 
     pub fn selection_weight(mut self, weight: f32) -> Self {
         self.selection_weight = weight;
+        self
+    }
+
+    /// Spawn a minimal HTTP server on `port` that responds `200 OK` to `GET /health`.
+    ///
+    /// Requires the `healthcheck` crate feature. The server runs as a background
+    /// task alongside the Hub connection; bind failures are logged but do not
+    /// abort the tap.
+    #[cfg(feature = "healthcheck")]
+    pub fn healthcheck_port(mut self, port: u16) -> Self {
+        self.healthcheck_port = Some(port);
         self
     }
 
@@ -133,6 +146,11 @@ impl TapBuilder {
             api_token: self.api_token.unwrap_or_default(),
             selection_weight: self.selection_weight,
         };
+
+        #[cfg(feature = "healthcheck")]
+        if let Some(port) = self.healthcheck_port {
+            tokio::spawn(crate::healthcheck::run_healthcheck_server(port));
+        }
 
         let bridge = Arc::new(HandlerBridge(handler));
         let zf_tap = ZakofishTap::new(client_config)?;
