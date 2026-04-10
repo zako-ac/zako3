@@ -32,6 +32,7 @@ jobs:
              target/release/zako3-taphub-core \
              target/release/cache-gc \
              target/release/metrics-sync \
+             target/release/traffic-light \
              dist/
 
       - name: Upload binaries
@@ -102,6 +103,9 @@ jobs:
             artifact: rust-binaries
           - name: metrics-sync
             dockerfile: workers/metrics-sync/Dockerfile
+            artifact: rust-binaries
+          - name: traffic-light
+            dockerfile: services/traffic-light/Dockerfile
             artifact: rust-binaries
           - name: web
             dockerfile: web/Dockerfile
