@@ -10,7 +10,7 @@ metadata:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: traffic-light
 spec:
-  clusterIP: None
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: traffic-light
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -32,6 +32,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: traffic-light
+    zako.ac/service: tl
 spec:
   replicas: 1
   selector:
@@ -43,6 +44,7 @@ spec:
       labels:
         app.kubernetes.io/name: traffic-light
         app.kubernetes.io/instance: {{ .Release.Name }}
+        zako.ac/service: tl
     spec:
       {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.trafficLight.nodeAffinity) | nindent 6 }}
       containers:

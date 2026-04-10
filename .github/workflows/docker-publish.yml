@@ -22,7 +22,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
 
       - name: Build all binaries
-        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl
+        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl --exclude zako3-tap-sdk
 
       - name: Stage binaries
         run: |
