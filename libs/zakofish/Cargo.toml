@@ -2,6 +2,9 @@
 name = "zakofish"
 version = "0.1.0"
 edition = "2024"
+authors = ["mincomk <mail@drchi.co.kr>"]
+description = "Implementation of the Zakofish API, which is for communication between Zako3 infra and Tap"
+license = "MIT"
 
 [dependencies]
 async-trait.workspace = true

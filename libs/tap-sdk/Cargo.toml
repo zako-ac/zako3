@@ -2,6 +2,9 @@
 name    = "zako3-tap-sdk"
 version = "0.1.0"
 edition = "2024"
+authors = ["mincomk <mail@drchi.co.kr>"]
+description = "High-level SDK for Tap, built on top of Zakofish"
+license = "MIT"
 
 [features]
 auto-encode = ["dep:ogg", "dep:tokio-stream"]
