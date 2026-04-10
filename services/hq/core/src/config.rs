@@ -7,6 +7,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub database_url: String,
+    pub timescale_database_url: String,
     pub discord_client_id: String,
     pub discord_client_secret: String,
     pub discord_redirect_uri: String,
@@ -30,6 +31,7 @@ impl AppConfig {
 
         Ok(Self {
             database_url: env::var("DATABASE_URL")?,
+            timescale_database_url: env::var("TIMESCALE_DATABASE_URL")?,
             discord_client_id: env::var("DISCORD_CLIENT_ID")?,
             discord_client_secret: env::var("DISCORD_CLIENT_SECRET")?,
             discord_redirect_uri: env::var("DISCORD_REDIRECT_URI")?,

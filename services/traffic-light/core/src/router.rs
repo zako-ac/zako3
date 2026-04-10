@@ -7,9 +7,6 @@ use crate::{
 
 #[derive(Debug, Clone, Error)]
 pub enum RouterError {
-    #[error("Already joined the voice channel")]
-    AlreadyJoined,
-
     #[error("Not joined the voice channel")]
     NotJoined,
 
@@ -37,8 +34,12 @@ pub fn route(
 ) -> Result<RouterResult, RouterError> {
     match request.command {
         AudioEngineCommand::Join => {
-            if state.session_by_info(&request.session).is_some() {
-                return Err(RouterError::AlreadyJoined);
+            if let Some(existing_route) = state.session_by_info(&request.session) {
+                // Session already tracked — re-dispatch to existing AE to recover from state drift.
+                return Ok(RouterResult::Join(vec![RouterSuccess {
+                    route: existing_route,
+                    new_state_on_success: state.clone(),
+                }]));
             }
 
             let eligible_workers: Vec<&Worker> =

@@ -21,10 +21,11 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting hq-boot...");
 
     let pool = get_pool(&config.database_url).await?;
+    let timescale_pool = get_pool(&config.timescale_database_url).await?;
 
     run_migrations(&pool).await?;
 
-    let service = Service::new(pool, config.clone()).await?;
+    let service = Service::new(pool, timescale_pool, config.clone()).await?;
 
     // Broadcast channel for playback state events (WebSocket clients subscribe here).
     // Events are not currently pushed; clients should poll /api/v1/playback/state.

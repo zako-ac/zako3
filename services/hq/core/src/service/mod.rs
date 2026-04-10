@@ -61,7 +61,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new(pool: PgPool, config: Arc<AppConfig>) -> CoreResult<Self> {
+    pub async fn new(pool: PgPool, timescale_pool: PgPool, config: Arc<AppConfig>) -> CoreResult<Self> {
         let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
         let tap_repo = Arc::new(PgTapRepository::new(pool.clone()));
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
@@ -80,7 +80,7 @@ impl Service {
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
-            pool.clone(),
+            timescale_pool,
             tap_repo.clone(),
             user_repo.clone(),
             audit_log_service.clone(),

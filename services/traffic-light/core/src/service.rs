@@ -39,13 +39,31 @@ impl TlService {
         };
 
         match route_result {
-            Err(RouterError::AlreadyJoined) => {
-                warn!("Routing failed: session already joined");
-                AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined)
-            }
             Err(RouterError::NotJoined) => {
-                warn!("Routing failed: session not joined");
-                AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
+                if matches!(
+                    request.command,
+                    AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave)
+                ) {
+                    // Broadcast Leave to all routes known for this guild — best-effort
+                    // cleanup in case TL state drifted and lost track of the session.
+                    let routes = {
+                        let state = self.state.read().await;
+                        state
+                            .sessions_by_guild_id(request.session.guild_id)
+                            .into_iter()
+                            .map(|(route, _)| route)
+                            .collect::<Vec<_>>()
+                    };
+                    for route in routes {
+                        if let Err(e) = self.dispatcher.send(route, request.clone()).await {
+                            warn!(error = %e, "broadcast Leave dispatch failed");
+                        }
+                    }
+                    AudioEngineCommandResponse::Ok
+                } else {
+                    warn!("Routing failed: session not joined");
+                    AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
+                }
             }
             Err(RouterError::NoAvailableWorker) => {
                 warn!("Routing failed: no available worker for guild");
@@ -61,10 +79,18 @@ impl TlService {
                         "Trying Join on AE"
                     );
                     match self.dispatcher.send(candidate.route, request.clone()).await {
-                        Ok(resp) if !matches!(resp, AudioEngineCommandResponse::Error(_)) => {
+                        Ok(resp) if matches!(
+                            &resp,
+                            AudioEngineCommandResponse::Ok
+                                | AudioEngineCommandResponse::Error(
+                                    AudioEngineError::AlreadyJoined
+                                )
+                        ) => {
+                            // AlreadyJoined from AE means the session is active there —
+                            // treat as success (covers state-drift resync joins).
                             let mut state = self.state.write().await;
                             *state = candidate.new_state_on_success;
-                            return resp;
+                            return AudioEngineCommandResponse::Ok;
                         }
                         Ok(err_resp) => {
                             warn!(

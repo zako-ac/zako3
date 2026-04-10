@@ -55,6 +55,12 @@ spec:
                     "secretName" (printf "%s-postgres-secret" $fullname)
                     "existingName" .Values.postgres.existingSecret.name
                     "key" .Values.postgres.existingSecret.databaseUrlKey) | nindent 16 }}
+            - name: TIMESCALE_DATABASE_URL
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-timescale-secret" $fullname)
+                    "existingName" .Values.timescale.existingSecret.name
+                    "key" .Values.timescale.existingSecret.databaseUrlKey) | nindent 16 }}
             - name: BACKEND_ADDRESS
               value: "0.0.0.0:{{ .Values.ports.hqBackend }}"
             - name: RPC_ADDRESS

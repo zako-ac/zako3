@@ -13,7 +13,7 @@ use zako3_states::{TapHubStateService, TapMetricKey, TapMetricsStateService};
 
 #[derive(Clone)]
 pub struct TapService {
-    pool: PgPool,
+    timescale_pool: PgPool,
     tap_repo: Arc<dyn TapRepository>,
     user_repo: Arc<dyn UserRepository>,
     audit_log: AuditLogService,
@@ -23,7 +23,7 @@ pub struct TapService {
 
 impl TapService {
     pub fn new(
-        pool: PgPool,
+        timescale_pool: PgPool,
         tap_repo: Arc<dyn TapRepository>,
         user_repo: Arc<dyn UserRepository>,
         audit_log: AuditLogService,
@@ -31,7 +31,7 @@ impl TapService {
         tap_hub_state: TapHubStateService,
     ) -> Self {
         Self {
-            pool,
+            timescale_pool,
             tap_repo,
             user_repo,
             audit_log,
@@ -242,7 +242,7 @@ impl TapService {
         )
         .bind(&tap_id.0)
         .bind(since)
-        .fetch_all(&self.pool)
+        .fetch_all(&self.timescale_pool)
         .await
         .unwrap_or_default();
 
