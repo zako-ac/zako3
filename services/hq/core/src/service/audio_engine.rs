@@ -5,9 +5,17 @@ use hq_types::{
     SessionState, TapName, TrackId, Volume,
 };
 use tracing::instrument;
-use zako3_tl_client::TlClient;
+use zako3_tl_client::{TlClient, TlClientError};
 
 use crate::{CoreError, CoreResult};
+
+fn map_tl_err(e: TlClientError) -> CoreError {
+    match e {
+        TlClientError::AlreadyJoined => CoreError::Conflict("Already in VC".into()),
+        TlClientError::NotJoined => CoreError::InvalidInput("Not in VC".into()),
+        e => CoreError::Internal(e.to_string()),
+    }
+}
 
 #[derive(Clone)]
 pub struct AudioEngineService {
@@ -25,7 +33,7 @@ impl AudioEngineService {
             .join(guild_id, channel_id)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id, channel_id = ?channel_id))]
@@ -34,7 +42,7 @@ impl AudioEngineService {
             .leave(guild_id, channel_id)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -60,7 +68,7 @@ impl AudioEngineService {
                 discord_user_id,
             )
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     pub async fn set_volume(
@@ -74,7 +82,7 @@ impl AudioEngineService {
             .set_volume(guild_id, channel_id, track_id, volume)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -88,7 +96,7 @@ impl AudioEngineService {
             .stop(guild_id, channel_id, track_id)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -102,7 +110,7 @@ impl AudioEngineService {
             .stop_many(guild_id, channel_id, filter)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -111,7 +119,7 @@ impl AudioEngineService {
             .next_music(guild_id, channel_id)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -125,7 +133,7 @@ impl AudioEngineService {
             .pause(guild_id, channel_id, queue_name)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -139,7 +147,7 @@ impl AudioEngineService {
             .resume(guild_id, channel_id, queue_name)
             .await
             .map(|_| true)
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     pub async fn get_session_state(
@@ -150,13 +158,13 @@ impl AudioEngineService {
         self.client
             .get_session_state(guild_id, channel_id)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 
     pub async fn get_sessions_in_guild(&self, guild_id: GuildId) -> CoreResult<Vec<SessionState>> {
         self.client
             .get_sessions_in_guild(guild_id)
             .await
-            .map_err(|e| CoreError::Internal(e.to_string()))
+            .map_err(map_tl_err)
     }
 }

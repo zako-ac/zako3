@@ -6,6 +6,8 @@ use zako3_types::{hq::*, *};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AudioEngineError {
     PermissionDenied,
+    AlreadyJoined,
+    NotJoined,
     InternalError(String),
 }
 

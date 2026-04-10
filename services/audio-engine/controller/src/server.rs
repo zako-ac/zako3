@@ -38,7 +38,7 @@ impl TlClientHandler for AeTransportHandler {
                     .get_session(guild_id, channel_id)
                     .is_some()
                 {
-                    return err("Session already exists");
+                    return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
                 }
                 match self.session_manager.join(guild_id, channel_id).await {
                     Ok(_) => AudioEngineCommandResponse::Ok,
@@ -49,7 +49,7 @@ impl TlClientHandler for AeTransportHandler {
             AudioEngineCommand::SessionCommand(cmd) => {
                 let Some(session) = self.session_manager.get_session(guild_id, channel_id) else {
                     warn!(guild_id = ?guild_id, channel_id = ?channel_id, "Session not found");
-                    return err("Session not found");
+                    return AudioEngineCommandResponse::Error(AudioEngineError::NotJoined);
                 };
 
                 match cmd {

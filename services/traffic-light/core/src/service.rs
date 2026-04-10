@@ -41,15 +41,11 @@ impl TlService {
         match route_result {
             Err(RouterError::AlreadyJoined) => {
                 warn!("Routing failed: session already joined");
-                AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
-                    "Already joined the voice channel".into(),
-                ))
+                AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined)
             }
             Err(RouterError::NotJoined) => {
                 warn!("Routing failed: session not joined");
-                AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
-                    "Not joined the voice channel".into(),
-                ))
+                AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
             }
             Err(RouterError::NoAvailableWorker) => {
                 warn!("Routing failed: no available worker for guild");

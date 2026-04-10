@@ -57,11 +57,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Clear stale tap connection states left over from the previous run.
     // Taps that are still online will reconnect and re-register immediately.
-    let known_taps = app
-        .tap_metrics_service
-        .get_known_taps()
-        .await
-        .unwrap_or_default();
+    let known_taps = match app.tap_metrics_service.get_known_taps().await {
+        Ok(taps) => taps,
+        Err(e) => {
+            tracing::warn!(%e, "Failed to fetch known taps; skipping stale state clear");
+            vec![]
+        }
+    };
     if let Err(e) = app
         .tap_state_service
         .clear_all_tap_states(&known_taps)

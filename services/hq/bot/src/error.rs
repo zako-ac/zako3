@@ -82,7 +82,7 @@ fn core_error_message(err: &CoreError) -> &str {
             "You need to log in first. Use `/settings` to get a login link."
         }
         CoreError::Forbidden(_) => "You don't have permission to do that.",
-        CoreError::Conflict(_) => "That's already been set up.",
+        CoreError::Conflict(msg) => msg.as_str(),
         CoreError::InvalidInput(msg) => msg.as_str(),
         _ => "Something went wrong on our end. Please try again.",
     }

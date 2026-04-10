@@ -97,10 +97,21 @@ pub(crate) async fn handle_preload_audio_inner(
     let audio_preload = Arc::clone(&tap_hub.audio_preload);
     tokio::spawn(async move {
         // Wait for preload file to appear (write task creates it)
-        let mut reader = loop {
-            match audio_preload.open_reader(preload_id).await {
-                Some(r) => break r,
-                None => tokio::time::sleep(Duration::from_millis(10)).await,
+        let reader_result = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                match audio_preload.open_reader(preload_id).await {
+                    Some(r) => break r,
+                    None => tokio::time::sleep(Duration::from_millis(10)).await,
+                }
+            }
+        })
+        .await;
+
+        let mut reader = match reader_result {
+            Ok(r) => r,
+            Err(_) => {
+                tracing::warn!(preload_id = preload_id.0, "Timed out waiting for preload file to appear");
+                return;
             }
         };
         // Drain frames until Done

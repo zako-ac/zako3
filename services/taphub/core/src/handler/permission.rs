@@ -20,19 +20,19 @@ pub(crate) async fn verify_permission(
             if user.id == tap.owner_id {
                 Ok(())
             } else {
-                Err("User is not the owner of this tap".to_string())
+                Err(format!("User is not the owner of tap {}", tap.id.0))
             }
         }
         TapPermission::Whitelisted { user_ids } => {
             if user_ids.contains(&discord_user_id.0) {
                 Ok(())
             } else {
-                Err("User is not whitelisted for this tap".to_string())
+                Err(format!("User is not whitelisted for tap {}", tap.id.0))
             }
         }
         TapPermission::Blacklisted { user_ids } => {
             if user_ids.contains(&discord_user_id.0) {
-                Err("User is blacklisted for this tap".to_string())
+                Err(format!("User is blacklisted for tap {}", tap.id.0))
             } else {
                 Ok(())
             }

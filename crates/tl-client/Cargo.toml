@@ -9,3 +9,6 @@ tarpc.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 zako3-types.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+backon = "1"

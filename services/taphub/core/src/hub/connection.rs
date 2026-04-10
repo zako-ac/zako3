@@ -116,11 +116,13 @@ impl HubHandler for TapHubConnectionHandler {
             let _ = tx.send(true);
         }
 
-        let states = self
-            .state_service
-            .get_tap_states(&tap_id)
-            .await
-            .unwrap_or_default();
+        let states = match self.state_service.get_tap_states(&tap_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(%e, tap_id = %tap_id.0, "Failed to get tap states on disconnect; uptime will not be recorded");
+                vec![]
+            }
+        };
 
         let uptime_secs = if let Some(conn) = states.iter().find(|s| s.connection_id == connection_id) {
             let secs = (chrono::Utc::now() - conn.connected_at)

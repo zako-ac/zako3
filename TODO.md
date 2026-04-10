@@ -8,6 +8,9 @@ refer hq todo
 
 - [ ] Show Duration: maybe Tap "capabilities"?
 
+- [ ] re-join logic in HQ/AE
+- [ ] Add translations for errors in bot
+
 # Done
 - [x] Implement multiple AE
 - [x] Implement settings `~/projects/zako3/docs/en/settings.md`
@@ -46,7 +49,6 @@ refer hq todo
 - [x] Remove dependencies of Zakofish
 - [x] Make cache get removed when early stop
 - [x] Async decoding performance issue in pf2 maybe?
-- [ ] re-join logic in HQ/AE
 
 # Other
 - [ ] merge migrations
