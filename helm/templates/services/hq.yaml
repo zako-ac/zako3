@@ -80,7 +80,11 @@ spec:
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
             - name: SUB_BOT_IDS
-              value: {{ .Values.hq.subBotIds | quote }}
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" $hqSecretName
+                    "existingName" $existingSecret
+                    "key" .Values.hq.existingSecret.keys.subBotIds) | nindent 16 }}
             - name: BOT_INVITE_PERMISSIONS
               value: {{ .Values.hq.botInvitePermissions | quote }}
             - name: RPC_ADMIN_TOKEN
