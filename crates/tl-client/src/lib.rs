@@ -10,7 +10,7 @@ use tl_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
     AudioEngineSessionCommand, AudioPlayRequest, SessionInfo, TrafficLightClient,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock, watch};
 use zako3_types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
     TrackId, Volume, hq::DiscordUserId,
@@ -29,65 +29,126 @@ pub enum TlClientError {
 }
 
 pub struct TlClient {
-    addr: String,
     inner: Arc<RwLock<TrafficLightClient>>,
+    /// Callers fire this when a call fails to wake the background reconnect loop.
+    reconnect_trigger: Arc<Notify>,
+    /// Incremented by the background loop after each successful reconnect.
+    reconnect_gen: Arc<watch::Sender<u64>>,
 }
 
 impl TlClient {
-    async fn connect_inner(addr: &str) -> Result<TrafficLightClient> {
+    /// Establish a TCP connection to `addr` and spawn the tarpc dispatch task.
+    /// The dispatch task fires `trigger` when the transport closes so the
+    /// reconnect loop wakes up immediately — even if no call is in-flight.
+    async fn connect_inner(addr: &str, trigger: Arc<Notify>) -> Result<TrafficLightClient> {
         let transport = tarpc::serde_transport::tcp::connect(addr, Json::default)
             .await
             .with_context(|| format!("failed to connect to TL at {addr}"))?;
-        Ok(TrafficLightClient::new(tarpc::client::Config::default(), transport).spawn())
+        let tarpc::client::NewClient { client, dispatch } =
+            TrafficLightClient::new(tarpc::client::Config::default(), transport);
+        tokio::spawn(async move {
+            let _ = dispatch.await;
+            tracing::warn!("tl-client: transport closed, triggering reconnect");
+            trigger.notify_one();
+        });
+        Ok(client)
     }
 
     /// Connect to a TL instance at `addr` (e.g. `"127.0.0.1:7070"` or `"hostname:7070"`).
+    /// Spawns a background task that automatically reconnects on transport failure.
     pub async fn connect(addr: &str) -> Result<Self> {
-        let client = Self::connect_inner(addr).await?;
+        let trigger = Arc::new(Notify::new());
+        let (gen_tx, _) = watch::channel(0u64);
+        let gen_tx = Arc::new(gen_tx);
+
+        let client = Self::connect_inner(addr, trigger.clone()).await?;
+        let inner = Arc::new(RwLock::new(client));
+
+        tokio::spawn(Self::reconnect_loop(
+            addr.to_string(),
+            inner.clone(),
+            trigger.clone(),
+            gen_tx.clone(),
+        ));
+
         Ok(Self {
-            addr: addr.to_string(),
-            inner: Arc::new(RwLock::new(client)),
+            inner,
+            reconnect_trigger: trigger,
+            reconnect_gen: gen_tx,
         })
     }
 
-    async fn reconnect(&self) -> Result<(), TlClientError> {
-        let addr = self.addr.clone();
-        let new_client = (|| {
-            let addr = addr.clone();
-            async move {
-                Self::connect_inner(&addr)
-                    .await
-                    .map_err(TlClientError::Transport)
+    /// Background task: waits for a reconnect trigger, then retries with exponential
+    /// backoff until the connection is re-established, then bumps the generation counter.
+    async fn reconnect_loop(
+        addr: String,
+        inner: Arc<RwLock<TrafficLightClient>>,
+        trigger: Arc<Notify>,
+        gen_tx: Arc<watch::Sender<u64>>,
+    ) {
+        loop {
+            trigger.notified().await;
+            tracing::info!("tl-client: reconnect triggered");
+
+            let result = (|| {
+                let addr = addr.clone();
+                let trigger = trigger.clone();
+                async move {
+                    Self::connect_inner(&addr, trigger)
+                        .await
+                        .map_err(TlClientError::Transport)
+                }
+            })
+            .retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(500))
+                    .with_max_delay(Duration::from_secs(30))
+                    .with_max_times(usize::MAX),
+            )
+            .notify(|err: &TlClientError, dur| {
+                tracing::warn!("tl-client: reconnect attempt failed ({err}), retrying in {dur:?}");
+            })
+            .await;
+
+            match result {
+                Ok(new_client) => {
+                    *inner.write().await = new_client;
+                    let next_gen = *gen_tx.borrow() + 1;
+                    let _ = gen_tx.send(next_gen);
+                    tracing::info!("tl-client: reconnected (gen={next_gen})");
+                }
+                Err(e) => {
+                    tracing::error!("tl-client: reconnect failed: {e}");
+                }
             }
-        })
-        .retry(
-            ExponentialBuilder::default()
-                .with_min_delay(Duration::from_millis(500))
-                .with_max_delay(Duration::from_secs(30))
-                .with_max_times(usize::MAX),
-        )
-        .notify(|err: &TlClientError, dur| {
-            tracing::warn!("tl-client: reconnect failed ({err}), retrying in {dur:?}");
-        })
-        .await?;
-
-        *self.inner.write().await = new_client;
-        Ok(())
+        }
     }
 
-    /// Call `f` with a cloned client handle. On transport failure, reconnect with
-    /// exponential backoff and retry the call once.
+    /// Call `f` with a cloned client handle. On transport failure, signals the background
+    /// reconnect loop and waits for it to complete, then retries the call once.
     async fn with_reconnect<F, Fut, T>(&self, call: F) -> Result<T, TlClientError>
     where
         F: Fn(TrafficLightClient) -> Fut,
         Fut: std::future::Future<Output = Result<T, tarpc::client::RpcError>>,
     {
+        // Snapshot the generation before the call so we can detect any reconnect that
+        // happens concurrently (including ones triggered by other callers).
+        let mut gen_rx = self.reconnect_gen.subscribe();
+        let gen_before = *gen_rx.borrow();
+
         let client = self.inner.read().await.clone();
         match call(client).await {
             Ok(v) => Ok(v),
             Err(e) => {
-                tracing::warn!("tl-client: call failed ({e}), reconnecting");
-                self.reconnect().await?;
+                tracing::warn!("tl-client: call failed ({e}), waiting for reconnect");
+                self.reconnect_trigger.notify_one();
+
+                // Wait until the background loop finishes a reconnect newer than our call.
+                gen_rx
+                    .wait_for(|&g| g > gen_before)
+                    .await
+                    .map_err(|_| TlClientError::Transport(anyhow::anyhow!("reconnect watcher closed")))?;
+
                 let client = self.inner.read().await.clone();
                 call(client)
                     .await

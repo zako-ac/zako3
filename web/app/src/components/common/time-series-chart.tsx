@@ -8,7 +8,7 @@ import {
     CardTitle,
 } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
-import { Line, LineChart, XAxis, CartesianGrid } from 'recharts'
+import { Area, AreaChart, XAxis, CartesianGrid } from 'recharts'
 import { Zap } from 'lucide-react'
 import { TimeRangeSelector, TIME_RANGES, type TimeRange } from './time-range-selector'
 
@@ -67,37 +67,45 @@ export const TimeSeriesChart = ({
                         </div>
                     </div>
                 ) : (
-                <ChartContainer config={chartConfig}>
-                    <LineChart
-                        accessibilityLayer
-                        data={formattedData}
-                        margin={{ left: 12, right: 12 }}
-                    >
-                        <CartesianGrid vertical={false} />
-                        <XAxis
-                            dataKey="time"
-                            tickLine={false}
-                            axisLine={false}
-                            tickMargin={8}
-                        />
-                        <ChartTooltip
-                            cursor={false}
-                            content={
-                                <ChartTooltipContent
-                                    formatter={(value) => [valueFormatter(value as number), '']}
-                                    hideLabel
-                                />
-                            }
-                        />
-                        <Line
-                            dataKey="value"
-                            type="natural"
-                            stroke="var(--color-value)"
-                            strokeWidth={2}
-                            dot={false}
-                        />
-                    </LineChart>
-                </ChartContainer>
+                    <ChartContainer config={chartConfig}>
+                        <AreaChart
+                            accessibilityLayer
+                            data={formattedData}
+                            margin={{ left: 12, right: 12 }}
+                        >
+                            <defs>
+                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#eb3489" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="#eb3489" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                                dataKey="time"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                            />
+                            <ChartTooltip
+                                cursor={false}
+                                content={
+                                    <ChartTooltipContent
+                                        formatter={(value) => [valueFormatter(value as number), '']}
+                                        hideLabel
+                                    />
+                                }
+                            />
+                            <Area
+                                dataKey="value"
+                                type="natural"
+                                stroke="#eb3489"
+                                strokeWidth={2}
+                                fill="url(#colorValue)"
+                                dot={false}
+                                isAnimationActive={false}
+                            />
+                        </AreaChart>
+                    </ChartContainer>
                 )}
             </CardContent>
         </Card>
