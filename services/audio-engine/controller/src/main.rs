@@ -59,12 +59,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
     let state_service = Arc::new(InMemoryStateService::new());
 
-    let addr: std::net::SocketAddr = config.ae_transport_addr.parse()?;
+    let addr = config.ae_transport_addr.clone();
 
     // Step 1: Connect to TL to receive our assigned Discord token.
     tracing::info!("Connecting to TL server at {} to receive Discord token", addr);
     let (token, _, connected) = loop {
-        match TlClient::connect(addr, HashMap::new()).await {
+        match TlClient::connect(addr.as_str(), HashMap::new()).await {
             Ok(result) => break result,
             Err(e) => {
                 tracing::warn!("Failed to connect to TL server: {e}, retrying in 2s");
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 5: Reconnect loop — TL only, Discord client continues running.
     loop {
         tokio::time::sleep(Duration::from_secs(2)).await;
-        match TlClient::connect(addr, HashMap::new()).await {
+        match TlClient::connect(addr.as_str(), HashMap::new()).await {
             Ok((_, _, connected)) => {
                 tracing::info!("Reconnected to TL server");
                 report_guilds_once(&serenity_ctx, &config.tl_tarpc_addr, &token.0).await;

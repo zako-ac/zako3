@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,19 +15,19 @@ use crate::{
 };
 
 pub struct TlClient {
-    addr: SocketAddr,
+    addr: String,
     client_headers: HashMap<String, String>,
     handler: Arc<dyn TlClientHandler>,
 }
 
 impl TlClient {
     pub fn new(
-        addr: SocketAddr,
+        addr: impl Into<String>,
         client_headers: HashMap<String, String>,
         handler: impl TlClientHandler,
     ) -> Self {
         Self {
-            addr,
+            addr: addr.into(),
             client_headers,
             handler: Arc::new(handler),
         }
@@ -37,7 +36,7 @@ impl TlClient {
     /// One-shot connect + handshake. Returns the assigned token, server headers,
     /// and a `ConnectedClient` ready to serve requests.
     pub async fn connect(
-        addr: SocketAddr,
+        addr: impl tokio::net::ToSocketAddrs,
         client_headers: HashMap<String, String>,
     ) -> Result<(DiscordToken, HashMap<String, String>, ConnectedClient), TlError> {
         let stream = TcpStream::connect(addr).await?;
@@ -76,7 +75,7 @@ impl TlClient {
     }
 
     async fn connect_and_serve(self: &Arc<Self>) -> Result<(), TlError> {
-        let stream = TcpStream::connect(self.addr).await?;
+        let stream = TcpStream::connect(self.addr.as_str()).await?;
         let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
 
         let mut headers = self.client_headers.clone();

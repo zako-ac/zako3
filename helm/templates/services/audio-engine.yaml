@@ -53,8 +53,6 @@ spec:
           env:
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
-            - name: NATS_URL
-              value: "nats://{{ $fullname }}-nats:4222"
             - name: AE_TRANSPORT_ADDR
               value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlAeTransport }}"
             - name: TL_TARPC_ADDR

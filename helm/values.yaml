@@ -124,10 +124,6 @@ ports:
   tlAeTransport: 7071
   web: 80
 
-# --- NATS ---
-nats:
-  image: nats:2-alpine
-
 # --- Redis ---
 redis:
   image: redis:7-alpine

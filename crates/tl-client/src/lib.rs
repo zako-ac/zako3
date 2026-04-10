@@ -16,11 +16,8 @@ pub struct TlClient {
 }
 
 impl TlClient {
-    /// Connect to a TL instance at `addr` (e.g. `"127.0.0.1:7070"`).
+    /// Connect to a TL instance at `addr` (e.g. `"127.0.0.1:7070"` or `"hostname:7070"`).
     pub async fn connect(addr: &str) -> Result<Self> {
-        let addr: std::net::SocketAddr = addr
-            .parse()
-            .with_context(|| format!("invalid TL address: {addr}"))?;
         let transport = tarpc::serde_transport::tcp::connect(addr, Json::default)
             .await
             .with_context(|| format!("failed to connect to TL at {addr}"))?;

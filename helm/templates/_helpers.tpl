@@ -70,13 +70,11 @@ affinity:
 {{- end }}
 
 {{/*
-OTLP + NATS + Redis shared env vars
+OTLP + Redis shared env vars
 */}}
 {{- define "zako3.sharedEnv" -}}
 - name: OTLP_ENDPOINT
   value: "http://{{ include "zako3.fullname" . }}-otel-lgtm:4317"
-- name: NATS_URL
-  value: "nats://{{ include "zako3.fullname" . }}-nats:4222"
 - name: REDIS_URL
   value: "redis://{{ include "zako3.fullname" . }}-redis:6379"
 {{- end }}
