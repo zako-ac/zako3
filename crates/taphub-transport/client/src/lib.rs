@@ -86,9 +86,10 @@ impl TransportClient {
     }
 
     pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, String> {
-        let mut lock = self.conn.lock().await;
-        let conn = &mut *lock;
-        let mut stream = conn.open_mani().await.map_err(|e| e.to_string())?;
+        let mut stream = {
+            let mut lock = self.conn.lock().await;
+            lock.open_mani().await.map_err(|e| e.to_string())?
+        };
 
         let req_clone = req.clone();
         let payload =
@@ -132,7 +133,7 @@ impl TransportClient {
                             Ok(None) => break, // Stream ended
                             Err(e) => {
                                 tracing::error!("Jitter buffer error: {:?}", e);
-                                if format!("{:?}", e).contains("InvalidPacket") {
+                                if e.to_string().contains("InvalidPacket") {
                                     tracing::warn!(
                                         "Invalid opus packet detected; invalidating cache"
                                     );
@@ -151,7 +152,7 @@ impl TransportClient {
                 })
             }
             TapHubResponse::Error(e) => Err(e),
-            _ => Err("Unexpected response".to_string()),
+            _ => Err(format!("Unexpected response to RequestAudio: {:?}", resp)),
         }
     }
 
@@ -165,7 +166,7 @@ impl TransportClient {
         {
             TapHubResponse::MetaReady(meta) => Ok(meta),
             TapHubResponse::Error(e) => Err(e),
-            _ => Err("Unexpected response".to_string()),
+            resp => Err(format!("Unexpected response to PreloadAudio: {:?}", resp)),
         }
     }
 
@@ -176,7 +177,7 @@ impl TransportClient {
         {
             TapHubResponse::MetaReady(meta) => Ok(meta),
             TapHubResponse::Error(e) => Err(e),
-            _ => Err("Unexpected response".to_string()),
+            resp => Err(format!("Unexpected response to RequestAudioMeta: {:?}", resp)),
         }
     }
 }
@@ -184,15 +185,20 @@ impl TransportClient {
 async fn send_invalidate_cache(conn: Arc<Mutex<ReconnectingConnection>>, req: CachedAudioRequest) {
     let mut lock = conn.lock().await;
     let Ok(mut stream) = lock.open_mani().await else {
+        tracing::warn!("send_invalidate_cache: failed to open stream");
         return;
     };
     let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
+        tracing::warn!("send_invalidate_cache: failed to serialize request");
         return;
     };
     if stream.send_payload(payload.into()).await.is_err() {
+        tracing::warn!("send_invalidate_cache: failed to send payload");
         return;
     }
-    let _ = stream.recv_payload().await;
+    if let Err(e) = stream.recv_payload().await {
+        tracing::warn!("send_invalidate_cache: failed to receive response: {:?}", e);
+    }
 }
 
 pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer<'static>>> {

@@ -4,7 +4,9 @@ use protofish2::mani::transfer::recv::{TransferReliableRecvStream, TransferUnrel
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use tokio::sync::Mutex;
+use tracing::Instrument;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
 
@@ -81,7 +83,9 @@ impl ZakofishHub {
                     disconnect_reason = tracing::field::Empty,
                 );
                 if let Err(e) =
-                    handle_new_connection(conn, handler, sessions, next_connection_id, span).await
+                    handle_new_connection(conn, handler, sessions, next_connection_id)
+                        .instrument(span)
+                        .await
                 {
                     tracing::error!("Error handling new connection: {:?}", e);
                 }
@@ -213,9 +217,7 @@ async fn handle_new_connection(
     handler: Arc<dyn HubHandler>,
     sessions: SessionMap,
     next_connection_id: Arc<AtomicU64>,
-    span: tracing::Span,
 ) -> Result<()> {
-    let _enter = span.enter();
 
     let mut mani_stream = conn.accept_mani().await?;
     let payload_bytes = mani_stream.recv_payload().await?;
@@ -250,8 +252,12 @@ async fn handle_new_connection(
                         .or_default()
                         .insert(connection_id, conn_arc.clone());
 
-                    // Keep stream alive/wait for disconnect
-                    let _ = mani_stream.recv_payload().await; // Wait until close or error
+                    // Keep stream alive/wait for disconnect with timeout
+                    let _ = tokio::time::timeout(
+                        Duration::from_secs(300),
+                        mani_stream.recv_payload(),
+                    )
+                    .await;
 
                     {
                         let mut sessions = sessions.lock().await;
