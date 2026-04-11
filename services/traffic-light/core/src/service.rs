@@ -8,7 +8,7 @@ use zako3_types::{GuildId, SessionState};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::{AeDispatcher, RouterError, RouterResult, StateChangeEvent, ZakoState, router};
+use crate::{AeDispatcher, RouterError, RouterResult, SessionRoute, StateChangeEvent, ZakoState, router};
 
 pub struct TlService {
     state: Arc<RwLock<ZakoState>>,
@@ -132,6 +132,8 @@ impl TlService {
                     }
                     Err(e) => {
                         error!(error = %e, "AE dispatch failed");
+                        // Sync session state on dispatch failure to clean up stale entries
+                        self.sync_sessions().await;
                         AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
                             e.to_string(),
                         ))
@@ -231,6 +233,75 @@ impl TlService {
             worker.permissions.set_allowed_guilds(guilds);
         } else {
             warn!(token, "report_guilds: no worker found for token");
+        }
+    }
+
+    /// Fetches current session state from all connected AEs and removes stale sessions.
+    /// Called periodically (every 1 min) and on command failures to reconcile state drift.
+    pub async fn sync_sessions(&self) {
+        // Snapshot all current routes
+        let routes: Vec<(SessionRoute, SessionInfo)> = {
+            let state = self.state.read().await;
+            state
+                .sessions
+                .iter()
+                .map(|(r, i)| (*r, *i))
+                .collect()
+        };
+
+        if routes.is_empty() {
+            return;
+        }
+
+        let mut to_remove = Vec::new();
+
+        for (route, session_info) in routes {
+            let req = AudioEngineCommandRequest {
+                session: session_info,
+                command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::GetSessionState),
+                headers: std::collections::HashMap::new(),
+                idempotency_key: None,
+            };
+
+            // Use 5s timeout to avoid blocking on dead AEs
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                self.dispatcher.send(route, req),
+            )
+            .await;
+
+            match result {
+                Ok(Ok(AudioEngineCommandResponse::SessionState(_))) => {
+                    // Session is still alive on the AE
+                }
+                Ok(Ok(other)) => {
+                    warn!(
+                        ?route,
+                        ?other,
+                        "sync_sessions: unexpected response, removing stale session"
+                    );
+                    to_remove.push(route);
+                }
+                Ok(Err(e)) => {
+                    warn!(
+                        ?route,
+                        error = %e,
+                        "sync_sessions: dispatch failed, removing stale session"
+                    );
+                    to_remove.push(route);
+                }
+                Err(_timeout) => {
+                    warn!(?route, "sync_sessions: timeout, removing stale session");
+                    to_remove.push(route);
+                }
+            }
+        }
+
+        if !to_remove.is_empty() {
+            let mut state = self.state.write().await;
+            for route in to_remove {
+                state.sessions.remove(&route);
+            }
         }
     }
 }

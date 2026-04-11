@@ -166,6 +166,17 @@ async fn main() -> anyhow::Result<()> {
     // accept_loop writes (connected_ae_ids) are immediately visible to the router.
     let tl_service = Arc::new(TlService::new(ae_registry.state(), ae_registry.clone()));
 
+    // Spawn session sync task — fetches current session state from all AEs every 60 seconds
+    let tl_for_sync = tl_service.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            tl_for_sync.sync_sessions().await;
+        }
+    });
+
     // Start tarpc listener
     let mut listener =
         tarpc::serde_transport::tcp::listen(&config.tarpc_addr, Json::default).await?;
