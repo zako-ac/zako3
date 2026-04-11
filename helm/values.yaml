@@ -40,6 +40,7 @@ hq:
   discordClientSecret: ""
   discordBotToken: ""
   jwtSecret: ""
+  zakoWebsiteUrl: "https://zako.ac"
   # Reference an existing Secret instead (all keys must exist in the Secret)
   existingSecret:
     name: ""
