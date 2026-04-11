@@ -79,27 +79,40 @@ impl AeRegistry {
             )
             .await?;
 
-        let (worker_id, ae_id) = {
+        let worker_id = {
             let state = self.state.read().await;
-            let worker_id = state
+            state
                 .workers
                 .iter()
                 .find(|(_, w)| w.discord_token == token)
                 .map(|(id, _)| *id)
                 .ok_or_else(|| {
                     zako3_ae_transport::TlError::Handshake("token not found in state".into())
-                })?;
-
-            let max_ae = self
-                .clients
-                .iter()
-                .filter(|e| e.key().0 == worker_id)
-                .map(|e| e.key().1 .0)
-                .max()
-                .unwrap_or(0);
-
-            (worker_id, AeId(max_ae + 1))
+                })?
         };
+
+        // Evict stale entries for this worker to prevent state drift on reconnect
+        let stale_ae_ids: Vec<AeId> = self
+            .clients
+            .iter()
+            .filter(|e| e.key().0 == worker_id)
+            .map(|e| e.key().1)
+            .collect();
+
+        for ae_id in &stale_ae_ids {
+            self.clients.remove(&(worker_id, *ae_id));
+        }
+
+        // Assign new AE the starting ID (all old ones evicted, so reuse ID 1)
+        let ae_id = AeId(1);
+
+        // Remove stale ae_ids from worker's connected list
+        if !stale_ae_ids.is_empty() {
+            let mut state = self.state.write().await;
+            if let Some(worker) = state.workers.get_mut(&worker_id) {
+                worker.connected_ae_ids.retain(|id| !stale_ae_ids.iter().any(|ae| ae.0 == *id));
+            }
+        }
 
         self.clients.insert((worker_id, ae_id), Mutex::new(client));
         Ok((worker_id, ae_id))

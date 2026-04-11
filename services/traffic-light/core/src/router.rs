@@ -34,12 +34,14 @@ pub fn route(
 ) -> Result<RouterResult, RouterError> {
     match request.command {
         AudioEngineCommand::Join => {
+            let mut candidates = Vec::new();
+
+            // If session already exists, try existing route first (recover from state drift)
             if let Some(existing_route) = state.session_by_info(&request.session) {
-                // Session already tracked — re-dispatch to existing AE to recover from state drift.
-                return Ok(RouterResult::Join(vec![RouterSuccess {
+                candidates.push(RouterSuccess {
                     route: existing_route,
                     new_state_on_success: state.clone(),
-                }]));
+                });
             }
 
             let eligible_workers: Vec<&Worker> =
@@ -59,15 +61,15 @@ pub fn route(
                     .filter(|worker| !worker.connected_ae_ids.is_empty())
                     .collect();
 
-            if eligible_workers.is_empty() {
+            if eligible_workers.is_empty() && candidates.is_empty() {
                 return Err(RouterError::NoAvailableWorker);
             }
 
-            // Build all candidates in round-robin order starting from worker_cursor.
+            // Build fallback candidates in round-robin order starting from worker_cursor.
             let n = eligible_workers.len();
-            let start = (state.worker_cursor as usize + 1) % n;
-            let candidates = (0..n)
-                .map(|i| {
+            if n > 0 {
+                let start = (state.worker_cursor as usize + 1) % n;
+                for i in 0..n {
                     let worker = eligible_workers[(start + i) % n];
                     let mut new_state = state.clone();
                     new_state.worker_cursor = ((start + i) % n) as u16;
@@ -82,12 +84,16 @@ pub fn route(
                         ae_id,
                     };
                     new_state.sessions.insert(route, request.session);
-                    RouterSuccess {
+                    candidates.push(RouterSuccess {
                         route,
                         new_state_on_success: new_state,
-                    }
-                })
-                .collect();
+                    });
+                }
+            }
+
+            if candidates.is_empty() {
+                return Err(RouterError::NoAvailableWorker);
+            }
 
             Ok(RouterResult::Join(candidates))
         }
