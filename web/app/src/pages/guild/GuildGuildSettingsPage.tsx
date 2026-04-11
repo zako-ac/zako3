@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useOutletContext } from 'react-router-dom'
 import { UserSettingsCard } from '@/features/settings'
 import { emptyPartial } from '@/features/settings'
 import type { PartialUserSettings } from '@/features/settings'
