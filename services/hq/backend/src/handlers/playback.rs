@@ -1,16 +1,21 @@
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
+};
+use axum_extra::{
+    TypedHeader,
+    headers::{Authorization, authorization::Bearer},
 };
 use futures_util::StreamExt;
 use hq_core::{Claims, CoreError, Service};
 use hq_types::hq::playback::{
-    EditQueueDto, GuildPlaybackStateDto, PauseTrackDto, PlaybackActionDto, ResumeTrackDto, SkipDto, StopTrackDto,
+    EditQueueDto, GuildPlaybackStateDto, PauseTrackDto, PlaybackActionDto, PlaybackEvent,
+    ResumeTrackDto, SkipDto, StopTrackDto,
 };
 use jsonwebtoken::{DecodingKey, Validation, decode};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -71,7 +76,6 @@ pub async fn get_playback_state(
 )]
 pub async fn stop_track(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<StopTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -89,7 +93,6 @@ pub async fn stop_track(
         .stop_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -104,7 +107,6 @@ pub async fn stop_track(
 )]
 pub async fn pause_track(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<PauseTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -122,7 +124,6 @@ pub async fn pause_track(
         .pause_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -137,7 +138,6 @@ pub async fn pause_track(
 )]
 pub async fn resume_track(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<ResumeTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -155,7 +155,6 @@ pub async fn resume_track(
         .resume_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -170,7 +169,6 @@ pub async fn resume_track(
 )]
 pub async fn skip_music(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<SkipDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -188,7 +186,6 @@ pub async fn skip_music(
         .skip_music(guild_id, channel_id, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -203,7 +200,6 @@ pub async fn skip_music(
 )]
 pub async fn edit_queue(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<EditQueueDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -213,7 +209,6 @@ pub async fn edit_queue(
         .edit_queue(payload, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -230,7 +225,6 @@ pub async fn edit_queue(
 )]
 pub async fn undo_action(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Path(action_id): Path<String>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -240,7 +234,6 @@ pub async fn undo_action(
         .undo_action(&action_id, &discord_id)
         .await
         .map_err(map_error)?;
-    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -267,14 +260,14 @@ pub async fn get_history(
 
 pub async fn playback_sse(
     State(service): State<Arc<Service>>,
-    Extension(event_tx): Extension<broadcast::Sender<String>>,
-    Query(params): Query<HashMap<String, String>>,
+    Extension(event_tx): Extension<broadcast::Sender<PlaybackEvent>>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> impl IntoResponse {
-    let token = params.get("token").cloned().unwrap_or_default();
+    let token = auth.token();
     let secret = &service.config.jwt_secret;
 
     let token_data = match decode::<Claims>(
-        &token,
+        token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     ) {
@@ -289,7 +282,11 @@ pub async fn playback_sse(
 
     let rx = event_tx.subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|msg| async move {
-        msg.ok().map(|data| Ok::<Event, std::convert::Infallible>(Event::default().data(data)))
+        msg.ok().and_then(|event| {
+            serde_json::to_string(&event).ok().map(|data| {
+                Ok::<Event, std::convert::Infallible>(Event::default().data(data))
+            })
+        })
     });
 
     Sse::new(stream).keep_alive(KeepAlive::default()).into_response()

@@ -1,6 +1,6 @@
-use crate::{ui, util, Context, Error};
-use poise::serenity_prelude as serenity;
+use crate::{Context, Error, ui, util};
 use hq_types::{AudioStopFilter, QueueName, Track, UserId};
+use poise::serenity_prelude as serenity;
 
 const MUSIC_QUEUE_PREFIX: &str = "music";
 const TTS_QUEUE_PREFIX: &str = "tts_";
@@ -99,20 +99,42 @@ pub async fn tts(
 )]
 pub async fn web(ctx: Context<'_>) -> Result<(), Error> {
     let service = &ctx.data().service;
-    let url = ui::messages::queue_web_url(&service.config.zako_website_url);
-    let login_url = service.auth.get_login_url(Some("/queue"));
 
-    let embed = ui::embeds::web_link_embed("Web Queue", "View and manage the queue in your browser.");
-    let open_button = serenity::CreateButton::new_link(&url).label("Open");
-    let login_button = serenity::CreateButton::new_link(&login_url).label("Login");
-    let row = serenity::CreateActionRow::Buttons(vec![open_button, login_button]);
-    ctx.send(
-        poise::CreateReply::default()
-            .embed(embed)
-            .components(vec![row]),
-    )
-    .await?;
-    Ok(())
+    let voice_channel_id = util::resolve_session(ctx, None)
+        .await
+        .ok()
+        .map(|session| session.channel_id);
+
+    if let Some(voice_channel_id) = voice_channel_id {
+        if let Some(guild_id) = ctx.guild_id() {
+            // /voice/{guild_id}/{channel_id}
+            let path = format!("/voice/{}/{}", guild_id, voice_channel_id);
+
+            let url = format!("{}{}", service.config.zako_website_url, path);
+            let login_url = service.auth.get_login_url(Some(&path));
+
+            let embed = ui::embeds::web_link_embed(
+                "Web Queue",
+                "View and manage the queue in your browser.",
+            );
+
+            let open_button = serenity::CreateButton::new_link(&url).label("Open");
+            let login_button = serenity::CreateButton::new_link(&login_url).label("Login");
+
+            let row = serenity::CreateActionRow::Buttons(vec![open_button, login_button]);
+            ctx.send(
+                poise::CreateReply::default()
+                    .embed(embed)
+                    .components(vec![row]),
+            )
+            .await?;
+            Ok(())
+        } else {
+            Err(Error::ShouldRunInGuild)
+        }
+    } else {
+        Err(Error::UserNotInSession)
+    }
 }
 
 /// Clear a queue.

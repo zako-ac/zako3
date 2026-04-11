@@ -2,7 +2,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use hq_core::Service;
+use hq_core::{PlaybackEvent, Service};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
@@ -168,7 +168,7 @@ pub struct ApiDoc;
 
 pub fn app(
     service: Service,
-    event_tx: broadcast::Sender<String>,
+    event_tx: broadcast::Sender<PlaybackEvent>,
     stats_tx: broadcast::Sender<()>,
 ) -> Router {
     let state = Arc::new(service.clone());

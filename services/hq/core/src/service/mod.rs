@@ -15,7 +15,7 @@ pub use api_key::ApiKeyService;
 pub mod audit_log;
 pub use audit_log::AuditLogService;
 pub use auth::Claims; // Export Claims
-pub use tap::TapService;
+pub use tap::{SortDirection, TapService, TapSortField};
 pub mod verification;
 pub use verification::VerificationService;
 pub mod user_settings;
@@ -32,8 +32,10 @@ use crate::repo::{
     PgUserRepository,
 };
 use crate::{AppConfig, CoreError, CoreResult};
+use hq_types::hq::playback::PlaybackEvent;
 use sqlx::PgPool;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use zako3_tl_client::TlClient;
 use zako3_states::{
     IntendedVoiceChannelService, TapHubStateService, TapMetricsStateService,
@@ -61,7 +63,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new(pool: PgPool, timescale_pool: PgPool, config: Arc<AppConfig>) -> CoreResult<Self> {
+    pub async fn new(pool: PgPool, timescale_pool: PgPool, config: Arc<AppConfig>, event_tx: broadcast::Sender<PlaybackEvent>) -> CoreResult<Self> {
         let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
         let tap_repo = Arc::new(PgTapRepository::new(pool.clone()));
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
@@ -106,7 +108,7 @@ impl Service {
                 .map_err(|e| CoreError::Internal(e.to_string()))?,
         );
 
-        let audio_engine_service = AudioEngineService::new(audio_engine.clone());
+        let audio_engine_service = AudioEngineService::new(audio_engine.clone(), event_tx);
 
         let voice_state = VoiceStateService::new(redis_repo.clone());
         let intended_vc = IntendedVoiceChannelService::new(redis_repo.clone());

@@ -1,27 +1,31 @@
 use axum::{
     Extension,
-    extract::{Query, State},
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
     response::sse::{Event, KeepAlive, Sse},
 };
+use axum_extra::{
+    TypedHeader,
+    headers::{Authorization, authorization::Bearer},
+};
 use futures_util::StreamExt;
 use hq_core::{Claims, Service};
 use jsonwebtoken::{DecodingKey, Validation, decode};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub async fn stats_sse(
     State(service): State<Arc<Service>>,
     Extension(stats_tx): Extension<broadcast::Sender<()>>,
-    Query(params): Query<HashMap<String, String>>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> impl IntoResponse {
-    let token = params.get("token").cloned().unwrap_or_default();
+    let token = auth.token();
     let secret = &service.config.jwt_secret;
 
     let token_data = match decode::<Claims>(
-        &token,
+        token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     ) {

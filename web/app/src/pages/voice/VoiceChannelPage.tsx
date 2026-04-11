@@ -12,7 +12,6 @@ import {
     useResumeTrack,
     useEditQueue,
     useUndoAction,
-    usePlaybackSSE,
 } from '@/features/playback'
 import type { TrackDto, AudioMetadataDto } from '@/features/playback'
 import { CopyableId } from '@/components/tap/copyable-id'
@@ -36,8 +35,6 @@ export const VoiceChannelPage = () => {
         guildId: string
         channelId: string
     }>()
-
-    usePlaybackSSE()
 
     const { data: states, isLoading: stateLoading, isRefetching } = usePlaybackState()
     const { data: history, isLoading: historyLoading } = usePlaybackHistory()

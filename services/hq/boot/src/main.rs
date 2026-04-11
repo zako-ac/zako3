@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
-use hq_core::{get_pool, run_migrations, AppConfig, Service};
+use hq_core::{get_pool, run_migrations, AppConfig, PlaybackEvent, Service};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -26,10 +26,10 @@ async fn main() -> anyhow::Result<()> {
 
     run_migrations(&pool).await?;
 
-    let service = Service::new(pool, timescale_pool, config.clone()).await?;
-
     // Broadcast channel for playback state events.
-    let (event_tx, _) = broadcast::channel::<String>(128);
+    let (event_tx, _) = broadcast::channel::<PlaybackEvent>(128);
+
+    let service = Service::new(pool, timescale_pool, config.clone(), event_tx.clone()).await?;
 
     // Broadcast channel for stats events — fired whenever a tap processes an audio request.
     let (stats_tx, _) = broadcast::channel::<()>(128);
@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
     let resolver_slot = service.name_resolver_slot.clone();
     let bot_task = tokio::spawn(async move {
         info!("Starting bot...");
-        if let Err(e) = hq_bot::run(service_bot, resolver_slot).await {
+        if let Err(e) = hq_bot::run(service_bot, resolver_slot, event_tx.clone()).await {
             tracing::error!("Bot error: {}", e);
             panic!("Bot failed");
         }

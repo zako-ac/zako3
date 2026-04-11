@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use hq_types::{
-    hq::DiscordUserId, AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName,
-    SessionState, TapName, TrackId, Volume,
+    hq::{playback::PlaybackEvent, DiscordUserId},
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
+    TrackId, Volume,
 };
+use tokio::sync::broadcast;
 use tracing::instrument;
 use zako3_tl_client::{TlClient, TlClientError};
 
@@ -20,11 +22,12 @@ fn map_tl_err(e: TlClientError) -> CoreError {
 #[derive(Clone)]
 pub struct AudioEngineService {
     client: Arc<TlClient>,
+    event_tx: broadcast::Sender<PlaybackEvent>,
 }
 
 impl AudioEngineService {
-    pub fn new(client: Arc<TlClient>) -> Self {
-        Self { client }
+    pub fn new(client: Arc<TlClient>, event_tx: broadcast::Sender<PlaybackEvent>) -> Self {
+        Self { client, event_tx }
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id, channel_id = ?channel_id))]
@@ -57,7 +60,8 @@ impl AudioEngineService {
         volume: Volume,
         discord_user_id: DiscordUserId,
     ) -> CoreResult<()> {
-        self.client
+        let result = self
+            .client
             .play(
                 guild_id,
                 channel_id,
@@ -68,7 +72,9 @@ impl AudioEngineService {
                 discord_user_id,
             )
             .await
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     pub async fn set_volume(
@@ -92,11 +98,14 @@ impl AudioEngineService {
         channel_id: ChannelId,
         track_id: TrackId,
     ) -> CoreResult<bool> {
-        self.client
+        let result = self
+            .client
             .stop(guild_id, channel_id, track_id)
             .await
             .map(|_| true)
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -106,20 +115,26 @@ impl AudioEngineService {
         channel_id: ChannelId,
         filter: AudioStopFilter,
     ) -> CoreResult<bool> {
-        self.client
+        let result = self
+            .client
             .stop_many(guild_id, channel_id, filter)
             .await
             .map(|_| true)
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
     pub async fn next_music(&self, guild_id: GuildId, channel_id: ChannelId) -> CoreResult<bool> {
-        self.client
+        let result = self
+            .client
             .next_music(guild_id, channel_id)
             .await
             .map(|_| true)
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -129,11 +144,14 @@ impl AudioEngineService {
         channel_id: ChannelId,
         queue_name: QueueName,
     ) -> CoreResult<bool> {
-        self.client
+        let result = self
+            .client
             .pause(guild_id, channel_id, queue_name)
             .await
             .map(|_| true)
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     #[instrument(skip(self), fields(guild_id = ?guild_id))]
@@ -143,11 +161,14 @@ impl AudioEngineService {
         channel_id: ChannelId,
         queue_name: QueueName,
     ) -> CoreResult<bool> {
-        self.client
+        let result = self
+            .client
             .resume(guild_id, channel_id, queue_name)
             .await
             .map(|_| true)
-            .map_err(map_tl_err)
+            .map_err(map_tl_err)?;
+        let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
+        Ok(result)
     }
 
     pub async fn get_session_state(

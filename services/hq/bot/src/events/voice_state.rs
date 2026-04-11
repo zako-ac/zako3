@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use hq_core::{CoreResult, Service};
+use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     hq::{DiscordUserId, Tap, TapName, UserJoinLeaveAlert, UserSettings},
     AudioRequestString, ChannelId, GuildId, QueueName,
 };
 use poise::serenity_prelude as serenity;
 use serenity::{async_trait, model::voice::VoiceState, Context, EventHandler};
+use tokio::sync::broadcast;
 use zako3_states::VoiceStateService;
 
 use crate::commands::voice::bot_join_and_announce;
@@ -14,6 +15,7 @@ use crate::commands::voice::bot_join_and_announce;
 pub struct VoiceStateHandler {
     pub voice_state_service: VoiceStateService,
     pub service: Arc<Service>,
+    pub event_tx: broadcast::Sender<PlaybackEvent>,
 }
 
 struct ChannelSnapshot {
@@ -80,6 +82,8 @@ impl EventHandler for VoiceStateHandler {
         if is_bot(&ctx, new.user_id) {
             return;
         }
+
+        let _ = self.event_tx.send(PlaybackEvent::VoiceStateChanged);
 
         let old_ch = old.as_ref().and_then(|o| o.channel_id);
         let new_ch = new.channel_id;

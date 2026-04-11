@@ -7,9 +7,25 @@ use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapStatsDto,
     TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
+use serde::Deserialize;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use zako3_states::{TapHubStateService, TapMetricKey, TapMetricsStateService};
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TapSortField {
+    MostUsed,
+    RecentlyCreated,
+    Alphabetical,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
 
 #[derive(Clone)]
 pub struct TapService {
@@ -124,6 +140,8 @@ impl TapService {
     pub async fn list_all_paginated(
         &self,
         user_id: Option<UserId>,
+        sort_field: Option<TapSortField>,
+        sort_direction: Option<SortDirection>,
     ) -> CoreResult<PaginatedResponseDto<TapWithAccessDto>> {
         let taps = self.tap_repo.list_all().await?;
 
@@ -150,6 +168,22 @@ impl TapService {
             };
 
             tap_dtos.push(tap_with_access);
+        }
+
+        let desc = sort_direction.as_ref() != Some(&SortDirection::Asc);
+        match sort_field.unwrap_or(TapSortField::MostUsed) {
+            TapSortField::MostUsed => {
+                tap_dtos.sort_by(|a, b| b.tap.total_uses.cmp(&a.tap.total_uses));
+            }
+            TapSortField::RecentlyCreated => {
+                tap_dtos.sort_by(|a, b| b.tap.created_at.cmp(&a.tap.created_at));
+            }
+            TapSortField::Alphabetical => {
+                tap_dtos.sort_by(|a, b| a.tap.name.cmp(&b.tap.name));
+            }
+        }
+        if !desc {
+            tap_dtos.reverse();
         }
 
         let total = tap_dtos.len() as u64;

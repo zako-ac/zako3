@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use hq_core::{CoreError, Service};
+use hq_core::{CoreError, Service, SortDirection, TapSortField};
 use hq_types::hq::{
     CreateTapDto, CreateVerificationRequestDto, PaginatedResponseDto, TapDto, TapId, TapStatsDto,
     TapWithAccessDto, VerificationRequest,
@@ -25,12 +25,15 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListTapsQuery {
     pub page: Option<i64>,
     pub per_page: Option<i64>,
     pub search: Option<String>,
     pub roles: Option<String>,
     pub accessible: Option<bool>,
+    pub sort_field: Option<TapSortField>,
+    pub sort_direction: Option<SortDirection>,
 }
 
 #[utoipa::path(
@@ -101,13 +104,11 @@ pub async fn create_tap(
 pub async fn list_taps(
     State(service): State<Arc<Service>>,
     OptionalAuthUser(user_id): OptionalAuthUser,
-    Query(_query): Query<ListTapsQuery>,
+    Query(query): Query<ListTapsQuery>,
 ) -> Result<Json<PaginatedResponseDto<TapWithAccessDto>>, (axum::http::StatusCode, String)> {
-    // TODO: Implement filtering by roles, search, accessible in the tap service
-    // For now, just use list_all_paginated and client-side filtering
     let taps = service
         .tap
-        .list_all_paginated(user_id)
+        .list_all_paginated(user_id, query.sort_field, query.sort_direction)
         .await
         .map_err(map_error)?;
 

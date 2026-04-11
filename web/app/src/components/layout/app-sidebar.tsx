@@ -1,4 +1,5 @@
 import zakoLogo from '@/assets/zakopsa.png'
+import { useEffect } from 'react'
 import { Link, useLocation, matchPath } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -13,10 +14,14 @@ import {
     Key,
     ShieldCheck,
 } from 'lucide-react'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { ROUTES } from '@/lib/constants'
+import { ROUTES, AUTH_TOKEN_KEY, API_BASE_URL } from '@/lib/constants'
 import { useLogout, useAuthStore } from '@/features/auth'
 import { useTap } from '@/features/taps'
+import { playbackKeys } from '@/features/playback'
+import { guildKeys } from '@/features/guild'
 import {
     Sidebar,
     SidebarContent,
@@ -47,6 +52,31 @@ export const AppSidebar = () => {
     const { user } = useAuthStore()
     const { mutate: logout } = useLogout()
     const { state } = useSidebar()
+    const queryClient = useQueryClient()
+
+    useEffect(() => {
+        const token = localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
+        if (!token) return
+        const ctrl = new AbortController()
+        fetchEventSource(`${API_BASE_URL}/playback/sse`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ctrl.signal,
+            onmessage(ev) {
+                try {
+                    const event = JSON.parse(ev.data) as { type: string }
+                    if (event.type === 'playbackChanged') {
+                        queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
+                    } else if (event.type === 'voiceStateChanged') {
+                        queryClient.invalidateQueries({ queryKey: guildKeys.myGuilds() })
+                    }
+                } catch { /* ignore malformed events */ }
+            },
+            onerror() {
+                ctrl.abort()
+            },
+        })
+        return () => ctrl.abort()
+    }, [queryClient])
 
     const match = matchPath('/taps/:tapId/*', location.pathname) || matchPath('/taps/:tapId', location.pathname)
     const activeTapId = match?.params.tapId
@@ -80,7 +110,6 @@ export const AppSidebar = () => {
                         title: t('nav.createTap'),
                         url: ROUTES.TAPS_CREATE,
                         icon: Plus,
-                        isPrimary: true,
                     },
                     {
                         title: t('nav.explore'),
@@ -109,19 +138,19 @@ export const AppSidebar = () => {
                                 url: ROUTES.TAP_SETTINGS(activeTapId),
                                 icon: Settings,
                             },
-                             {
-                                 title: t('taps.settings.apiAccess'),
-                                 url: ROUTES.TAP_API_KEYS(activeTapId),
-                                 icon: Key,
-                             },
-                             {
-                                 title: t('nav.verification'),
-                                 url: ROUTES.TAP_VERIFICATION(activeTapId),
-                                 icon: ShieldCheck,
-                             },
-                         ],
-                     },
-                 ]
+                            {
+                                title: t('taps.settings.apiAccess'),
+                                url: ROUTES.TAP_API_KEYS(activeTapId),
+                                icon: Key,
+                            },
+                            {
+                                title: t('nav.verification'),
+                                url: ROUTES.TAP_VERIFICATION(activeTapId),
+                                icon: ShieldCheck,
+                            },
+                        ],
+                    },
+                ]
 
                 : []),
         ]
@@ -155,7 +184,7 @@ export const AppSidebar = () => {
 
             <SidebarContent>
                 {user && <VoiceSidebarSection />}
-            {navSections.map((section) => (
+                {navSections.map((section) => (
                     <SidebarGroup key={section.title}>
                         <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
                         <SidebarGroupContent>

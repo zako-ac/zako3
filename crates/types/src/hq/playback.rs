@@ -111,3 +111,10 @@ pub struct ResumeTrackDto {
     pub channel_id: String,
     pub track_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum PlaybackEvent {
+    PlaybackChanged,
+    VoiceStateChanged,
+}

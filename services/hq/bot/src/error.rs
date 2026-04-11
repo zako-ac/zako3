@@ -22,6 +22,8 @@ pub enum BotError {
     NothingPlaying,
     #[error("대기열이 비어 있어요.")]
     QueueEmpty,
+    #[error("이 명령어는 서버에서만 사용할 수 있어요.")]
+    ShouldRunInGuild,
     // ── Transparent infrastructure errors ──────────────────────────────────
     #[error(transparent)]
     Core(#[from] CoreError),
@@ -47,6 +49,7 @@ impl BotError {
             }
             BotError::NothingPlaying => "현재 재생 중인 항목이 없어요.",
             BotError::QueueEmpty => "대기열이 비어 있어요.",
+            BotError::ShouldRunInGuild => "이 명령어는 서버에서만 사용할 수 있어요.",
             BotError::Core(inner) => core_error_message(inner),
             BotError::Serenity(_) => "Discord와 통신하는 중 문제가 발생했어요.",
             BotError::State(_) => "서버에서 문제가 발생했어요. 다시 시도해 주세요.",

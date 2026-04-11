@@ -2,6 +2,10 @@ use derive_more::{Display, From, FromStr, Into};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub use zakofish::types::{
+    AttachedMetadata, AudioCachePolicy, AudioCacheType, AudioMetadata, AudioRequestString,
+};
+
 pub mod taphub;
 pub use taphub::*;
 
@@ -60,12 +64,6 @@ pub struct TapName(pub String);
 #[display("{_0}")]
 pub struct Volume(f32);
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Into, From, FromStr, Display, Serialize, Deserialize,
-)]
-#[display("{_0}")]
-pub struct AudioRequestString(String);
-
 pub struct AudioResponse {
     pub cache_key: Option<AudioCachePolicy>,
     pub metadatas: Vec<AudioMetadata>,
@@ -96,33 +94,6 @@ pub struct CachedAudioRequest {
     pub discord_user_id: hq::DiscordUserId,
     #[serde(default)]
     pub headers: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AudioCacheType {
-    #[serde(rename = "none")]
-    None,
-    #[serde(rename = "ar_hash")]
-    ARHash,
-    #[serde(rename = "key")]
-    CacheKey(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioCachePolicy {
-    pub cache_type: AudioCacheType,
-    pub ttl_seconds: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case", content = "value")]
-pub enum AudioMetadata {
-    Title(String),
-    Description(String),
-    Artist(String),
-    Album(String),
-    ImageUrl(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

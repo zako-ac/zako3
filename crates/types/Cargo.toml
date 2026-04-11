@@ -25,3 +25,4 @@ chrono = { workspace = true, features = ["serde"] }
 utoipa = { workspace = true, features = ["uuid", "chrono"] }
 
 jsonrpsee.workspace = true
+zakofish.workspace = true

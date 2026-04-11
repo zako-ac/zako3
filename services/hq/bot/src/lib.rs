@@ -1,10 +1,11 @@
 use ::serenity::all::GatewayIntents;
 use hq_core::{
     service::{DiscordNameResolver, DiscordNameResolverSlot},
-    Service,
+    PlaybackEvent, Service,
 };
 use poise::serenity_prelude as serenity;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 pub mod commands;
 pub mod discord_resolver;
@@ -43,7 +44,11 @@ async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> anyhow::Result<()> {
+pub async fn run(
+    service: Service,
+    resolver_slot: DiscordNameResolverSlot,
+    event_tx: broadcast::Sender<PlaybackEvent>,
+) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();
     let intents = GatewayIntents::non_privileged()
         | GatewayIntents::GUILD_VOICE_STATES
@@ -55,6 +60,7 @@ pub async fn run(service: Service, resolver_slot: DiscordNameResolverSlot) -> an
     let voice_handler = events::VoiceStateHandler {
         voice_state_service: service.voice_state.clone(),
         service: Arc::new(service.clone()),
+        event_tx,
     };
 
     let message_handler = events::MessageCreateHandler {

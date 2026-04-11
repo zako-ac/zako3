@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { playbackApi } from './api'
 import type { EditQueueDto, PauseTrackDto, ResumeTrackDto, SkipDto, StopTrackDto } from '@zako-ac/zako3-data'
 import { AUTH_TOKEN_KEY, API_BASE_URL } from '@/lib/constants'
+import { useNameCache } from '@/features/guild/name-cache'
 
 export const playbackKeys = {
     all: ['playback'] as const,
@@ -10,12 +12,18 @@ export const playbackKeys = {
     history: () => [...playbackKeys.all, 'history'] as const,
 }
 
-export const usePlaybackState = () =>
-    useQuery({
+export const usePlaybackState = () => {
+    const ingestPlayback = useNameCache((s) => s.ingestPlayback)
+    const query = useQuery({
         queryKey: playbackKeys.state(),
         queryFn: playbackApi.getState,
         refetchInterval: 30_000,
     })
+    useEffect(() => {
+        if (query.data) ingestPlayback(query.data)
+    }, [query.data, ingestPlayback])
+    return query
+}
 
 export const useRefreshPlaybackState = () => {
     const queryClient = useQueryClient()
@@ -26,13 +34,18 @@ export const usePlaybackSSE = () => {
     const queryClient = useQueryClient()
     useEffect(() => {
         const token = localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
-        const url = `${API_BASE_URL}/playback/sse?token=${encodeURIComponent(token)}`
-        const es = new EventSource(url)
-        es.onmessage = () => {
-            queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
-        }
-        es.onerror = () => es.close()
-        return () => es.close()
+        const ctrl = new AbortController()
+        fetchEventSource(`${API_BASE_URL}/playback/sse`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ctrl.signal,
+            onmessage() {
+                queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
+            },
+            onerror() {
+                ctrl.abort()
+            },
+        })
+        return () => ctrl.abort()
     }, [queryClient])
 }
 
