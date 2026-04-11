@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { UserSettingsCard } from '@/features/settings'
 import { emptyPartial } from '@/features/settings'
 import type { PartialUserSettings } from '@/features/settings'
@@ -8,6 +8,7 @@ import type { GuildSettingsOutletContext } from './GuildSettingsPage'
 
 export const GuildGuildSettingsPage = () => {
     const { t } = useTranslation()
+
     const {
         taps,
         guildPartial,
@@ -19,6 +20,14 @@ export const GuildGuildSettingsPage = () => {
 
     const handleSave = async (settings: PartialUserSettings) => {
         await handleSaveGuild(settings)
+    }
+
+    if (!canManage) {
+        return (
+            <p className="text-muted-foreground text-sm mb-4">
+                {t('guilds.settings.guildSettingsNoPermission')}
+            </p>
+        )
     }
 
     // Show loading state while initial data is fetching

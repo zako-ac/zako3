@@ -234,10 +234,6 @@
       "signInDescription": "대시보드로 계속하려면 로그인하세요.",
       "welcome": "환영합니다"
     },
-    "notFound": {
-      "goHome": "홈으로",
-      "message": "찾으시는 페이지가 존재하지 않습니다."
-    },
     "common": {
       "actions": "작업",
       "back": "뒤로",
@@ -320,6 +316,10 @@
       "taps": "탭",
       "users": "사용자",
       "verification": "인증"
+    },
+    "notFound": {
+      "goHome": "홈으로",
+      "message": "찾으시는 페이지가 존재하지 않습니다."
     },
     "notifications": {
       "all": "모두",

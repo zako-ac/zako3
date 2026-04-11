@@ -132,7 +132,7 @@ export const GuildSettingsPage = () => {
             <Tabs value={tabValue} onValueChange={handleTabChange}>
                 <TabsList>
                     <TabsTrigger value="my-settings">{t('guilds.settings.mySettings')}</TabsTrigger>
-                    <TabsTrigger value="guild-settings">{t('guilds.settings.guildSettings')}</TabsTrigger>
+                    <TabsTrigger value="guild-settings" disabled={!canManage}>{t('guilds.settings.guildSettings')}</TabsTrigger>
                 </TabsList>
 
                 <Outlet context={outletContext} />

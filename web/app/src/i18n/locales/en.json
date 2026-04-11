@@ -234,10 +234,6 @@
       "signInDescription": "Sign in to continue to the dashboard.",
       "welcome": "Welcome"
     },
-    "notFound": {
-      "goHome": "Go Home",
-      "message": "The page you're looking for doesn't exist."
-    },
     "common": {
       "actions": "Actions",
       "back": "Back",
@@ -321,6 +317,10 @@
       "taps": "Taps",
       "users": "Users",
       "verification": "Verification"
+    },
+    "notFound": {
+      "goHome": "Go Home",
+      "message": "The page you're looking for doesn't exist."
     },
     "notifications": {
       "all": "All",
