@@ -61,7 +61,7 @@ anyhow = "1.0"
 mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
-protofish2 = { version = "0.6.1", features = ["opus", "jitter"] }
+protofish2 = { version = "0.6.3", features = ["opus", "jitter"] }
 async-nats = "0.45.0"
 tarpc = { version = "0.34", features = ["full"] }
 dashmap = "6"
