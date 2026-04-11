@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
-    hq::{DiscordUserId, Tap, TapName, UserJoinLeaveAlert, UserSettings},
     AudioRequestString, ChannelId, GuildId, QueueName,
+    hq::{DiscordUserId, Tap, TapName, UserJoinLeaveAlert, UserSettings},
 };
 use poise::serenity_prelude as serenity;
-use serenity::{async_trait, model::voice::VoiceState, Context, EventHandler};
+use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
 use tokio::sync::broadcast;
 use zako3_states::VoiceStateService;
 
@@ -183,7 +183,12 @@ fn get_display_name(
         .guild(guild_id)
         .as_ref()
         .and_then(|g| g.members.get(&user_id))
-        .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
+        .map(|m| {
+            m.nick
+                .clone()
+                .or_else(|| m.user.global_name.clone())
+                .unwrap_or_else(|| m.user.name.clone())
+        })
         .unwrap_or_else(|| fallback.to_string())
 }
 
