@@ -53,6 +53,16 @@ pub(crate) async fn handle_request_audio_inner(
     if let Err(e) = tap_hub.metrics_service.inc_total_uses(tap_id.clone()).await {
         tracing::warn!(%e, "Failed to increment total_uses metric");
     }
+
+    // Fire-and-forget: notify stats subscribers via NATS
+    if let Some(client) = &tap_hub.nats_client {
+        let client = client.clone();
+        let id = tap_id.0.to_string();
+        tokio::spawn(async move {
+            let payload = format!(r#"{{"tap_id":"{}"}}"#, id);
+            let _ = client.publish("zako3.stats.tap_used", payload.into()).await;
+        });
+    }
     if let Err(e) = tap_hub
         .metrics_service
         .record_unique_user(tap_id.clone(), UserId(request.discord_user_id.0.clone()))

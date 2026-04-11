@@ -3,8 +3,8 @@
 refer hq todo
 
 # Do Now
-- [ ] Fix graph
-- [ ] use SSE for live update in queue and stats
+- [x] Fix graph
+- [x] use SSE for live update in queue and stats
 
 - [ ] Show Duration: maybe Tap "capabilities"?
 

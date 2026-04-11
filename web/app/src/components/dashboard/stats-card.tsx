@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,6 +15,8 @@ interface StatsCardProps {
   }
   className?: string
   isLoading?: boolean
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }
 
 export const StatsCard = ({
@@ -24,6 +27,8 @@ export const StatsCard = ({
   trend,
   className,
   isLoading = false,
+  onRefresh,
+  isRefreshing = false,
 }: StatsCardProps) => {
   if (isLoading) {
     return (
@@ -46,7 +51,18 @@ export const StatsCard = ({
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        {icon && <div className="text-muted-foreground">{icon}</div>}
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="rounded p-0.5 hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <RotateCcw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+            </button>
+          )}
+          {icon && <div>{icon}</div>}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>

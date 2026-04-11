@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { playbackApi } from './api'
 import type { EditQueueDto, PauseTrackDto, ResumeTrackDto, SkipDto, StopTrackDto } from '@zako-ac/zako3-data'
-import { AUTH_TOKEN_KEY, WS_BASE_URL } from '@/lib/constants'
+import { AUTH_TOKEN_KEY, API_BASE_URL } from '@/lib/constants'
 
 export const playbackKeys = {
     all: ['playback'] as const,
@@ -14,7 +14,7 @@ export const usePlaybackState = () =>
     useQuery({
         queryKey: playbackKeys.state(),
         queryFn: playbackApi.getState,
-        refetchInterval: 15_000,
+        refetchInterval: 30_000,
     })
 
 export const useRefreshPlaybackState = () => {
@@ -22,18 +22,17 @@ export const useRefreshPlaybackState = () => {
     return () => queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
 }
 
-export const usePlaybackEvents = () => {
+export const usePlaybackSSE = () => {
     const queryClient = useQueryClient()
     useEffect(() => {
         const token = localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
-        const ws = new WebSocket(
-            `${WS_BASE_URL}/api/v1/playback/ws?token=${encodeURIComponent(token)}`
-        )
-        ws.onmessage = () => {
+        const url = `${API_BASE_URL}/playback/sse?token=${encodeURIComponent(token)}`
+        const es = new EventSource(url)
+        es.onmessage = () => {
             queryClient.invalidateQueries({ queryKey: playbackKeys.state() })
         }
-        ws.onerror = () => ws.close()
-        return () => ws.close()
+        es.onerror = () => es.close()
+        return () => es.close()
     }, [queryClient])
 }
 

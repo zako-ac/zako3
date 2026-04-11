@@ -3,7 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ArrowLeft, Trash2, Users, Activity, MousePointer2, Database } from 'lucide-react'
-import { useTap, useTapStats, useDeleteTap } from '@/features/taps'
+import { useTap, useTapStats, useDeleteTap, tapKeys } from '@/features/taps'
+import { useStatsSSE } from '@/features/stats'
 import { useUpdateTapOccupation } from '@/features/admin/hooks'
 import { PermissionBadge, TapRolesBadge, CopyableId, OccupationSelect } from '@/components/tap'
 import { TimeSeriesChart } from '@/components/common'
@@ -23,8 +24,9 @@ export const AdminTapDetailPage = () => {
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
+    useStatsSSE(tapId ? [tapKeys.stats(tapId)] : [])
     const { data: tap, isLoading: isLoadingTap } = useTap(tapId)
-    const { data: stats, isLoading: isLoadingStats } = useTapStats(tapId)
+    const { data: stats, isLoading: isLoadingStats, isFetching: isStatsFetching, refetch: refetchStats } = useTapStats(tapId)
 
     const owner = tap?.owner
     const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
@@ -199,21 +201,29 @@ export const AdminTapDetailPage = () => {
                             title={t('taps.stats.activeNow')}
                             value={stats.currentlyActive}
                             icon={<Activity className="h-4 w-4" />}
+                            onRefresh={refetchStats}
+                            isRefreshing={isStatsFetching}
                         />
                         <StatsCard
                             title={t('dashboard.stats.totalUses')}
                             value={stats.totalUses.toLocaleString()}
                             icon={<MousePointer2 className="h-4 w-4" />}
+                            onRefresh={refetchStats}
+                            isRefreshing={isStatsFetching}
                         />
                         <StatsCard
                             title={t('taps.stats.uniqueUsers')}
                             value={stats.uniqueUsers.toLocaleString()}
                             icon={<Users className="h-4 w-4" />}
+                            onRefresh={refetchStats}
+                            isRefreshing={isStatsFetching}
                         />
                         <StatsCard
                             title={t('taps.stats.cacheHits')}
                             value={stats.cacheHits.toLocaleString()}
                             icon={<Database className="h-4 w-4" />}
+                            onRefresh={refetchStats}
+                            isRefreshing={isStatsFetching}
                         />
                     </div>
 

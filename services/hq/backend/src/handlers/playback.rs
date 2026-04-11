@@ -1,9 +1,10 @@
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
 };
+use futures_util::StreamExt;
 use hq_core::{Claims, CoreError, Service};
 use hq_types::hq::playback::{
     EditQueueDto, GuildPlaybackStateDto, PauseTrackDto, PlaybackActionDto, ResumeTrackDto, SkipDto, StopTrackDto,
@@ -11,6 +12,7 @@ use hq_types::hq::playback::{
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 
 use crate::middleware::auth::AuthUser;
 
@@ -69,6 +71,7 @@ pub async fn get_playback_state(
 )]
 pub async fn stop_track(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<StopTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -86,6 +89,7 @@ pub async fn stop_track(
         .stop_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -100,6 +104,7 @@ pub async fn stop_track(
 )]
 pub async fn pause_track(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<PauseTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -117,6 +122,7 @@ pub async fn pause_track(
         .pause_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -131,6 +137,7 @@ pub async fn pause_track(
 )]
 pub async fn resume_track(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<ResumeTrackDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -148,6 +155,7 @@ pub async fn resume_track(
         .resume_track(guild_id, channel_id, &payload.track_id, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -162,6 +170,7 @@ pub async fn resume_track(
 )]
 pub async fn skip_music(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<SkipDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -179,6 +188,7 @@ pub async fn skip_music(
         .skip_music(guild_id, channel_id, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -193,6 +203,7 @@ pub async fn skip_music(
 )]
 pub async fn edit_queue(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Json(payload): Json<EditQueueDto>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -202,6 +213,7 @@ pub async fn edit_queue(
         .edit_queue(payload, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -218,6 +230,7 @@ pub async fn edit_queue(
 )]
 pub async fn undo_action(
     State(service): State<Arc<Service>>,
+    Extension(event_tx): Extension<broadcast::Sender<String>>,
     AuthUser(user_id): AuthUser,
     Path(action_id): Path<String>,
 ) -> Result<Json<PlaybackActionDto>, (StatusCode, String)> {
@@ -227,6 +240,7 @@ pub async fn undo_action(
         .undo_action(&action_id, &discord_id)
         .await
         .map_err(map_error)?;
+    let _ = event_tx.send("playback_changed".to_string());
     Ok(Json(action))
 }
 
@@ -251,8 +265,7 @@ pub async fn get_history(
     Ok(Json(history))
 }
 
-pub async fn playback_ws(
-    ws: WebSocketUpgrade,
+pub async fn playback_sse(
     State(service): State<Arc<Service>>,
     Extension(event_tx): Extension<broadcast::Sender<String>>,
     Query(params): Query<HashMap<String, String>>,
@@ -274,24 +287,10 @@ pub async fn playback_ws(
         return (StatusCode::UNAUTHORIZED, "Unknown user").into_response();
     }
 
-    ws.on_upgrade(move |socket| handle_ws(socket, event_tx))
-        .into_response()
-}
+    let rx = event_tx.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|msg| async move {
+        msg.ok().map(|data| Ok::<Event, std::convert::Infallible>(Event::default().data(data)))
+    });
 
-async fn handle_ws(mut socket: WebSocket, event_tx: broadcast::Sender<String>) {
-    let mut rx = event_tx.subscribe();
-    loop {
-        tokio::select! {
-            Ok(msg) = rx.recv() => {
-                if socket.send(Message::Text(msg)).await.is_err() {
-                    break;
-                }
-            }
-            msg = socket.recv() => {
-                if msg.is_none() {
-                    break;
-                }
-            }
-        }
-    }
+    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
 }

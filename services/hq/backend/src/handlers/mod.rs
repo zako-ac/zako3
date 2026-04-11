@@ -8,5 +8,6 @@ pub use mapper::ApiErrorResponse;
 pub mod notification;
 pub mod playback;
 pub mod settings;
+pub mod stats;
 pub mod tap;
 pub mod users;

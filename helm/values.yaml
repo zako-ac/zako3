@@ -130,6 +130,10 @@ ports:
 redis:
   image: redis:7-alpine
 
+# --- NATS ---
+nats:
+  image: nats:2-alpine
+
 # --- Otel-LGTM ---
 otelLgtm:
   image: grafana/otel-lgtm:latest

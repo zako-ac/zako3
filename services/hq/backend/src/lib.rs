@@ -22,6 +22,7 @@ use handlers::mapper;
 use handlers::notification;
 use handlers::playback;
 use handlers::settings;
+use handlers::stats;
 use handlers::tap;
 use handlers::users;
 
@@ -165,7 +166,11 @@ use handlers::users;
 )]
 pub struct ApiDoc;
 
-pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
+pub fn app(
+    service: Service,
+    event_tx: broadcast::Sender<String>,
+    stats_tx: broadcast::Sender<()>,
+) -> Router {
     let state = Arc::new(service.clone());
 
     Router::new()
@@ -301,7 +306,9 @@ pub fn app(service: Service, event_tx: broadcast::Sender<String>) -> Router {
             post(playback::undo_action),
         )
         .route("/api/v1/playback/history", get(playback::get_history))
-        .route("/api/v1/playback/ws", get(playback::playback_ws))
+        .route("/api/v1/playback/sse", get(playback::playback_sse))
+        .route("/api/v1/stats/sse", get(stats::stats_sse))
+        .layer(Extension(stats_tx))
         .layer(Extension(event_tx))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::metrics::MetricsLayer::new())

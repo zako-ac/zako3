@@ -3,8 +3,6 @@ export * from '@zako-ac/zako3-data';
 
 // Web-specific constants
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-export const WS_BASE_URL =
-  import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080';
 
 export const AUTH_TOKEN_KEY = 'zako_auth_token';
 export const AUTH_USER_KEY = 'zako_auth_user';

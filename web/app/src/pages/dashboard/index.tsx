@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Box, Compass, Plus, TrendingUp, Users, Activity } from 'lucide-react'
-import { useMyTaps } from '@/features/taps'
+import { useMyTaps, tapKeys } from '@/features/taps'
 import { useNotifications } from '@/features/notifications'
+import { useStatsSSE } from '@/features/stats'
 import { useAuthStore } from '@/features/auth'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { ActivityLog, type ActivityItem } from '@/components/dashboard/activity-log'
@@ -13,7 +14,8 @@ import { ROUTES } from '@/lib/constants'
 export const DashboardPage = () => {
     const { t } = useTranslation()
     const { user } = useAuthStore()
-    const { data: myTapsData, isLoading: isTapsLoading } = useMyTaps({ perPage: 100 })
+    useStatsSSE([tapKeys.myTaps()])
+    const { data: myTapsData, isLoading: isTapsLoading, isFetching: isTapsFetching, refetch: refetchTaps } = useMyTaps({ perPage: 100 })
     const { data: notificationsData, isLoading: isNotificationsLoading } = useNotifications({ perPage: 10 })
 
     const myTaps = myTapsData?.data ?? []
@@ -46,6 +48,8 @@ export const DashboardPage = () => {
                     icon={<Compass className="h-4 w-4" />}
                     description={t('dashboard.stats.tapsOwned')}
                     isLoading={isTapsLoading}
+                    onRefresh={refetchTaps}
+                    isRefreshing={isTapsFetching}
                 />
                 <StatsCard
                     title={t('dashboard.stats.totalUses')}
@@ -53,6 +57,8 @@ export const DashboardPage = () => {
                     icon={<TrendingUp className="h-4 w-4" />}
                     description={t('dashboard.stats.acrossTaps')}
                     isLoading={isTapsLoading}
+                    onRefresh={refetchTaps}
+                    isRefreshing={isTapsFetching}
                 />
                 <StatsCard
                     title={t('dashboard.stats.activeUsers')}
@@ -60,6 +66,8 @@ export const DashboardPage = () => {
                     icon={<Users className="h-4 w-4" />}
                     description={t('dashboard.stats.acrossTaps')}
                     isLoading={isTapsLoading}
+                    onRefresh={refetchTaps}
+                    isRefreshing={isTapsFetching}
                 />
                 <StatsCard
                     title={t('dashboard.stats.uptime')}
@@ -67,6 +75,8 @@ export const DashboardPage = () => {
                     icon={<Activity className="h-4 w-4" />}
                     description={t('dashboard.stats.acrossTaps')}
                     isLoading={isTapsLoading}
+                    onRefresh={refetchTaps}
+                    isRefreshing={isTapsFetching}
                 />
             </div>
 

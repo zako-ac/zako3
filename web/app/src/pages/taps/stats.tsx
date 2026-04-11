@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { Activity, Users, TrendingUp, Database, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { useTap, useTapStats, useTapAuditLog } from '@/features/taps'
+import { useTap, useTapStats, useTapAuditLog, tapKeys } from '@/features/taps'
+import { useStatsSSE } from '@/features/stats'
 import { OccupationBadge } from '@/components/tap'
 import { usePagination } from '@/hooks'
 import { StatsCard } from '@/components/dashboard/stats-card'
@@ -48,8 +49,9 @@ export const TapStatsPage = () => {
         initialPerPage: 10,
     })
 
+    useStatsSSE(tapId ? [tapKeys.stats(tapId)] : [])
     const { data: tap, isLoading: isTapLoading } = useTap(tapId)
-    const { data: stats, isLoading: isStatsLoading } = useTapStats(tapId)
+    const { data: stats, isLoading: isStatsLoading, isFetching: isStatsFetching, refetch: refetchStats } = useTapStats(tapId)
     const { data: auditLogData, isLoading: isAuditLoading } = useTapAuditLog(
         tapId,
         {
@@ -127,21 +129,29 @@ export const TapStatsPage = () => {
                     title={t('taps.stats.activeNow')}
                     value={stats.currentlyActive.toLocaleString()}
                     icon={<Activity className="h-4 w-4" />}
+                    onRefresh={refetchStats}
+                    isRefreshing={isStatsFetching}
                 />
                 <StatsCard
                     title={t('dashboard.stats.totalUses')}
                     value={stats.totalUses.toLocaleString()}
                     icon={<TrendingUp className="h-4 w-4" />}
+                    onRefresh={refetchStats}
+                    isRefreshing={isStatsFetching}
                 />
                 <StatsCard
                     title={t('taps.stats.cacheHits')}
                     value={stats.cacheHits.toLocaleString()}
                     icon={<Database className="h-4 w-4" />}
+                    onRefresh={refetchStats}
+                    isRefreshing={isStatsFetching}
                 />
                 <StatsCard
                     title={t('taps.stats.uniqueUsers')}
                     value={stats.uniqueUsers.toLocaleString()}
                     icon={<Users className="h-4 w-4" />}
+                    onRefresh={refetchStats}
+                    isRefreshing={isStatsFetching}
                 />
             </div>
 

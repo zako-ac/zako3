@@ -4,7 +4,7 @@ export {
     usePlaybackState,
     useRefreshPlaybackState,
     usePlaybackHistory,
-    usePlaybackEvents,
+    usePlaybackSSE,
     useStopTrack,
     useSkipMusic,
     usePauseTrack,

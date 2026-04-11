@@ -8,9 +8,10 @@ import {
   Bell,
   ExternalLink,
 } from 'lucide-react'
-import { useUsers } from '@/features/users'
-import { useTaps } from '@/features/taps'
-import { useAdminActivity, usePendingVerifications } from '@/features/admin'
+import { useUsers, userKeys } from '@/features/users'
+import { useTaps, tapKeys } from '@/features/taps'
+import { useAdminActivity, usePendingVerifications, adminKeys } from '@/features/admin'
+import { useStatsSSE } from '@/features/stats'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,14 +21,17 @@ import { ROUTES } from '@/lib/constants'
 
 export const AdminDashboardPage = () => {
   const { t, i18n } = useTranslation()
-  const { data: usersData, isLoading: isUsersLoading } = useUsers({
+  useStatsSSE([userKeys.lists(), tapKeys.lists(), adminKeys.pendingVerifications()])
+  const { data: usersData, isLoading: isUsersLoading, isFetching: isUsersFetching, refetch: refetchUsers } = useUsers({
     perPage: 1,
   })
-  const { data: tapsData, isLoading: isTapsLoading } = useTaps({ perPage: 1 })
+  const { data: tapsData, isLoading: isTapsLoading, isFetching: isTapsFetching, refetch: refetchTaps } = useTaps({
+    perPage: 1,
+  })
   const { data: activityData, isLoading: isActivityLoading } = useAdminActivity(
     { perPage: 5 }
   )
-  const { data: pendingTaps, isLoading: isPendingLoading } =
+  const { data: pendingTaps, isLoading: isPendingLoading, isFetching: isPendingFetching, refetch: refetchPending } =
     usePendingVerifications()
 
   const totalUsers = usersData?.meta.total ?? 0
@@ -49,12 +53,16 @@ export const AdminDashboardPage = () => {
           value={totalUsers.toLocaleString()}
           icon={<Users className="h-4 w-4" />}
           isLoading={isUsersLoading}
+          onRefresh={refetchUsers}
+          isRefreshing={isUsersFetching}
         />
         <StatsCard
           title={t('admin.stats.totalTaps')}
           value={totalTaps.toLocaleString()}
           icon={<Compass className="h-4 w-4" />}
           isLoading={isTapsLoading}
+          onRefresh={refetchTaps}
+          isRefreshing={isTapsFetching}
         />
         <StatsCard
           title={t('admin.stats.pendingVerifications')}
@@ -64,6 +72,8 @@ export const AdminDashboardPage = () => {
           icon={<AlertTriangle className="h-4 w-4" />}
           description={t('admin.stats.requiresReview')}
           isLoading={isPendingLoading}
+          onRefresh={refetchPending}
+          isRefreshing={isPendingFetching}
         />
         <StatsCard
           title={t('admin.stats.systemHealth')}

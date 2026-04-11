@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+use async_nats::Client as NatsClient;
+
 use parking_lot::Mutex;
 use tokio::sync::watch;
 use zako3_types::hq::TapId;
@@ -33,6 +35,7 @@ pub struct TapHub {
     pub audio_preload: Arc<AudioPreload>,
     pub audio_cache: Arc<FileAudioCache>,
     pub request_timeout: Duration,
+    pub nats_client: Option<Arc<NatsClient>>,
     pub(crate) connection_signals: ConnectionSignals,
 }
 
@@ -44,6 +47,7 @@ impl TapHub {
         key_file: impl AsRef<Path>,
         cache_dir: PathBuf,
         request_timeout_ms: u64,
+        nats_client: Option<Arc<NatsClient>>,
     ) -> Result<Self, ZakofishError> {
         let server_config = create_server_config(
             bind_address.parse().map_err(|_| {
@@ -77,6 +81,7 @@ impl TapHub {
             audio_preload: Arc::new(AudioPreload::new(cache_dir, None)),
             audio_cache: Arc::new(audio_cache),
             request_timeout: Duration::from_millis(request_timeout_ms),
+            nats_client,
             connection_signals,
         })
     }

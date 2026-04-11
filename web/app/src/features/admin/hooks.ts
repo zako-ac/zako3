@@ -28,6 +28,7 @@ export const usePendingVerifications = () => {
   return useQuery({
     queryKey: adminKeys.pendingVerifications(),
     queryFn: () => adminApi.getPendingVerifications(),
+    refetchInterval: 60_000,
   })
 }
 

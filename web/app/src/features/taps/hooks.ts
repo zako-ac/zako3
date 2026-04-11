@@ -52,6 +52,7 @@ export const useTapStats = (tapId: string | undefined) => {
     queryKey: tapKeys.stats(tapId!),
     queryFn: () => tapsApi.getTapStats(tapId!),
     enabled: !!tapId,
+    refetchInterval: 60_000,
   })
 }
 
@@ -67,6 +68,7 @@ export const useMyTaps = (params: Partial<PaginationParams> = {}) => {
   return useQuery({
     queryKey: [...tapKeys.myTaps(), params],
     queryFn: () => tapsApi.getMyTaps(params),
+    refetchInterval: 60_000,
   })
 }
 

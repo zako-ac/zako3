@@ -73,6 +73,8 @@ spec:
               value: {{ .Values.hq.mapperDbPath | quote }}
             - name: OTLP_ENDPOINT
               value: "http://{{ $fullname }}-otel-lgtm:4317"
+            - name: NATS_URL
+              value: "nats://{{ $fullname }}-nats:4222"
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
             - name: TRAFFIC_LIGHT_URL

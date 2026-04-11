@@ -74,6 +74,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Cleared online state for {} known taps", known_taps.len());
 
+    let nats_client = match &config.nats_url {
+        Some(url) => {
+            tracing::info!("Connecting to NATS at {}", url);
+            let client = async_nats::connect(url).await?;
+            Some(Arc::new(client))
+        }
+        None => {
+            tracing::info!("ZK_TH_NATS_URL not set; tap_used events will not be published");
+            None
+        }
+    };
+
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,
@@ -81,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &config.zakofish_key_file,
         config.cache_dir.clone(),
         config.request_timeout_ms,
+        nats_client,
     )
     .await?;
     let tap_hub = Arc::new(tap_hub);

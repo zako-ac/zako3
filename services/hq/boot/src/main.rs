@@ -1,3 +1,4 @@
+use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
 use hq_core::{get_pool, run_migrations, AppConfig, Service};
 use std::sync::Arc;
@@ -27,15 +28,33 @@ async fn main() -> anyhow::Result<()> {
 
     let service = Service::new(pool, timescale_pool, config.clone()).await?;
 
-    // Broadcast channel for playback state events (WebSocket clients subscribe here).
-    // Events are not currently pushed; clients should poll /api/v1/playback/state.
+    // Broadcast channel for playback state events.
     let (event_tx, _) = broadcast::channel::<String>(128);
+
+    // Broadcast channel for stats events — fired whenever a tap processes an audio request.
+    let (stats_tx, _) = broadcast::channel::<()>(128);
+
+    // Subscribe to NATS tap_used events and bridge to stats_tx.
+    if let Some(ref url) = config.nats_url {
+        let stats_tx2 = stats_tx.clone();
+        let nats = async_nats::connect(url.as_str()).await?;
+        let mut sub = nats.subscribe("zako3.stats.tap_used").await?;
+        tokio::spawn(async move {
+            while sub.next().await.is_some() {
+                let _ = stats_tx2.send(());
+            }
+        });
+        info!("Subscribed to NATS zako3.stats.tap_used at {}", url);
+    } else {
+        info!("NATS_URL not set; stats SSE will not receive live updates");
+    }
 
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();
     let event_tx_backend = event_tx.clone();
+    let stats_tx_backend = stats_tx.clone();
     let backend_task = tokio::spawn(async move {
-        let app = hq_backend::app(service_backend, event_tx_backend);
+        let app = hq_backend::app(service_backend, event_tx_backend, stats_tx_backend);
 
         let listener = TcpListener::bind(&backend_address)
             .await
