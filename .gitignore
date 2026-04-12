@@ -203,3 +203,5 @@ cabal.project.local~
 *-prompt.md
 
 claude-docs
+
+o2_data/

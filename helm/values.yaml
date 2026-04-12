@@ -135,15 +135,15 @@ redis:
 nats:
   image: nats:2-alpine
 
-# --- Otel-LGTM ---
-otelLgtm:
-  image: grafana/otel-lgtm:latest
-  adminUser: "admin"
-  adminPassword: ""
+# --- OpenObserve ---
+openobserve:
+  image: public.ecr.aws/zinclabs/openobserve:latest
+  otelCollectorImage: otel/opentelemetry-collector-contrib:latest
+  rootUserEmail: "admin@example.com"
+  rootUserPassword: ""
   existingSecret:
     name: ""
-    adminUserKey: "admin-user"
-    adminPasswordKey: "admin-password"
-  storageSize: "2Gi"
-  prometheusStorageSize: "10Gi"
-  tempoStorageSize: "10Gi"
+    emailKey: "root-user-email"
+    passwordKey: "root-user-password"
+    basicAuthKey: "basic-auth"
+  storageSize: "20Gi"

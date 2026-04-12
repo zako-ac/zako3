@@ -1,0 +1,172 @@
+{{- $fullname := include "zako3.fullname" . -}}
+{{- $secretName := ternary (printf "%s-openobserve-secret" $fullname) .Values.openobserve.existingSecret.name (not .Values.openobserve.existingSecret.name) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-openobserve-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.openobserve.storageSize }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-otel-collector-config
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+data:
+  otel-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    exporters:
+      otlp_http/openobserve:
+        endpoint: "http://{{ $fullname }}-openobserve:5080/api/default"
+        headers:
+          Authorization: "Basic ${OO_BASIC_AUTH}"
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [otlp_http/openobserve]
+        metrics:
+          receivers: [otlp]
+          exporters: [otlp_http/openobserve]
+        logs:
+          receivers: [otlp]
+          exporters: [otlp_http/openobserve]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-openobserve
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openobserve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 8 }}
+    spec:
+      containers:
+        - name: openobserve
+          image: {{ .Values.openobserve.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 5080
+          env:
+            - name: ZO_DATA_DIR
+              value: /data
+            - name: ZO_ROOT_USER_EMAIL
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-openobserve-secret" $fullname)
+                    "existingName" .Values.openobserve.existingSecret.name
+                    "key" .Values.openobserve.existingSecret.emailKey) | nindent 16 }}
+            - name: ZO_ROOT_USER_PASSWORD
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-openobserve-secret" $fullname)
+                    "existingName" .Values.openobserve.existingSecret.name
+                    "key" .Values.openobserve.existingSecret.passwordKey) | nindent 16 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-openobserve-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-openobserve
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: http
+      port: 5080
+      targetPort: 5080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-otel-collector
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 8 }}
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.openobserve.otelCollectorImage }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--config=/etc/otel-config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+          env:
+            - name: OO_BASIC_AUTH
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-openobserve-secret" $fullname)
+                    "existingName" .Values.openobserve.existingSecret.name
+                    "key" .Values.openobserve.existingSecret.basicAuthKey) | nindent 16 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-config.yaml
+              subPath: otel-config.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-otel-collector
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318

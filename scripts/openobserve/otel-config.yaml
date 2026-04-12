@@ -1,0 +1,26 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  otlphttp/openobserve:
+    endpoint: "http://openobserve:5080/api/default"
+    headers:
+      # Replace with your Base64 encoded 'email:password'
+      Authorization: "Basic YWRtaW5AZXhhbXBsZS5jb206bXlwYXNzd29yZA=="
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/openobserve]
+    metrics:
+      receivers: [otlp]
+      exporters: [otlphttp/openobserve]
+    logs:
+      receivers: [otlp]
+      exporters: [otlphttp/openobserve]

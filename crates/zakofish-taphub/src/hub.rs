@@ -259,6 +259,12 @@ async fn handle_new_connection(
                     )
                     .await;
 
+                    // Explicitly close the underlying QUIC connection so the tap detects
+                    // the disconnect. Without this, the protofish2 keepalive task (which
+                    // holds its own quinn::Connection clone) keeps the QUIC connection alive
+                    // indefinitely, and the tap's keepalive timer never fires.
+                    conn_arc.lock().await.close();
+
                     {
                         let mut sessions = sessions.lock().await;
                         if let Some(conns) = sessions.get_mut(&tap_id_wire) {

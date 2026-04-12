@@ -58,7 +58,7 @@ spec:
             - name: ZK_TH_REQUEST_TIMEOUT_MS
               value: {{ .Values.taphub.requestTimeoutMs | quote }}
             - name: ZK_TH_OTLP_ENDPOINT
-              value: "http://{{ $fullname }}-otel-lgtm:4317"
+              value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: ZK_TH_METRICS_PORT
               value: {{ .Values.taphub.metricsPort | quote }}
             - name: ZK_TH_HQ_RPC_ADMIN_TOKEN
@@ -133,6 +133,7 @@ metadata:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
   ports:

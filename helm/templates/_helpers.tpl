@@ -70,11 +70,18 @@ affinity:
 {{- end }}
 
 {{/*
+OTLP endpoint URL
+*/}}
+{{- define "zako3.otlpEndpoint" -}}
+http://{{ include "zako3.fullname" . }}-otel-collector:4317
+{{- end }}
+
+{{/*
 OTLP + Redis shared env vars
 */}}
 {{- define "zako3.sharedEnv" -}}
 - name: OTLP_ENDPOINT
-  value: "http://{{ include "zako3.fullname" . }}-otel-lgtm:4317"
+  value: {{ include "zako3.otlpEndpoint" . | quote }}
 - name: REDIS_URL
   value: "redis://{{ include "zako3.fullname" . }}-redis:6379"
 {{- end }}

@@ -72,7 +72,7 @@ spec:
             - name: MAPPER_DB_PATH
               value: {{ .Values.hq.mapperDbPath | quote }}
             - name: OTLP_ENDPOINT
-              value: "http://{{ $fullname }}-otel-lgtm:4317"
+              value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
             - name: REDIS_URL

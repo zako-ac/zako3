@@ -64,7 +64,7 @@ spec:
             - name: TAPHUB_TRANSPORT_CERT_FILE
               value: "/certs/transport/{{ .Values.taphub.transportTlsCertFilename }}"
             - name: OTLP_ENDPOINT
-              value: "http://{{ $fullname }}-otel-lgtm:4317"
+              value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: METRICS_PORT
               value: "9090"
             - name: DISCORD_TOKEN

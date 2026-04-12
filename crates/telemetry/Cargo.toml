@@ -16,3 +16,4 @@ opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic", "metrics"] }
 tonic = { version = "0.14", default-features = false }
 opentelemetry-prometheus = "0.31"
 prometheus = "0.14"
+opentelemetry-appender-tracing = "0.31"
