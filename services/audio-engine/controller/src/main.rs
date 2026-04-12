@@ -18,7 +18,7 @@ use zako3_audio_engine_infra::{
     InMemoryStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
-use zako3_audio_engine_telemetry::TelemetryConfig;
+use zako3_telemetry::TelemetryConfig;
 use zako3_ae_transport::TlClient;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
 
@@ -33,10 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let telem_config = TelemetryConfig {
         service_name: config.service_name.clone(),
         otlp_endpoint: config.otlp_endpoint.clone(),
-        metrics_port: config.metrics_port,
+        metrics_port: Some(config.metrics_port),
     };
 
-    let telemetry = zako3_audio_engine_telemetry::init(telem_config).await?;
+    let telemetry = zako3_telemetry::init(telem_config).await?;
 
     let certs = load_certs(&config.taphub_transport_cert_file).unwrap_or_else(|_| vec![]);
 

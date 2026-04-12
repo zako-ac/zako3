@@ -82,6 +82,8 @@ OTLP + Redis shared env vars
 {{- define "zako3.sharedEnv" -}}
 - name: OTLP_ENDPOINT
   value: {{ include "zako3.otlpEndpoint" . | quote }}
+- name: OTEL_FILTER
+  value: {{ .Values.telemetry.otelFilter | quote }}
 - name: REDIS_URL
   value: "redis://{{ include "zako3.fullname" . }}-redis:6379"
 {{- end }}

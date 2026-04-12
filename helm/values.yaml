@@ -3,6 +3,10 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+# Telemetry configuration
+telemetry:
+  otelFilter: "debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off,jsonrpsee=off,serenity::gateway=off"
+
 # Global nodeAffinity applied to all pods unless overridden per-service
 nodeAffinity: {}
 

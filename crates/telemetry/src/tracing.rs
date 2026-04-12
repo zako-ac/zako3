@@ -36,6 +36,8 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
 
     if let Some(endpoint) = otlp_endpoint {
         let headers_env = std::env::var("OTEL_EXPORTER_OTLP_HEADERS").ok();
+        let otel_filter = std::env::var("OTEL_FILTER")
+            .unwrap_or_else(|_| "debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off,jsonrpsee=off,serenity::gateway=off".to_string());
         let resource = Resource::builder()
             .with_service_name(service_name.to_string())
             .build();
@@ -64,10 +66,10 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
             .with_resource(resource)
             .build();
         let log_bridge = OpenTelemetryTracingBridge::new(&logger_provider)
-            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off,jsonrpsee=off,serenity::gateway=off"));
+            .with_filter(EnvFilter::new(&otel_filter));
         let otel_layer = tracing_opentelemetry::layer()
             .with_tracer(tracer)
-            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off,jsonrpsee=off,serenity::gateway=off"));
+            .with_filter(EnvFilter::new(&otel_filter));
         registry.with(otel_layer).with(log_bridge).init();
     } else {
         registry.init();
