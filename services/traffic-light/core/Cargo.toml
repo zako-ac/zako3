@@ -1,17 +1,17 @@
 [package]
 name = "zako3-tl-core"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+async-trait.workspace = true
 derive_more = { version = "2.1.1", features = ["from", "into", "from_str", "default", "display", "add", "full"] }
-serde = { workspace = true, features = ["derive"] }
-thiserror.workspace = true
-zako3-types.workspace = true
-zako3-audio-engine-client.workspace = true
 parking_lot = "0.12.5"
 rustc-hash = "2.1.2"
-tl-protocol = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+tl-protocol.workspace = true
+tokio.workspace = true
 tracing.workspace = true
-tokio = { workspace = true }
-async-trait.workspace = true
+zako3-types.workspace = true
+

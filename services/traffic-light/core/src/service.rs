@@ -380,3 +380,205 @@ impl TlService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustc_hash::FxHashMap;
+    use std::sync::Mutex;
+    use tl_protocol::{AudioEngineCommand, SessionInfo, AudioEngineSessionCommand};
+    use zako3_types::{ChannelId, GuildId};
+    use crate::{AeId, DiscordToken, TlError, Worker, WorkerId, WorkerPermissions};
+
+    #[derive(Clone)]
+    enum MockCall {
+        FetchDiscordVoiceState,
+        Leave(SessionInfo),
+    }
+
+    struct TestDispatcher {
+        calls: Arc<Mutex<Vec<MockCall>>>,
+        response: Arc<dyn Fn() -> Result<AudioEngineCommandResponse, TlError> + Send + Sync>,
+    }
+
+    #[async_trait::async_trait]
+    impl AeDispatcher for TestDispatcher {
+        async fn send(
+            &self,
+            _route: SessionRoute,
+            req: AudioEngineCommandRequest,
+        ) -> Result<AudioEngineCommandResponse, TlError> {
+            match &req.command {
+                AudioEngineCommand::FetchDiscordVoiceState => {
+                    self.calls.lock().unwrap().push(MockCall::FetchDiscordVoiceState);
+                }
+                AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave) => {
+                    if let Some(s) = req.session {
+                        self.calls.lock().unwrap().push(MockCall::Leave(s));
+                    }
+                }
+                _ => {}
+            }
+            (self.response)()
+        }
+    }
+
+    fn route() -> SessionRoute {
+        SessionRoute {
+            worker_id: WorkerId(0),
+            ae_id: AeId(1),
+        }
+    }
+
+    fn session(g: u64, c: u64) -> SessionInfo {
+        SessionInfo {
+            guild_id: GuildId::from(g),
+            channel_id: ChannelId::from(c),
+        }
+    }
+
+    fn state_with_no_ae() -> Arc<RwLock<ZakoState>> {
+        Arc::new(RwLock::new(ZakoState {
+            workers: FxHashMap::default(),
+            sessions: Default::default(),
+            worker_cursor: 0,
+        }))
+    }
+
+    fn state_with_connected_ae() -> Arc<RwLock<ZakoState>> {
+        let mut workers = FxHashMap::default();
+        workers.insert(
+            WorkerId(0),
+            Worker {
+                worker_id: WorkerId(0),
+                bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+                discord_token: DiscordToken(String::new()),
+                connected_ae_ids: vec![1],
+                permissions: WorkerPermissions::new(),
+                ae_cursor: 0,
+            },
+        );
+        Arc::new(RwLock::new(ZakoState {
+            workers,
+            sessions: Default::default(),
+            worker_cursor: 0,
+        }))
+    }
+
+    fn state_with_session(s: SessionInfo) -> Arc<RwLock<ZakoState>> {
+        let mut sessions: FxHashMap<SessionRoute, SessionInfo> = Default::default();
+        sessions.insert(route(), s);
+        let mut workers = FxHashMap::default();
+        workers.insert(
+            WorkerId(0),
+            Worker {
+                worker_id: WorkerId(0),
+                bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+                discord_token: DiscordToken(String::new()),
+                connected_ae_ids: vec![1],
+                permissions: WorkerPermissions::new(),
+                ae_cursor: 0,
+            },
+        );
+        Arc::new(RwLock::new(ZakoState {
+            workers,
+            sessions,
+            worker_cursor: 0,
+        }))
+    }
+
+    #[tokio::test]
+    async fn reconcile_no_connected_aes_does_nothing() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+        TlService::new(state_with_no_ae(), dispatcher).reconcile().await;
+        assert_eq!(calls.lock().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn reconcile_tl_restart_dangling_session() {
+        let discord_session = session(1, 100);
+        let state = state_with_connected_ae();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(move || {
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![discord_session]))
+            }),
+        });
+
+        TlService::new(state, dispatcher).reconcile().await;
+
+        let call_list = calls.lock().unwrap();
+        assert_eq!(call_list.len(), 2);
+        assert!(matches!(call_list[0], MockCall::FetchDiscordVoiceState));
+        assert!(matches!(call_list[1], MockCall::Leave(s) if s == discord_session));
+    }
+
+    #[tokio::test]
+    async fn reconcile_matching_sessions_no_leave() {
+        let s = session(1, 100);
+        let state = state_with_session(s);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(move || Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![s]))),
+        });
+
+        TlService::new(state, dispatcher).reconcile().await;
+
+        let call_list = calls.lock().unwrap();
+        assert_eq!(call_list.len(), 1, "Should only call FetchDiscordVoiceState, no Leave");
+        assert!(matches!(call_list[0], MockCall::FetchDiscordVoiceState));
+    }
+
+    #[tokio::test]
+    async fn reconcile_partial_dangling() {
+        let cached = session(1, 100);
+        let dangling = session(2, 200);
+        let state = state_with_session(cached);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(move || {
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![cached, dangling]))
+            }),
+        });
+
+        TlService::new(state, dispatcher).reconcile().await;
+
+        let call_list = calls.lock().unwrap();
+        assert_eq!(call_list.len(), 2);
+        assert!(matches!(call_list[0], MockCall::FetchDiscordVoiceState));
+        assert!(matches!(call_list[1], MockCall::Leave(s) if s == dangling));
+    }
+
+    #[tokio::test]
+    async fn reconcile_fetch_dispatch_error_continues() {
+        let state = state_with_connected_ae();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Err(TlError::Transport("AE dead".into()))),
+        });
+
+        TlService::new(state, dispatcher).reconcile().await;
+        // Should complete without panic
+    }
+
+    #[tokio::test]
+    async fn reconcile_unexpected_response_continues() {
+        let state = state_with_connected_ae();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        TlService::new(state, dispatcher).reconcile().await;
+        // Should complete without panic
+    }
+}

@@ -43,10 +43,10 @@ fn make_request() -> AudioEngineCommandRequest {
     use tl_protocol::{AudioEngineCommand, SessionInfo};
     use zako3_types::{ChannelId, GuildId};
     AudioEngineCommandRequest {
-        session: SessionInfo {
+        session: Some(SessionInfo {
             guild_id: GuildId::from(1u64),
             channel_id: ChannelId::from(2u64),
-        },
+        }),
         command: AudioEngineCommand::Join,
         headers: HashMap::new(),
         idempotency_key: None,

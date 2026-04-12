@@ -151,3 +151,132 @@ fn err(msg: &str) -> AudioEngineCommandResponse {
     error!(msg, "AudioEngine command error");
     AudioEngineCommandResponse::Error(AudioEngineError::InternalError(msg.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tl_protocol::SessionInfo;
+    use zako3_audio_engine_core::service::discord::MockDiscordService;
+    use zako3_audio_engine_core::service::state::MockStateService;
+    use zako3_audio_engine_core::service::taphub::MockTapHubService;
+    use zako3_audio_engine_core::types::{ChannelId, GuildId};
+    use zako3_audio_engine_core::engine::session_manager::SessionManager;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn handler_fetch_discord_voice_state_returns_sessions() {
+        let guild_id = GuildId::from(1);
+        let channel_id = ChannelId::from(100);
+
+        let mut mock_discord = MockDiscordService::new();
+        let mock_state = MockStateService::new();
+        let mock_taphub = MockTapHubService::new();
+
+        mock_discord
+            .expect_get_active_voice_connections()
+            .times(1)
+            .returning(move || Ok(vec![(guild_id, channel_id)]));
+
+        let session_manager = Arc::new(SessionManager::new(
+            Arc::new(mock_discord),
+            Arc::new(mock_state),
+            Arc::new(mock_taphub),
+        ));
+
+        let handler = AeTransportHandler::new(session_manager);
+        let req = AudioEngineCommandRequest {
+            session: None,
+            command: AudioEngineCommand::FetchDiscordVoiceState,
+            headers: HashMap::new(),
+            idempotency_key: None,
+        };
+
+        let resp = handler.handle(req, &HashMap::new()).await;
+
+        match resp {
+            AudioEngineCommandResponse::DiscordVoiceState(sessions) => {
+                assert_eq!(sessions.len(), 1);
+                assert_eq!(
+                    sessions[0],
+                    SessionInfo {
+                        guild_id: GuildId::from(1),
+                        channel_id: ChannelId::from(100),
+                    }
+                );
+            }
+            _ => panic!("Expected DiscordVoiceState response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handler_fetch_discord_voice_state_empty() {
+        let mut mock_discord = MockDiscordService::new();
+        let mock_state = MockStateService::new();
+        let mock_taphub = MockTapHubService::new();
+
+        mock_discord
+            .expect_get_active_voice_connections()
+            .times(1)
+            .returning(|| Ok(vec![]));
+
+        let session_manager = Arc::new(SessionManager::new(
+            Arc::new(mock_discord),
+            Arc::new(mock_state),
+            Arc::new(mock_taphub),
+        ));
+
+        let handler = AeTransportHandler::new(session_manager);
+        let req = AudioEngineCommandRequest {
+            session: None,
+            command: AudioEngineCommand::FetchDiscordVoiceState,
+            headers: HashMap::new(),
+            idempotency_key: None,
+        };
+
+        let resp = handler.handle(req, &HashMap::new()).await;
+
+        match resp {
+            AudioEngineCommandResponse::DiscordVoiceState(sessions) => {
+                assert_eq!(sessions.len(), 0);
+            }
+            _ => panic!("Expected DiscordVoiceState response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handler_fetch_discord_voice_state_error() {
+        use std::io;
+
+        let mut mock_discord = MockDiscordService::new();
+        let mock_state = MockStateService::new();
+        let mock_taphub = MockTapHubService::new();
+
+        mock_discord
+            .expect_get_active_voice_connections()
+            .times(1)
+            .returning(|| Err(io::Error::new(io::ErrorKind::Other, "Discord error").into()));
+
+        let session_manager = Arc::new(SessionManager::new(
+            Arc::new(mock_discord),
+            Arc::new(mock_state),
+            Arc::new(mock_taphub),
+        ));
+
+        let handler = AeTransportHandler::new(session_manager);
+        let req = AudioEngineCommandRequest {
+            session: None,
+            command: AudioEngineCommand::FetchDiscordVoiceState,
+            headers: HashMap::new(),
+            idempotency_key: None,
+        };
+
+        let resp = handler.handle(req, &HashMap::new()).await;
+
+        match resp {
+            AudioEngineCommandResponse::Error(_) => {
+                // Expected
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+}
