@@ -18,9 +18,9 @@ spec:
     - name: metrics
       port: 9090
       targetPort: metrics
-    - name: tarpc
-      port: {{ .Values.ports.tlTarpc }}
-      targetPort: tarpc
+    - name: rpc
+      port: {{ .Values.ports.tlRpc }}
+      targetPort: rpc
     - name: ae-transport
       port: {{ .Values.ports.tlAeTransport }}
       targetPort: ae-transport
@@ -54,15 +54,15 @@ spec:
           ports:
             - name: metrics
               containerPort: 9090
-            - name: tarpc
-              containerPort: {{ .Values.ports.tlTarpc }}
+            - name: rpc
+              containerPort: {{ .Values.ports.tlRpc }}
             - name: ae-transport
               containerPort: {{ .Values.ports.tlAeTransport }}
           env:
             - name: METRICS_PORT
               value: {{ .Values.trafficLight.metricsPort | quote }}
-            - name: TARPC_ADDR
-              value: "0.0.0.0:{{ .Values.ports.tlTarpc }}"
+            - name: RPC_ADDR
+              value: "0.0.0.0:{{ .Values.ports.tlRpc }}"
             - name: AE_TRANSPORT_ADDR
               value: "0.0.0.0:{{ .Values.ports.tlAeTransport }}"
             - name: OTLP_ENDPOINT

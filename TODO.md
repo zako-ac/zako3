@@ -6,7 +6,8 @@ refer hq todo
 - [x] Fix graph
 - [x] use SSE for live update in queue and stats
 
-- [ ] Show Duration: maybe Tap "capabilities"?
+- [ ] add AE controller to zakoctl
+- [ ] AE controller -> boot
 
 - [ ] re-join logic in HQ/AE
 - [ ] Add translations for errors in bot
@@ -59,6 +60,7 @@ refer hq todo
 - [ ] Emoji/Text mapping scope elevation request
 - [ ] Standardize service folder structure to "boot"
 - [ ] pre-settings: Admin can change UserSettings even user is not registered
+- [ ] Show Duration: maybe Tap "capabilities"?
 
 ## Do before production
 - [ ] Captcha

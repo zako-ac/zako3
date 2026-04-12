@@ -113,12 +113,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 3b: Spawn background guild reporter.
     tokio::spawn(run_guild_reporter(
         serenity_ctx.clone(),
-        config.tl_tarpc_addr.clone(),
+        config.tl_rpc_url.clone(),
         token.0.clone(),
     ));
 
     // Step 4: Serve requests. On TL disconnect, reconnect TL only (Discord stays alive).
-    report_guilds_once(&serenity_ctx, &config.tl_tarpc_addr, &token.0).await;
+    report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
     let handler = AeTransportHandler::new(session_manager.clone());
     if let Err(e) = connected.serve(handler).await {
         tracing::warn!("TL connection lost: {e}, reconnecting...");
@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match TlClient::connect(addr.as_str(), HashMap::new()).await {
             Ok((_, _, connected)) => {
                 tracing::info!("Reconnected to TL server");
-                report_guilds_once(&serenity_ctx, &config.tl_tarpc_addr, &token.0).await;
+                report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
                 let handler = AeTransportHandler::new(session_manager.clone());
                 if let Err(e) = connected.serve(handler).await {
                     tracing::warn!("TL connection lost: {e}, reconnecting...");

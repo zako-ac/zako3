@@ -12,12 +12,11 @@ zako3-tl-core.workspace = true
 zako3-tl-infra.workspace = true
 tl-protocol.workspace = true
 zako3-telemetry.workspace = true
-tarpc = { workspace = true }
+jsonrpsee = { workspace = true }
 tokio = { workspace = true }
 tracing.workspace = true
 serde = { workspace = true, features = ["derive"] }
 dotenvy.workspace = true
 envy.workspace = true
 anyhow.workspace = true
-futures = "0.3"
 zako3-types.workspace = true

@@ -55,8 +55,8 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: AE_TRANSPORT_ADDR
               value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlAeTransport }}"
-            - name: TL_TARPC_ADDR
-              value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlTarpc }}"
+            - name: TL_RPC_URL
+              value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: TAPHUB_URL
               value: "{{ $fullname }}-taphub:{{ .Values.ports.taphubTransport }}"
             - name: TAPHUB_SNI

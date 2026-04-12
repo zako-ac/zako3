@@ -14,3 +14,8 @@
 
 For tasks that require fast speed and repetition, use `build` agent with `opencode_run` for quick execution.
 For task that require fast speed and repetition and is READ ONLY, use `plan` agent with `opencode`. Also use it for exploring codebase.
+
+# Config Addition Guide
+1. Update the source code, of course.
+2. Update corresponding .env.example
+3. Update helm

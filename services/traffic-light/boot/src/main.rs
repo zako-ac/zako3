@@ -1,14 +1,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use futures::StreamExt as _;
 use serde::Deserialize;
-use tarpc::{
-    context::Context,
-    server::{BaseChannel, Channel},
-    tokio_serde::formats::Json,
-};
-use tl_protocol::{AudioEngineCommandRequest, AudioEngineCommandResponse, TrafficLight};
+use tl_protocol::{AudioEngineCommandRequest, AudioEngineCommandResponse, TrafficLightRpcServer};
 use zako3_types::{GuildId, SessionState};
 use tokio::sync::RwLock;
 use tracing::info;
@@ -18,6 +12,8 @@ use zako3_tl_core::{
 use zako3_tl_infra::AeRegistry;
 use zako3_telemetry::TelemetryConfig;
 use zako3_types::hq::DiscordUserId;
+use jsonrpsee::core::{async_trait, RpcResult};
+use jsonrpsee::server::Server;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -30,9 +26,9 @@ struct AppConfig {
     #[serde(default = "default_metrics_port")]
     pub metrics_port: u16,
 
-    // tarpc listener (callers connect here)
-    #[serde(default = "default_tarpc_addr")]
-    pub tarpc_addr: SocketAddr,
+    // RPC listener (callers connect here)
+    #[serde(default = "default_rpc_addr")]
+    pub rpc_addr: SocketAddr,
 
     // ae-transport listener (AEs connect here)
     #[serde(default = "default_ae_transport_addr")]
@@ -46,7 +42,7 @@ fn default_metrics_port() -> u16 {
     9090
 }
 
-fn default_tarpc_addr() -> SocketAddr {
+fn default_rpc_addr() -> SocketAddr {
     "0.0.0.0:7070".parse().unwrap()
 }
 
@@ -68,7 +64,7 @@ impl AppConfig {
 }
 
 // ---------------------------------------------------------------------------
-// tarpc service impl
+// jsonrpsee service impl
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -76,21 +72,18 @@ struct TrafficLightServiceImpl {
     tl: Arc<TlService>,
 }
 
-impl TrafficLight for TrafficLightServiceImpl {
-    async fn execute(
-        self,
-        _ctx: Context,
-        request: AudioEngineCommandRequest,
-    ) -> AudioEngineCommandResponse {
-        self.tl.execute(request).await
+#[async_trait]
+impl TrafficLightRpcServer for TrafficLightServiceImpl {
+    async fn execute(&self, request: AudioEngineCommandRequest) -> RpcResult<AudioEngineCommandResponse> {
+        Ok(self.tl.execute(request).await)
     }
 
-    async fn get_sessions_in_guild(self, _ctx: Context, guild_id: GuildId) -> Vec<SessionState> {
-        self.tl.get_sessions_in_guild(guild_id).await
+    async fn get_sessions_in_guild(&self, guild_id: GuildId) -> RpcResult<Vec<SessionState>> {
+        Ok(self.tl.get_sessions_in_guild(guild_id).await)
     }
 
-    async fn report_guilds(self, _ctx: Context, token: String, guilds: Vec<GuildId>) {
-        self.tl.report_guilds(token, guilds).await
+    async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> RpcResult<()> {
+        Ok(self.tl.report_guilds(token, guilds).await)
     }
 }
 
@@ -191,32 +184,17 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Start tarpc listener
-    let mut listener =
-        tarpc::serde_transport::tcp::listen(&config.tarpc_addr, Json::default).await?;
-    info!("tarpc listening on {}", config.tarpc_addr);
+    let svc = TrafficLightServiceImpl { tl: tl_service };
+
+    // Start JSON-RPC HTTP listener
+    let server = Server::builder().build(config.rpc_addr).await?;
+    info!("RPC server listening on {}", config.rpc_addr);
 
     telemetry.healthy();
     info!("Traffic Light is ready");
 
-    let svc = TrafficLightServiceImpl { tl: tl_service };
-
-    while let Some(conn) = listener.next().await {
-        let transport = match conn {
-            Ok(t) => t,
-            Err(e) => {
-                tracing::warn!("tarpc accept error: {e}");
-                continue;
-            }
-        };
-        let svc = svc.clone();
-        tokio::spawn(async move {
-            BaseChannel::with_defaults(transport)
-                .execute(svc.serve())
-                .for_each_concurrent(None, |fut| fut)
-                .await;
-        });
-    }
+    let handle = server.start(svc.into_rpc());
+    handle.stopped().await;
 
     Ok(())
 }

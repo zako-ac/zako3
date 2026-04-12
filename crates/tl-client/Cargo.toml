@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 tl-protocol.workspace = true
-tarpc.workspace = true
+jsonrpsee = { workspace = true }
 tokio.workspace = true
 anyhow.workspace = true
 zako3-types.workspace = true

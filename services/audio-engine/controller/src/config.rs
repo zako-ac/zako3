@@ -4,8 +4,8 @@ use serde::Deserialize;
 pub struct AppConfig {
     #[serde(default = "default_ae_transport_addr")]
     pub ae_transport_addr: String,
-    #[serde(default = "default_tl_tarpc_addr")]
-    pub tl_tarpc_addr: String,
+    #[serde(default = "default_tl_rpc_url")]
+    pub tl_rpc_url: String,
     #[serde(default = "default_taphub_url")]
     pub taphub_url: String,
     #[serde(default = "default_taphub_sni")]
@@ -25,8 +25,8 @@ fn default_ae_transport_addr() -> String {
     "127.0.0.1:5700".to_string()
 }
 
-fn default_tl_tarpc_addr() -> String {
-    "127.0.0.1:7070".to_string()
+fn default_tl_rpc_url() -> String {
+    "http://127.0.0.1:7070".to_string()
 }
 
 fn default_taphub_url() -> String {

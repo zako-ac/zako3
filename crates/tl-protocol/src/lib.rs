@@ -33,11 +33,16 @@ pub struct AudioEngineCommandRequest {
     pub idempotency_key: Option<String>,
 }
 
-#[tarpc::service]
-pub trait TrafficLight {
-    async fn execute(request: AudioEngineCommandRequest) -> AudioEngineCommandResponse;
-    async fn get_sessions_in_guild(guild_id: GuildId) -> Vec<SessionState>;
-    async fn report_guilds(token: String, guilds: Vec<GuildId>);
+#[jsonrpsee::proc_macros::rpc(server, client)]
+pub trait TrafficLightRpc {
+    #[method(name = "execute")]
+    async fn execute(&self, request: AudioEngineCommandRequest) -> jsonrpsee::core::RpcResult<AudioEngineCommandResponse>;
+
+    #[method(name = "get_sessions_in_guild")]
+    async fn get_sessions_in_guild(&self, guild_id: GuildId) -> jsonrpsee::core::RpcResult<Vec<SessionState>>;
+
+    #[method(name = "report_guilds")]
+    async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> jsonrpsee::core::RpcResult<()>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

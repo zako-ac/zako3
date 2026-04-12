@@ -42,7 +42,7 @@ impl Default for Config {
             current_context: "default".to_string(),
             contexts: vec![Context {
                 name: "default".to_string(),
-                ae_addr: "127.0.0.1:7070".to_string(),
+                ae_addr: "http://127.0.0.1:7070".to_string(),
                 ae_token: None,
                 hq_addr: default_hq_addr(),
                 hq_admin_token: None,

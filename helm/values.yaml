@@ -123,7 +123,7 @@ ports:
   hqRpc: 50052
   taphubTransport: 4000
   taphubZakofish: 7060
-  tlTarpc: 7070
+  tlRpc: 7070
   tlAeTransport: 7071
   web: 80
 

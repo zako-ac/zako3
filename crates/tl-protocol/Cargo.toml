@@ -7,4 +7,4 @@ edition = "2024"
 rkyv = "0.8.15"
 serde = { workspace = true, features = ["derive"] }
 zako3-types.workspace = true
-tarpc = { workspace = true }
+jsonrpsee = { workspace = true }

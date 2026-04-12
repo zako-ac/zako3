@@ -63,7 +63,6 @@ jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 protofish2 = { version = "0.6.5", features = ["opus", "jitter"] }
 async-nats = "0.45.0"
-tarpc = { version = "0.34", features = ["full"] }
 dashmap = "6"
 envy = "0.4"
 zako3-ae-transport = { path = "crates/ae-transport" }
