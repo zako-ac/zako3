@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ pub enum MixerCommand {
     RemoveSource(TrackId),
     SetVolume(TrackId, f32),
     HasSource(TrackId, tokio::sync::oneshot::Sender<bool>),
+    HasSources(Vec<TrackId>, tokio::sync::oneshot::Sender<HashSet<TrackId>>),
 }
 
 struct ManagedSource {
@@ -69,6 +71,13 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
                 MixerCommand::HasSource(track_id, resp_tx) => {
                     let has_source = sources.iter().any(|s| s.track_id == track_id);
                     let _ = resp_tx.send(has_source);
+                }
+                MixerCommand::HasSources(track_ids, resp_tx) => {
+                    let present: HashSet<TrackId> = track_ids
+                        .into_iter()
+                        .filter(|id| sources.iter().any(|s| s.track_id == *id))
+                        .collect();
+                    let _ = resp_tx.send(present);
                 }
             }
         }
@@ -165,6 +174,7 @@ pub trait Mixer: Send + Sync + 'static {
     fn remove_source(&self, track_id: TrackId);
     fn set_volume(&self, track_id: TrackId, volume: f32);
     async fn has_source(&self, track_id: TrackId) -> bool;
+    async fn has_sources(&self, track_ids: Vec<TrackId>) -> HashSet<TrackId>;
 }
 
 pub struct ThreadMixer {
@@ -203,6 +213,15 @@ impl Mixer for ThreadMixer {
         match tokio::time::timeout(std::time::Duration::from_secs(2), resp_rx).await {
             Ok(Ok(has_source)) => has_source,
             _ => false,
+        }
+    }
+
+    async fn has_sources(&self, track_ids: Vec<TrackId>) -> HashSet<TrackId> {
+        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+        let _ = self.cmd_tx.send(MixerCommand::HasSources(track_ids, resp_tx));
+        match tokio::time::timeout(std::time::Duration::from_secs(2), resp_rx).await {
+            Ok(Ok(present)) => present,
+            _ => HashSet::new(),
         }
     }
 }

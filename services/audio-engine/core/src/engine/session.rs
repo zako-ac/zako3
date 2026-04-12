@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tokio::sync::mpsc::Sender;
 use tracing::instrument;
@@ -7,7 +7,7 @@ use zako3_types::SessionState;
 
 use crate::{
     audio::{ArcDecoder, ArcMixer},
-    error::ZakoResult,
+    error::{ZakoError, ZakoResult},
     service::{ArcStateService, ArcTapHubService, modify_state_session},
     types::{
         AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, ChannelId, GuildId,
@@ -76,7 +76,12 @@ impl SessionControl {
             headers: Default::default(),
         };
 
-        let meta = self.taphub_service.request_audio_meta(ar.clone()).await?;
+        let meta = tokio::time::timeout(
+            Duration::from_secs(10),
+            self.taphub_service.request_audio_meta(ar.clone()),
+        )
+        .await
+        .map_err(|_| ZakoError::TaphubTimeout)??;
         tracing::info!("base_volume = {}", meta.base_volume);
 
         let effective_volume = Volume::from(f32::from(volume) * meta.base_volume);
@@ -360,11 +365,18 @@ impl SessionControl {
         if let Some(session) = session {
             let active_tracks = session.get_active_tracks();
 
+            let non_paused_ids: Vec<TrackId> = active_tracks
+                .iter()
+                .filter(|t| !t.paused)
+                .map(|t| t.track_id)
+                .collect();
+            let present = self.mixer.has_sources(non_paused_ids).await;
+
             for track in active_tracks {
                 if track.paused {
                     continue;
                 }
-                if !self.mixer.has_source(track.track_id).await {
+                if !present.contains(&track.track_id) {
                     if let Err(e) = self.play_now(track.clone()).await {
                         tracing::warn!(
                             track_id = %track.track_id,
@@ -404,10 +416,12 @@ impl SessionControl {
             "Starting playback"
         );
 
-        let response = self
-            .taphub_service
-            .request_audio(track.request.clone())
-            .await?;
+        let response = tokio::time::timeout(
+            Duration::from_secs(10),
+            self.taphub_service.request_audio(track.request.clone()),
+        )
+        .await
+        .map_err(|_| ZakoError::TaphubTimeout)??;
 
         let consumer = self
             .decoder

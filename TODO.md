@@ -11,6 +11,9 @@ refer hq todo
 
 - [ ] re-join logic in HQ/AE
 - [ ] Add translations for errors in bot
+- [ ] Fix mention matching
+- [ ] 첨부 파일 N개와 함께
+- [ ] 증발 not work in global settings
 
 # Done
 - [x] Implement multiple AE

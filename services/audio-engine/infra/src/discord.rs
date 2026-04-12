@@ -1,5 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serenity::all::ChannelId as SerenityChannelId;
@@ -44,7 +45,13 @@ impl DiscordService for SongbirdDiscordService {
 
             // Check if songbird has an active connection in this guild
             if let Some(call_lock) = self.manager.get(g_id) {
-                let call = call_lock.lock().await;
+                let call = match tokio::time::timeout(Duration::from_secs(3), call_lock.lock()).await {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        tracing::warn!(guild_id = ?guild_id, "Timed out acquiring Call lock, skipping guild");
+                        continue;
+                    }
+                };
 
                 // Get current connection info
                 if let Some(conn) = call.current_connection() {
@@ -82,7 +89,13 @@ impl DiscordService for SongbirdDiscordService {
         let g_id = Self::to_songbird_guild_id(guild_id);
 
         if let Some(call_lock) = self.manager.get(g_id) {
-            let call = call_lock.lock().await;
+            let call = match tokio::time::timeout(Duration::from_secs(3), call_lock.lock()).await {
+                Ok(guard) => guard,
+                Err(_) => {
+                    tracing::warn!(guild_id = ?guild_id, "Timed out acquiring Call lock for play_audio");
+                    return Ok(());
+                }
+            };
 
             // Play direct opus stream
             call.play_direct_opus(stream);

@@ -85,10 +85,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to create Discord client");
 
     tokio::spawn(async move {
-        let _ = discord_client.start().await.map_err(|e| {
+        if let Err(e) = discord_client.start().await {
             tracing::error!("Discord client ended: {:?}", e);
-            panic!();
-        });
+        } else {
+            tracing::warn!("Discord client exited without error");
+        }
+        tracing::error!("Discord task terminated, shutting down AE process for restart");
+        std::process::exit(1);
     });
 
     ready_recv.recv().await;

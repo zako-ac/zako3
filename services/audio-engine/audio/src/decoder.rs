@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use dashmap::DashMap;
 use mockall::automock;
 use ringbuf::traits::{Observer, Producer};
 use serenity::async_trait;
@@ -28,13 +28,13 @@ pub trait Decoder: Send + Sync + 'static {
 }
 
 pub struct PcmDecoder {
-    pause_txs: Arc<tokio::sync::Mutex<HashMap<TrackId, watch::Sender<bool>>>>,
+    pause_txs: Arc<DashMap<TrackId, watch::Sender<bool>>>,
 }
 
 impl PcmDecoder {
     pub fn new() -> Self {
         PcmDecoder {
-            pause_txs: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            pause_txs: Arc::new(DashMap::new()),
         }
     }
 }
@@ -57,10 +57,7 @@ impl Decoder for PcmDecoder {
 
         let (pause_tx, pause_rx) = watch::channel(false);
 
-        {
-            let mut pause_txs = self.pause_txs.lock().await;
-            pause_txs.insert(track_id, pause_tx);
-        }
+        self.pause_txs.insert(track_id, pause_tx);
 
         let pause_txs = self.pause_txs.clone();
 
@@ -71,41 +68,26 @@ impl Decoder for PcmDecoder {
             }
 
             // Clean up pause_txs entry on task exit
-            {
-                let mut pause_txs_guard = pause_txs.lock().await;
-                pause_txs_guard.remove(&track_id);
-            }
+            pause_txs.remove(&track_id);
         });
 
         Ok(cons)
     }
 
     fn pause_track(&self, track_id: TrackId) {
-        let pause_txs = self.pause_txs.clone();
-        tokio::spawn(async move {
-            let map = pause_txs.lock().await;
-            if let Some(tx) = map.get(&track_id) {
-                let _ = tx.send(true);
-            }
-        });
+        if let Some(tx) = self.pause_txs.get(&track_id) {
+            let _ = tx.send(true);
+        }
     }
 
     fn resume_track(&self, track_id: TrackId) {
-        let pause_txs = self.pause_txs.clone();
-        tokio::spawn(async move {
-            let map = pause_txs.lock().await;
-            if let Some(tx) = map.get(&track_id) {
-                let _ = tx.send(false);
-            }
-        });
+        if let Some(tx) = self.pause_txs.get(&track_id) {
+            let _ = tx.send(false);
+        }
     }
 
     fn stop_track(&self, track_id: TrackId) {
-        let pause_txs = self.pause_txs.clone();
-        tokio::spawn(async move {
-            let mut pause_txs_guard = pause_txs.lock().await;
-            pause_txs_guard.remove(&track_id);
-        });
+        self.pause_txs.remove(&track_id);
     }
 }
 

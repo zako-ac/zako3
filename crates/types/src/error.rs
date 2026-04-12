@@ -28,6 +28,9 @@ pub enum ZakoError {
 
     #[error("RPC error: {0}")]
     Rpc(String),
+
+    #[error("taphub request timed out")]
+    TaphubTimeout,
 }
 
 pub type ZakoResult<T> = Result<T, ZakoError>;
