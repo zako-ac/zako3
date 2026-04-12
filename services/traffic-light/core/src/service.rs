@@ -8,7 +8,7 @@ use zako3_types::{GuildId, SessionState};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::{AeDispatcher, RouterError, RouterResult, SessionRoute, StateChangeEvent, ZakoState, router};
+use crate::{AeDispatcher, AeId, RouterError, RouterResult, SessionRoute, StateChangeEvent, ZakoState, router};
 
 pub struct TlService {
     state: Arc<RwLock<ZakoState>>,
@@ -63,7 +63,62 @@ impl TlService {
                 }
             }
             Err(RouterError::NoAvailableWorker) => {
-                warn!("Routing failed: no available worker for guild");
+                // No eligible worker via normal routing — try every known AE as a last resort.
+                let all_routes: Vec<SessionRoute> = {
+                    let state = self.state.read().await;
+                    state
+                        .workers
+                        .iter()
+                        .flat_map(|(worker_id, worker)| {
+                            worker.connected_ae_ids.iter().map(|&ae_id| SessionRoute {
+                                worker_id: *worker_id,
+                                ae_id: AeId(ae_id),
+                            })
+                        })
+                        .collect()
+                };
+
+                warn!(
+                    route_count = all_routes.len(),
+                    "No eligible worker for guild; trying all AEs as fallback"
+                );
+
+                for route in all_routes {
+                    match self.dispatcher.send(route, request.clone()).await {
+                        Ok(resp)
+                            if matches!(
+                                &resp,
+                                AudioEngineCommandResponse::Ok
+                                    | AudioEngineCommandResponse::Error(
+                                        AudioEngineError::AlreadyJoined
+                                    )
+                            ) =>
+                        {
+                            if let Some(session_info) = request.session {
+                                let mut state = self.state.write().await;
+                                state.sessions.insert(route, session_info);
+                            }
+                            return AudioEngineCommandResponse::Ok;
+                        }
+                        Ok(err_resp) => {
+                            warn!(
+                                worker_id = route.worker_id.0,
+                                ae_id = route.ae_id.0,
+                                "AE rejected fallback Join: {err_resp:?}, trying next"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                worker_id = route.worker_id.0,
+                                ae_id = route.ae_id.0,
+                                error = %e,
+                                "Dispatch error on fallback Join, trying next"
+                            );
+                        }
+                    }
+                }
+
+                error!("All AEs failed on fallback Join");
                 AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
                     "No available worker for this guild".into(),
                 ))
