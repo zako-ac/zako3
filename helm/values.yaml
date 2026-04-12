@@ -137,6 +137,7 @@ nats:
 
 # --- OpenObserve ---
 openobserve:
+  nodeAffinity: {}
   image: public.ecr.aws/zinclabs/openobserve:latest
   otelCollectorImage: otel/opentelemetry-collector-contrib:latest
   rootUserEmail: "admin@example.com"

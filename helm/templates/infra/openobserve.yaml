@@ -67,6 +67,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 8 }}
     spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.openobserve.nodeAffinity) | nindent 6 }}
       containers:
         - name: openobserve
           image: {{ .Values.openobserve.image }}
@@ -128,6 +129,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 8 }}
     spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.openobserve.nodeAffinity) | nindent 6 }}
       containers:
         - name: otel-collector
           image: {{ .Values.openobserve.otelCollectorImage }}
