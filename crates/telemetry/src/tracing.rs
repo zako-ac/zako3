@@ -64,10 +64,10 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
             .with_resource(resource)
             .build();
         let log_bridge = OpenTelemetryTracingBridge::new(&logger_provider)
-            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off"));
+            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off"));
         let otel_layer = tracing_opentelemetry::layer()
             .with_tracer(tracer)
-            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off"));
+            .with_filter(EnvFilter::new("debug,h2=off,tonic=off,hyper=off,tower=off,quinn=off"));
         registry.with(otel_layer).with(log_bridge).init();
     } else {
         registry.init();
