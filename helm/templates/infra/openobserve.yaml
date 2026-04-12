@@ -36,7 +36,7 @@ data:
       otlp_http/openobserve:
         endpoint: "http://{{ $fullname }}-openobserve:5080/api/default"
         headers:
-          Authorization: "Basic ${OO_BASIC_AUTH}"
+          Authorization: "Basic ${env:OO_BASIC_AUTH}"
 
     service:
       pipelines:
