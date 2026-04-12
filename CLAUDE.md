@@ -18,4 +18,4 @@ For task that require fast speed and repetition and is READ ONLY, use `plan` age
 # Config Addition Guide
 1. Update the source code, of course.
 2. Update corresponding .env.example
-3. Update helm
+3. Update helm: Always grep for the config key.

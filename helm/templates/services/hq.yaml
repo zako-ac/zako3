@@ -78,7 +78,7 @@ spec:
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
             - name: TRAFFIC_LIGHT_URL
-              value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlTarpc }}"
+              value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
             - name: SUB_BOT_IDS
