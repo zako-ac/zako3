@@ -24,15 +24,10 @@ impl TlService {
         self.state.clone()
     }
 
-    #[tracing::instrument(
-        skip(self),
-        fields(
-            guild_id = %request.session.guild_id,
-            channel_id = %request.session.channel_id,
-            idempotency_key = ?request.idempotency_key,
-        )
-    )]
     pub async fn execute(&self, request: AudioEngineCommandRequest) -> AudioEngineCommandResponse {
+        if let Some(session) = &request.session {
+            tracing::debug!(?session, ?request.idempotency_key, "Executing command");
+        }
         let route_result = {
             let state = self.state.read().await;
             router::route(&state, &request)
@@ -46,17 +41,19 @@ impl TlService {
                 ) {
                     // Broadcast Leave to all routes known for this guild — best-effort
                     // cleanup in case TL state drifted and lost track of the session.
-                    let routes = {
-                        let state = self.state.read().await;
-                        state
-                            .sessions_by_guild_id(request.session.guild_id)
-                            .into_iter()
-                            .map(|(route, _)| route)
-                            .collect::<Vec<_>>()
-                    };
-                    for route in routes {
-                        if let Err(e) = self.dispatcher.send(route, request.clone()).await {
-                            warn!(error = %e, "broadcast Leave dispatch failed");
+                    if let Some(session_info) = &request.session {
+                        let routes = {
+                            let state = self.state.read().await;
+                            state
+                                .sessions_by_guild_id(session_info.guild_id)
+                                .into_iter()
+                                .map(|(route, _)| route)
+                                .collect::<Vec<_>>()
+                        };
+                        for route in routes {
+                            if let Err(e) = self.dispatcher.send(route, request.clone()).await {
+                                warn!(error = %e, "broadcast Leave dispatch failed");
+                            }
                         }
                     }
                     AudioEngineCommandResponse::Ok
@@ -176,10 +173,10 @@ impl TlService {
                         "Auto-triggering Leave due to voice state change"
                     );
                     let leave_req = AudioEngineCommandRequest {
-                        session: SessionInfo {
+                        session: Some(SessionInfo {
                             guild_id: session_info.guild_id,
                             channel_id: session_info.channel_id,
-                        },
+                        }),
                         command: AudioEngineCommand::SessionCommand(
                             AudioEngineSessionCommand::Leave,
                         ),
@@ -207,10 +204,10 @@ impl TlService {
         let mut results = Vec::new();
         for (route, session_info) in sessions {
             let req = AudioEngineCommandRequest {
-                session: SessionInfo {
+                session: Some(SessionInfo {
                     guild_id: session_info.guild_id,
                     channel_id: session_info.channel_id,
-                },
+                }),
                 command: tl_protocol::AudioEngineCommand::SessionCommand(
                     tl_protocol::AudioEngineSessionCommand::GetSessionState,
                 ),
@@ -236,6 +233,84 @@ impl TlService {
         }
     }
 
+    /// Reconciles dangling sessions: voice channels where bot is connected in Discord
+    /// but has no cached session in AE. Sends Leave for dangling sessions.
+    /// Called periodically (every 1 min) and on boot.
+    pub async fn reconcile(&self) {
+        // Get all connected AE routes from ZakoState
+        let all_routes: Vec<SessionRoute> = {
+            let state = self.state.read().await;
+            state
+                .workers
+                .iter()
+                .flat_map(|(worker_id, worker)| {
+                    worker
+                        .connected_ae_ids
+                        .iter()
+                        .map(|&ae_id| SessionRoute {
+                            worker_id: *worker_id,
+                            ae_id: crate::AeId(ae_id),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+
+        // For each AE route, fetch Discord voice state and compare with cached sessions
+        for route in all_routes {
+            let req = AudioEngineCommandRequest {
+                session: None,
+                command: AudioEngineCommand::FetchDiscordVoiceState,
+                headers: std::collections::HashMap::new(),
+                idempotency_key: None,
+            };
+
+            match self.dispatcher.send(route, req).await {
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(discord_sessions)) => {
+                    // Get cached sessions for this AE
+                    let cached: std::collections::HashSet<SessionInfo> = {
+                        let state = self.state.read().await;
+                        state
+                            .sessions
+                            .iter()
+                            .filter(|(r, _)| *r == &route)
+                            .map(|(_, info)| info)
+                            .copied()
+                            .collect()
+                    };
+
+                    // Find dangling sessions: in Discord but not in cache
+                    for session_info in discord_sessions {
+                        if !cached.contains(&session_info) {
+                            tracing::info!(
+                                ?route,
+                                ?session_info,
+                                "Leaving dangling session (in Discord but not cached)"
+                            );
+                            let leave_req = AudioEngineCommandRequest {
+                                session: Some(session_info),
+                                command: AudioEngineCommand::SessionCommand(
+                                    AudioEngineSessionCommand::Leave,
+                                ),
+                                headers: std::collections::HashMap::new(),
+                                idempotency_key: None,
+                            };
+                            if let Err(e) = self.dispatcher.send(route, leave_req).await {
+                                tracing::warn!(error = %e, "reconcile: failed to leave dangling session");
+                            }
+                        }
+                    }
+                }
+                Ok(other) => {
+                    tracing::warn!(?route, ?other, "reconcile: unexpected response");
+                }
+                Err(e) => {
+                    tracing::warn!(?route, error = %e, "reconcile: dispatch failed");
+                }
+            }
+        }
+    }
+
     /// Fetches current session state from all connected AEs and removes stale sessions.
     /// Called periodically (every 1 min) and on command failures to reconcile state drift.
     pub async fn sync_sessions(&self) {
@@ -257,7 +332,7 @@ impl TlService {
 
         for (route, session_info) in routes {
             let req = AudioEngineCommandRequest {
-                session: session_info,
+                session: Some(session_info),
                 command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::GetSessionState),
                 headers: std::collections::HashMap::new(),
                 idempotency_key: None,

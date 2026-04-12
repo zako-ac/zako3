@@ -15,6 +15,7 @@ pub enum AudioEngineError {
 pub enum AudioEngineCommandResponse {
     Ok,
     SessionState(SessionState),
+    DiscordVoiceState(Vec<SessionInfo>),
     Error(AudioEngineError),
 }
 
@@ -26,7 +27,7 @@ pub struct SessionInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioEngineCommandRequest {
-    pub session: SessionInfo,
+    pub session: Option<SessionInfo>,
     pub command: AudioEngineCommand,
     pub headers: HashMap<String, String>,
     pub idempotency_key: Option<String>,
@@ -53,6 +54,7 @@ pub struct AudioPlayRequest {
 pub enum AudioEngineCommand {
     Join,
     SessionCommand(AudioEngineSessionCommand),
+    FetchDiscordVoiceState,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

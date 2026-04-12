@@ -166,6 +166,9 @@ async fn main() -> anyhow::Result<()> {
     // accept_loop writes (connected_ae_ids) are immediately visible to the router.
     let tl_service = Arc::new(TlService::new(ae_registry.state(), ae_registry.clone()));
 
+    // Run reconcile on boot to clean up any dangling sessions from previous crashes
+    tl_service.reconcile().await;
+
     // Spawn session sync task — fetches current session state from all AEs every 60 seconds
     let tl_for_sync = tl_service.clone();
     tokio::spawn(async move {
@@ -174,6 +177,17 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             tl_for_sync.sync_sessions().await;
+        }
+    });
+
+    // Spawn reconcile task — detects dangling sessions and leaves them every 60 seconds
+    let tl_for_reconcile = tl_service.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            tl_for_reconcile.reconcile().await;
         }
     });
 

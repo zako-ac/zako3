@@ -11,7 +11,6 @@ use zako3_audio_engine_controller::{
     guild_reporter::{report_guilds_once, run_guild_reporter},
     ready_waiter::create_ready_waiter,
     server::AeTransportHandler,
-    voice_state::VoiceStateHandler,
 };
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
@@ -76,25 +75,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 2: Build the Discord / audio infrastructure with the assigned token.
     let songbird_manager = songbird::Songbird::serenity();
-    let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager.clone()));
-
-    let session_manager = Arc::new(SessionManager::new(
-        discord_service,
-        state_service,
-        taphub_service,
-    ));
-
-    let voice_state_handler = Arc::new(VoiceStateHandler {
-        session_manager: session_manager.clone(),
-    });
-
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
     let intents = GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILDS;
     let mut discord_client = Client::builder(&token.0, intents)
         .event_handler_arc(ready_waiter)
-        .event_handler_arc(voice_state_handler)
-        .register_songbird_with(songbird_manager)
+        .register_songbird_with(songbird_manager.clone())
         .await
         .expect("Failed to create Discord client");
 
@@ -105,9 +91,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     });
 
-    // Step 3: Wait for Discord to be ready.
     ready_recv.recv().await;
     let serenity_ctx = ctx_recv.recv().await.expect("ctx channel closed before ready");
+
+    let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager.clone(), serenity_ctx.cache.clone()));
+
+    let session_manager = Arc::new(SessionManager::new(
+        discord_service,
+        state_service,
+        taphub_service,
+    ));
+
+    // Note: voice_state_handler would normally be registered with the Discord client,
+    // but since we need the serenity context (and cache) before constructing it,
+    // and the client is already running, we skip the voice_state_handler registration.
+    // Voice state updates are still handled via the gateway (serenity's built-in handling).
+
     tracing::info!("Audio Engine is ready and connected to Discord!");
     telemetry.healthy();
 

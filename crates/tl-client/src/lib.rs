@@ -184,10 +184,10 @@ impl TlClient {
         command: AudioEngineCommand,
     ) -> AudioEngineCommandRequest {
         AudioEngineCommandRequest {
-            session: SessionInfo {
+            session: Some(SessionInfo {
                 guild_id,
                 channel_id,
-            },
+            }),
             command,
             headers: HashMap::new(),
             idempotency_key: None,

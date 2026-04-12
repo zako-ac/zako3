@@ -28,25 +28,43 @@ impl TlClientHandler for AeTransportHandler {
         req: AudioEngineCommandRequest,
         _headers: &HashMap<String, String>,
     ) -> AudioEngineCommandResponse {
-        let guild_id = req.session.guild_id;
-        let channel_id = req.session.channel_id;
-
         match req.command {
+            AudioEngineCommand::FetchDiscordVoiceState => {
+                use tl_protocol::SessionInfo;
+                match self.session_manager.fetch_discord_voice_state().await {
+                    Ok(voice_states) => {
+                        let sessions: Vec<SessionInfo> = voice_states
+                            .into_iter()
+                            .map(|(guild_id, channel_id)| SessionInfo { guild_id, channel_id })
+                            .collect();
+                        AudioEngineCommandResponse::DiscordVoiceState(sessions)
+                    },
+                    Err(e) => err(&e.to_string()),
+                }
+            }
             AudioEngineCommand::Join => {
+                let Some(session_info) = req.session else {
+                    return err("session required for Join");
+                };
                 if self
                     .session_manager
-                    .get_session(guild_id, channel_id)
+                    .get_session(session_info.guild_id, session_info.channel_id)
                     .is_some()
                 {
                     return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
                 }
-                match self.session_manager.join(guild_id, channel_id).await {
+                match self.session_manager.join(session_info.guild_id, session_info.channel_id).await {
                     Ok(_) => AudioEngineCommandResponse::Ok,
                     Err(e) => err(&e.to_string()),
                 }
             }
 
             AudioEngineCommand::SessionCommand(cmd) => {
+                let Some(session_info) = req.session else {
+                    return err("session required for SessionCommand");
+                };
+                let guild_id = session_info.guild_id;
+                let channel_id = session_info.channel_id;
                 let Some(session) = self.session_manager.get_session(guild_id, channel_id) else {
                     warn!(guild_id = ?guild_id, channel_id = ?channel_id, "Session not found");
                     return AudioEngineCommandResponse::Error(AudioEngineError::NotJoined);

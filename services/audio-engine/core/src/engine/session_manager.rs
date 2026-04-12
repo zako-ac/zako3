@@ -162,4 +162,8 @@ impl SessionManager {
             .map(|entry| entry.value().clone())
             .collect()
     }
+
+    pub async fn fetch_discord_voice_state(&self) -> ZakoResult<Vec<(GuildId, ChannelId)>> {
+        self.discord_service.get_active_voice_connections().await
+    }
 }

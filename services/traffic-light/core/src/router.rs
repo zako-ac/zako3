@@ -32,14 +32,15 @@ pub fn route(
     state: &ZakoState,
     request: &AudioEngineCommandRequest,
 ) -> Result<RouterResult, RouterError> {
+    let session = request.session.expect("session required for routing");
     match request.command {
         AudioEngineCommand::Join => {
-            if let Some(existing_route) = state.session_by_info(&request.session) {
+            if let Some(existing_route) = state.session_by_info(&session) {
                 // Session already tracked — try the existing AE first (state-drift recovery),
                 // then retry the same route as a fresh join in case the AE lost its session
                 // after a restart. Using the same route avoids a second bot joining the channel.
                 let mut fresh_state = state.clone();
-                fresh_state.sessions.insert(existing_route, request.session);
+                fresh_state.sessions.insert(existing_route, session);
                 return Ok(RouterResult::Join(vec![
                     RouterSuccess {
                         route: existing_route,
@@ -53,7 +54,7 @@ pub fn route(
             }
 
             let eligible_workers: Vec<&Worker> =
-                available_workers_for_guild(state, request.session.guild_id)
+                available_workers_for_guild(state, session.guild_id)
                     .into_iter()
                     .filter(|worker| {
                         tracing::debug!(
@@ -63,7 +64,7 @@ pub fn route(
                         );
                         state.worker_has_access_to_guild(
                             &worker.worker_id,
-                            &request.session.guild_id,
+                            &session.guild_id,
                         )
                     })
                     .filter(|worker| !worker.connected_ae_ids.is_empty())
@@ -91,7 +92,7 @@ pub fn route(
                         worker_id: worker.worker_id,
                         ae_id,
                     };
-                    new_state.sessions.insert(route, request.session);
+                    new_state.sessions.insert(route, session);
                     RouterSuccess {
                         route,
                         new_state_on_success: new_state,
@@ -102,7 +103,7 @@ pub fn route(
             Ok(RouterResult::Join(candidates))
         }
         AudioEngineCommand::SessionCommand(_) => {
-            if let Some(route) = state.session_by_info(&request.session) {
+            if let Some(route) = state.session_by_info(&session) {
                 Ok(RouterResult::Session(RouterSuccess {
                     route,
                     new_state_on_success: state.clone(),
@@ -110,6 +111,9 @@ pub fn route(
             } else {
                 Err(RouterError::NotJoined)
             }
+        }
+        AudioEngineCommand::FetchDiscordVoiceState => {
+            Err(RouterError::NotJoined)
         }
     }
 }
