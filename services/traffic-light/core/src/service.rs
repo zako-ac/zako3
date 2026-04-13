@@ -140,8 +140,21 @@ impl TlService {
                         ) => {
                             // AlreadyJoined from AE means the session is active there —
                             // treat as success (covers state-drift resync joins).
-                            let mut state = self.state.write().await;
-                            *state = candidate.new_state_on_success;
+                            //
+                            // Targeted write: only apply what this Join actually changes.
+                            // Replacing the entire state with a pre-snapshot would silently
+                            // erase concurrent Join commits for other guilds (TOCTOU).
+                            if let Some(session_info) = request.session {
+                                let mut state = self.state.write().await;
+                                state.sessions.insert(candidate.route, session_info);
+                                // Carry over round-robin cursor advances from the routing decision.
+                                state.worker_cursor = candidate.new_state_on_success.worker_cursor;
+                                if let Some(worker) = state.workers.get_mut(&candidate.route.worker_id) {
+                                    if let Some(new_worker) = candidate.new_state_on_success.workers.get(&candidate.route.worker_id) {
+                                        worker.ae_cursor = new_worker.ae_cursor;
+                                    }
+                                }
+                            }
                             return AudioEngineCommandResponse::Ok;
                         }
                         Ok(err_resp) => {
@@ -176,10 +189,10 @@ impl TlService {
 
                 match self.dispatcher.send(route, request).await {
                     Ok(response) => {
-                        if !matches!(response, AudioEngineCommandResponse::Error(_)) {
-                            let mut state = self.state.write().await;
-                            *state = success.new_state_on_success;
-                        }
+                        // SessionCommand routing never modifies state (new_state_on_success
+                        // is always state.clone()), so no write-back needed. Performing a
+                        // full state replacement here would cause the same TOCTOU overwrite
+                        // of concurrent Join commits.
                         response
                     }
                     Err(e) => {
