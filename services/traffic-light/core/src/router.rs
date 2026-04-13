@@ -39,6 +39,13 @@ pub fn route(
                 // Session already tracked — try the existing AE first (state-drift recovery),
                 // then retry the same route as a fresh join in case the AE lost its session
                 // after a restart. Using the same route avoids a second bot joining the channel.
+                tracing::info!(
+                    worker_id = existing_route.worker_id.0,
+                    ae_id = existing_route.ae_id.0,
+                    guild_id = ?session.guild_id,
+                    channel_id = ?session.channel_id,
+                    "router: Join for already-tracked session, reusing existing route (state-drift recovery)"
+                );
                 let mut fresh_state = state.clone();
                 fresh_state.sessions.insert(existing_route, session);
                 return Ok(RouterResult::Join(vec![
@@ -53,30 +60,52 @@ pub fn route(
                 ]));
             }
 
-            let eligible_workers: Vec<&Worker> =
-                available_workers_for_guild(state, session.guild_id)
+            let available = available_workers_for_guild(state, session.guild_id);
+            tracing::debug!(
+                guild_id = ?session.guild_id,
+                available_count = available.len(),
+                total_workers = state.workers.len(),
+                "router: available workers for guild (not already serving this guild)"
+            );
+
+            let eligible_workers: Vec<&Worker> = available
                     .into_iter()
                     .filter(|worker| {
-                        tracing::debug!(
-                            worker_id = worker.worker_id.0,
-                            "Checking worker eligibility for Join command: {:#?}",
-                            state.workers
-                        );
-                        state.worker_has_access_to_guild(
+                        let has_access = state.worker_has_access_to_guild(
                             &worker.worker_id,
                             &session.guild_id,
-                        )
+                        );
+                        let has_ae = !worker.connected_ae_ids.is_empty();
+                        tracing::debug!(
+                            worker_id = worker.worker_id.0,
+                            has_guild_access = has_access,
+                            connected_aes = worker.connected_ae_ids.len(),
+                            eligible = has_access && has_ae,
+                            "router: worker eligibility check"
+                        );
+                        has_access && has_ae
                     })
-                    .filter(|worker| !worker.connected_ae_ids.is_empty())
                     .collect();
 
             if eligible_workers.is_empty() {
+                tracing::warn!(
+                    guild_id = ?session.guild_id,
+                    total_workers = state.workers.len(),
+                    "router: no eligible worker for Join (no access or no connected AEs)"
+                );
                 return Err(RouterError::NoAvailableWorker);
             }
 
             // Build all candidates in round-robin order starting from worker_cursor.
             let n = eligible_workers.len();
             let start = (state.worker_cursor as usize + 1) % n;
+            tracing::info!(
+                guild_id = ?session.guild_id,
+                channel_id = ?session.channel_id,
+                eligible_workers = n,
+                first_candidate_worker_id = eligible_workers[start % n].worker_id.0,
+                "router: building Join candidates"
+            );
             let candidates = (0..n)
                 .map(|i| {
                     let worker = eligible_workers[(start + i) % n];
@@ -102,13 +131,26 @@ pub fn route(
 
             Ok(RouterResult::Join(candidates))
         }
-        AudioEngineCommand::SessionCommand(_) => {
+        AudioEngineCommand::SessionCommand(ref cmd) => {
             if let Some(route) = state.session_by_info(&session) {
+                tracing::debug!(
+                    worker_id = route.worker_id.0,
+                    ae_id = route.ae_id.0,
+                    guild_id = ?session.guild_id,
+                    cmd = ?cmd,
+                    "router: session command routed"
+                );
                 Ok(RouterResult::Session(RouterSuccess {
                     route,
                     new_state_on_success: state.clone(),
                 }))
             } else {
+                tracing::warn!(
+                    guild_id = ?session.guild_id,
+                    channel_id = ?session.channel_id,
+                    cmd = ?cmd,
+                    "router: session command for unknown session (NotJoined)"
+                );
                 Err(RouterError::NotJoined)
             }
         }

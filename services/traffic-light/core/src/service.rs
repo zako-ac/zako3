@@ -25,9 +25,25 @@ impl TlService {
     }
 
     pub async fn execute(&self, request: AudioEngineCommandRequest) -> AudioEngineCommandResponse {
+        let cmd_name = match &request.command {
+            AudioEngineCommand::Join => "Join",
+            AudioEngineCommand::SessionCommand(c) => match c {
+                AudioEngineSessionCommand::Leave => "Leave",
+                AudioEngineSessionCommand::GetSessionState => "GetSessionState",
+                _ => "SessionCommand",
+            },
+            AudioEngineCommand::FetchDiscordVoiceState => "FetchDiscordVoiceState",
+        };
         if let Some(session) = &request.session {
-            tracing::debug!(?session, ?request.idempotency_key, "Executing command");
+            info!(
+                cmd = cmd_name,
+                guild_id = ?session.guild_id,
+                channel_id = ?session.channel_id,
+                idempotency_key = ?request.idempotency_key,
+                "execute: incoming command"
+            );
         }
+
         let route_result = {
             let state = self.state.read().await;
             router::route(&state, &request)
@@ -50,15 +66,29 @@ impl TlService {
                                 .map(|(route, _)| route)
                                 .collect::<Vec<_>>()
                         };
+                        info!(
+                            guild_id = ?session_info.guild_id,
+                            route_count = routes.len(),
+                            "Leave: session not in TL cache, broadcasting to all known routes for guild"
+                        );
                         for route in routes {
                             if let Err(e) = self.dispatcher.send(route, request.clone()).await {
-                                warn!(error = %e, "broadcast Leave dispatch failed");
+                                warn!(
+                                    worker_id = route.worker_id.0,
+                                    ae_id = route.ae_id.0,
+                                    error = %e,
+                                    "broadcast Leave dispatch failed"
+                                );
                             }
                         }
                     }
                     AudioEngineCommandResponse::Ok
                 } else {
-                    warn!("Routing failed: session not joined");
+                    warn!(
+                        cmd = cmd_name,
+                        guild_id = ?request.session.map(|s| s.guild_id),
+                        "routing failed: session not joined"
+                    );
                     AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
                 }
             }
@@ -79,8 +109,9 @@ impl TlService {
                 };
 
                 warn!(
-                    route_count = all_routes.len(),
-                    "No eligible worker for guild; trying all AEs as fallback"
+                    guild_id = ?request.session.map(|s| s.guild_id),
+                    fallback_route_count = all_routes.len(),
+                    "no eligible worker for guild; trying all AEs as fallback"
                 );
 
                 for route in all_routes {
@@ -94,9 +125,23 @@ impl TlService {
                                     )
                             ) =>
                         {
+                            info!(
+                                worker_id = route.worker_id.0,
+                                ae_id = route.ae_id.0,
+                                already_joined = matches!(&resp, AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined)),
+                                "fallback Join succeeded"
+                            );
                             if let Some(session_info) = request.session {
                                 let mut state = self.state.write().await;
                                 state.sessions.insert(route, session_info);
+                                info!(
+                                    worker_id = route.worker_id.0,
+                                    ae_id = route.ae_id.0,
+                                    guild_id = ?session_info.guild_id,
+                                    channel_id = ?session_info.channel_id,
+                                    total_sessions = state.sessions.len(),
+                                    "session committed (fallback)"
+                                );
                             }
                             return AudioEngineCommandResponse::Ok;
                         }
@@ -104,7 +149,8 @@ impl TlService {
                             warn!(
                                 worker_id = route.worker_id.0,
                                 ae_id = route.ae_id.0,
-                                "AE rejected fallback Join: {err_resp:?}, trying next"
+                                response = ?err_resp,
+                                "AE rejected fallback Join, trying next"
                             );
                         }
                         Err(e) => {
@@ -112,23 +158,32 @@ impl TlService {
                                 worker_id = route.worker_id.0,
                                 ae_id = route.ae_id.0,
                                 error = %e,
-                                "Dispatch error on fallback Join, trying next"
+                                "dispatch error on fallback Join, trying next"
                             );
                         }
                     }
                 }
 
-                error!("All AEs failed on fallback Join");
+                error!(
+                    guild_id = ?request.session.map(|s| s.guild_id),
+                    "all AEs failed on fallback Join"
+                );
                 AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
                     "No available worker for this guild".into(),
                 ))
             }
             Ok(RouterResult::Join(candidates)) => {
+                info!(
+                    candidate_count = candidates.len(),
+                    guild_id = ?request.session.map(|s| s.guild_id),
+                    "Join: trying {} candidate(s)", candidates.len()
+                );
                 for candidate in candidates {
                     info!(
                         worker_id = candidate.route.worker_id.0,
                         ae_id = candidate.route.ae_id.0,
-                        "Trying Join on AE"
+                        guild_id = ?request.session.map(|s| s.guild_id),
+                        "Join: dispatching to AE"
                     );
                     match self.dispatcher.send(candidate.route, request.clone()).await {
                         Ok(resp) if matches!(
@@ -144,6 +199,7 @@ impl TlService {
                             // Targeted write: only apply what this Join actually changes.
                             // Replacing the entire state with a pre-snapshot would silently
                             // erase concurrent Join commits for other guilds (TOCTOU).
+                            let already_joined = matches!(&resp, AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined));
                             if let Some(session_info) = request.session {
                                 let mut state = self.state.write().await;
                                 state.sessions.insert(candidate.route, session_info);
@@ -154,6 +210,15 @@ impl TlService {
                                         worker.ae_cursor = new_worker.ae_cursor;
                                     }
                                 }
+                                info!(
+                                    worker_id = candidate.route.worker_id.0,
+                                    ae_id = candidate.route.ae_id.0,
+                                    guild_id = ?session_info.guild_id,
+                                    channel_id = ?session_info.channel_id,
+                                    already_joined,
+                                    total_sessions = state.sessions.len(),
+                                    "session committed"
+                                );
                             }
                             return AudioEngineCommandResponse::Ok;
                         }
@@ -161,7 +226,8 @@ impl TlService {
                             warn!(
                                 worker_id = candidate.route.worker_id.0,
                                 ae_id = candidate.route.ae_id.0,
-                                "Join failed on AE: {err_resp:?}, trying next candidate"
+                                response = ?err_resp,
+                                "Join failed on AE, trying next candidate"
                             );
                         }
                         Err(e) => {
@@ -169,12 +235,15 @@ impl TlService {
                                 worker_id = candidate.route.worker_id.0,
                                 ae_id = candidate.route.ae_id.0,
                                 error = %e,
-                                "Dispatch error on Join, trying next candidate"
+                                "dispatch error on Join, trying next candidate"
                             );
                         }
                     }
                 }
-                error!("All workers failed to handle Join");
+                error!(
+                    guild_id = ?request.session.map(|s| s.guild_id),
+                    "all candidates failed to handle Join"
+                );
                 AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
                     "All workers failed to handle Join".into(),
                 ))
@@ -182,9 +251,12 @@ impl TlService {
             Ok(RouterResult::Session(success)) => {
                 let route = success.route;
                 info!(
+                    cmd = cmd_name,
                     worker_id = route.worker_id.0,
                     ae_id = route.ae_id.0,
-                    "Routing to AE"
+                    guild_id = ?request.session.map(|s| s.guild_id),
+                    channel_id = ?request.session.map(|s| s.channel_id),
+                    "session command: dispatching to AE"
                 );
 
                 match self.dispatcher.send(route, request).await {
@@ -193,10 +265,25 @@ impl TlService {
                         // is always state.clone()), so no write-back needed. Performing a
                         // full state replacement here would cause the same TOCTOU overwrite
                         // of concurrent Join commits.
+                        if matches!(response, AudioEngineCommandResponse::Error(_)) {
+                            warn!(
+                                cmd = cmd_name,
+                                worker_id = route.worker_id.0,
+                                ae_id = route.ae_id.0,
+                                response = ?response,
+                                "AE returned error for session command"
+                            );
+                        }
                         response
                     }
                     Err(e) => {
-                        error!(error = %e, "AE dispatch failed");
+                        error!(
+                            cmd = cmd_name,
+                            worker_id = route.worker_id.0,
+                            ae_id = route.ae_id.0,
+                            error = %e,
+                            "AE dispatch failed"
+                        );
                         // Sync session state on dispatch failure to clean up stale entries
                         self.sync_sessions().await;
                         AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
@@ -217,12 +304,22 @@ impl TlService {
                 span.record("user_id", tracing::field::debug(&e.user_id));
 
                 if e.after.is_some() {
+                    tracing::debug!(
+                        guild_id = ?e.guild_id,
+                        user_id = ?e.user_id,
+                        "VoiceStateUpdate: bot joined/moved, no Leave needed"
+                    );
                     return;
                 }
 
                 let (worker_id, sessions_to_leave) = {
                     let state = self.state.read().await;
                     let Some(worker_id) = state.worker_by_bot_client_id(&e.user_id) else {
+                        tracing::debug!(
+                            user_id = ?e.user_id,
+                            guild_id = ?e.guild_id,
+                            "VoiceStateUpdate: no worker found for user, ignoring"
+                        );
                         return;
                     };
                     let sessions = state
@@ -233,12 +330,21 @@ impl TlService {
                     (worker_id, sessions)
                 };
 
+                info!(
+                    worker_id = worker_id.0,
+                    guild_id = ?e.guild_id,
+                    session_count = sessions_to_leave.len(),
+                    "VoiceStateUpdate: bot disconnected, triggering Leave for {} session(s)",
+                    sessions_to_leave.len()
+                );
+
                 for (route, session_info) in sessions_to_leave {
                     info!(
                         worker_id = worker_id.0,
+                        ae_id = route.ae_id.0,
                         guild_id = ?e.guild_id,
                         channel_id = ?session_info.channel_id,
-                        "Auto-triggering Leave due to voice state change"
+                        "auto-Leave: dispatching"
                     );
                     let leave_req = AudioEngineCommandRequest {
                         session: Some(SessionInfo {
@@ -252,10 +358,24 @@ impl TlService {
                         idempotency_key: None,
                     };
                     if let Err(e) = self.dispatcher.send(route, leave_req).await {
-                        error!(error = %e, "Failed to dispatch auto-Leave");
+                        error!(
+                            worker_id = worker_id.0,
+                            ae_id = route.ae_id.0,
+                            guild_id = ?session_info.guild_id,
+                            error = %e,
+                            "auto-Leave dispatch failed"
+                        );
                     } else {
                         let mut state = self.state.write().await;
                         state.sessions.remove(&route);
+                        info!(
+                            worker_id = worker_id.0,
+                            ae_id = route.ae_id.0,
+                            guild_id = ?session_info.guild_id,
+                            channel_id = ?session_info.channel_id,
+                            total_sessions = state.sessions.len(),
+                            "auto-Leave: session removed from state"
+                        );
                     }
                 }
             }
@@ -324,8 +444,11 @@ impl TlService {
                 .collect()
         };
 
+        info!(route_count = all_routes.len(), "reconcile: starting");
+
         // For each AE route, fetch Discord voice state and compare with cached sessions
-        for route in all_routes {
+        for route in &all_routes {
+            let route = *route;
             let req = AudioEngineCommandRequest {
                 session: None,
                 command: AudioEngineCommand::FetchDiscordVoiceState,
@@ -347,36 +470,69 @@ impl TlService {
                             .collect()
                     };
 
+                    let discord_count = discord_sessions.len();
+                    let dangling: Vec<SessionInfo> = discord_sessions
+                        .into_iter()
+                        .filter(|s| !cached.contains(s))
+                        .collect();
+
+                    info!(
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        discord_sessions = discord_count,
+                        cached_sessions = cached.len(),
+                        dangling_count = dangling.len(),
+                        "reconcile: route checked"
+                    );
+
                     // Find dangling sessions: in Discord but not in cache
-                    for session_info in discord_sessions {
-                        if !cached.contains(&session_info) {
-                            tracing::info!(
-                                ?route,
-                                ?session_info,
-                                "Leaving dangling session (in Discord but not cached)"
+                    for session_info in dangling {
+                        info!(
+                            worker_id = route.worker_id.0,
+                            ae_id = route.ae_id.0,
+                            guild_id = ?session_info.guild_id,
+                            channel_id = ?session_info.channel_id,
+                            "reconcile: leaving dangling session (in Discord but not cached)"
+                        );
+                        let leave_req = AudioEngineCommandRequest {
+                            session: Some(session_info),
+                            command: AudioEngineCommand::SessionCommand(
+                                AudioEngineSessionCommand::Leave,
+                            ),
+                            headers: std::collections::HashMap::new(),
+                            idempotency_key: None,
+                        };
+                        if let Err(e) = self.dispatcher.send(route, leave_req).await {
+                            warn!(
+                                worker_id = route.worker_id.0,
+                                ae_id = route.ae_id.0,
+                                guild_id = ?session_info.guild_id,
+                                error = %e,
+                                "reconcile: failed to leave dangling session"
                             );
-                            let leave_req = AudioEngineCommandRequest {
-                                session: Some(session_info),
-                                command: AudioEngineCommand::SessionCommand(
-                                    AudioEngineSessionCommand::Leave,
-                                ),
-                                headers: std::collections::HashMap::new(),
-                                idempotency_key: None,
-                            };
-                            if let Err(e) = self.dispatcher.send(route, leave_req).await {
-                                tracing::warn!(error = %e, "reconcile: failed to leave dangling session");
-                            }
                         }
                     }
                 }
                 Ok(other) => {
-                    tracing::warn!(?route, ?other, "reconcile: unexpected response");
+                    warn!(
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        response = ?other,
+                        "reconcile: unexpected response from AE"
+                    );
                 }
                 Err(e) => {
-                    tracing::warn!(?route, error = %e, "reconcile: dispatch failed");
+                    warn!(
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        error = %e,
+                        "reconcile: dispatch failed"
+                    );
                 }
             }
         }
+
+        info!(route_count = all_routes.len(), "reconcile: done");
     }
 
     /// Fetches current session state from all connected AEs and removes stale sessions.
@@ -393,14 +549,17 @@ impl TlService {
         };
 
         if routes.is_empty() {
+            tracing::debug!("sync_sessions: no sessions to check");
             return;
         }
 
+        info!(session_count = routes.len(), "sync_sessions: checking {} session(s)", routes.len());
+
         let mut to_remove = Vec::new();
 
-        for (route, session_info) in routes {
+        for (route, session_info) in &routes {
             let req = AudioEngineCommandRequest {
-                session: Some(session_info),
+                session: Some(*session_info),
                 command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::GetSessionState),
                 headers: std::collections::HashMap::new(),
                 idempotency_key: None,
@@ -409,42 +568,63 @@ impl TlService {
             // Use 5s timeout to avoid blocking on dead AEs
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(5),
-                self.dispatcher.send(route, req),
+                self.dispatcher.send(*route, req),
             )
             .await;
 
             match result {
                 Ok(Ok(AudioEngineCommandResponse::SessionState(_))) => {
-                    // Session is still alive on the AE
+                    tracing::debug!(
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        guild_id = ?session_info.guild_id,
+                        "sync_sessions: session alive"
+                    );
                 }
                 Ok(Ok(other)) => {
                     warn!(
-                        ?route,
-                        ?other,
-                        "sync_sessions: unexpected response, removing stale session"
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        guild_id = ?session_info.guild_id,
+                        response = ?other,
+                        "sync_sessions: unexpected response, marking stale"
                     );
-                    to_remove.push(route);
+                    to_remove.push(*route);
                 }
                 Ok(Err(e)) => {
                     warn!(
-                        ?route,
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        guild_id = ?session_info.guild_id,
                         error = %e,
-                        "sync_sessions: dispatch failed, removing stale session"
+                        "sync_sessions: dispatch failed, marking stale"
                     );
-                    to_remove.push(route);
+                    to_remove.push(*route);
                 }
                 Err(_timeout) => {
-                    warn!(?route, "sync_sessions: timeout, removing stale session");
-                    to_remove.push(route);
+                    warn!(
+                        worker_id = route.worker_id.0,
+                        ae_id = route.ae_id.0,
+                        guild_id = ?session_info.guild_id,
+                        "sync_sessions: timeout, marking stale"
+                    );
+                    to_remove.push(*route);
                 }
             }
         }
 
         if !to_remove.is_empty() {
+            info!(
+                remove_count = to_remove.len(),
+                "sync_sessions: removing {} stale session(s)", to_remove.len()
+            );
             let mut state = self.state.write().await;
             for route in to_remove {
                 state.sessions.remove(&route);
             }
+            info!(remaining_sessions = state.sessions.len(), "sync_sessions: done");
+        } else {
+            info!(session_count = routes.len(), "sync_sessions: all sessions alive");
         }
     }
 }
