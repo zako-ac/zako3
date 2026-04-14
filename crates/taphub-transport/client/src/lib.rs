@@ -68,9 +68,10 @@ impl TransportClient {
     }
 
     async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, String> {
-        let mut lock = self.conn.lock().await;
-        let conn = &mut *lock;
-        let mut stream = conn.open_mani().await.map_err(|e| e.to_string())?;
+        let mut stream = {
+            let mut lock = self.conn.lock().await;
+            lock.open_mani().await.map_err(|e| e.to_string())?
+        };
 
         let payload = rmp_serde::to_vec(&req).map_err(|e| e.to_string())?;
         stream
@@ -183,10 +184,15 @@ impl TransportClient {
 }
 
 async fn send_invalidate_cache(conn: Arc<Mutex<ReconnectingConnection>>, req: CachedAudioRequest) {
-    let mut lock = conn.lock().await;
-    let Ok(mut stream) = lock.open_mani().await else {
-        tracing::warn!("send_invalidate_cache: failed to open stream");
-        return;
+    let mut stream = {
+        let mut lock = conn.lock().await;
+        match lock.open_mani().await {
+            Ok(s) => s,
+            Err(_) => {
+                tracing::warn!("send_invalidate_cache: failed to open stream");
+                return;
+            }
+        }
     };
     let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
         tracing::warn!("send_invalidate_cache: failed to serialize request");

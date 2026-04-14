@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use serenity::{async_trait, model::voice::VoiceState, prelude::*};
 
@@ -8,7 +8,7 @@ use zako3_audio_engine_core::{
 };
 
 pub struct VoiceStateHandler {
-    pub session_manager: Arc<SessionManager>,
+    pub session_manager: Arc<OnceLock<Arc<SessionManager>>>,
 }
 
 #[async_trait]
@@ -19,6 +19,14 @@ impl EventHandler for VoiceStateHandler {
         old: Option<VoiceState>,
         new: VoiceState,
     ) {
+        let session_manager = match self.session_manager.get() {
+            Some(sm) => sm,
+            None => {
+                tracing::warn!("VoiceStateHandler: session_manager not yet initialized");
+                return;
+            }
+        };
+
         // Only care about the bot's own voice state changes
         let bot_user_id = match ctx.http.get_current_user().await {
             Ok(u) => u.id,
@@ -48,7 +56,7 @@ impl EventHandler for VoiceStateHandler {
         };
 
         // If no in-memory session exists, our own leave() already cleaned up
-        if self.session_manager.get_session(guild_id, channel_id).is_none() {
+        if session_manager.as_ref().get_session(guild_id, channel_id).is_none() {
             return;
         }
 
@@ -58,8 +66,8 @@ impl EventHandler for VoiceStateHandler {
             "Bot disconnected externally; cleaning up session"
         );
 
-        if let Err(e) = self
-            .session_manager
+        if let Err(e) = session_manager
+            .as_ref()
             .cleanup_session(guild_id, channel_id)
             .await
         {

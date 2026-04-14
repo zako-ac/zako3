@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use tl_protocol::{AudioEngineCommandRequest, AudioEngineCommandResponse};
@@ -62,7 +63,7 @@ async fn request_response_roundtrip() {
     });
 
     let (_token, _headers, connected) = TlClient::connect(addr, HashMap::new()).await.unwrap();
-    tokio::spawn(async move { connected.serve(MockHandler).await });
+    tokio::spawn(async move { connected.serve(Arc::new(MockHandler)).await });
 
     let mut server_client = server_task.await.unwrap();
     let resp = server_client.request(make_request()).await.unwrap();
@@ -82,7 +83,7 @@ async fn multiple_sequential_requests() {
     });
 
     let (_token, _headers, connected) = TlClient::connect(addr, HashMap::new()).await.unwrap();
-    tokio::spawn(async move { connected.serve(MockHandler).await });
+    tokio::spawn(async move { connected.serve(Arc::new(MockHandler)).await });
 
     let mut server_client = server_task.await.unwrap();
     for _ in 0..3 {

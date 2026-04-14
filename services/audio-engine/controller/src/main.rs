@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use serenity::Client;
@@ -11,6 +11,7 @@ use zako3_audio_engine_controller::{
     guild_reporter::{report_guilds_once, run_guild_reporter},
     ready_waiter::create_ready_waiter,
     server::AeTransportHandler,
+    voice_state::VoiceStateHandler,
 };
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
@@ -95,9 +96,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let songbird_manager = songbird::Songbird::serenity();
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
+    // Create OnceLock for session_manager to break circular dependency
+    let sm_cell: Arc<OnceLock<Arc<SessionManager>>> = Arc::new(OnceLock::new());
+    let voice_state_handler = Arc::new(VoiceStateHandler {
+        session_manager: sm_cell.clone(),
+    });
+
     let intents = GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILDS;
     let mut discord_client = Client::builder(&token.0, intents)
         .event_handler_arc(ready_waiter)
+        .event_handler_arc(voice_state_handler)
         .register_songbird_with(songbird_manager.clone())
         .await
         .expect("Failed to create Discord client");
@@ -123,10 +131,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         taphub_service,
     ));
 
-    // Note: voice_state_handler would normally be registered with the Discord client,
-    // but since we need the serenity context (and cache) before constructing it,
-    // and the client is already running, we skip the voice_state_handler registration.
-    // Voice state updates are still handled via the gateway (serenity's built-in handling).
+    // Fill the OnceLock now that session_manager is constructed
+    let _ = sm_cell.set(session_manager.clone());
+
+    // Voice state handler is now ready and registered with the Discord client
 
     tracing::info!("Audio Engine is ready and connected to Discord!");
     telemetry.healthy();
@@ -140,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: Serve requests. On TL disconnect, reconnect TL only (Discord stays alive).
     report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-    let handler = AeTransportHandler::new(session_manager.clone());
+    let handler = Arc::new(AeTransportHandler::new(session_manager.clone()));
     if let Err(e) = connected.serve(handler).await {
         tracing::warn!("TL connection lost: {e}, reconnecting...");
     }
@@ -152,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((_, _, connected)) => {
                 tracing::info!("Reconnected to TL server");
                 report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-                let handler = AeTransportHandler::new(session_manager.clone());
+                let handler = Arc::new(AeTransportHandler::new(session_manager.clone()));
                 if let Err(e) = connected.serve(handler).await {
                     tracing::warn!("TL connection lost: {e}, reconnecting...");
                 }

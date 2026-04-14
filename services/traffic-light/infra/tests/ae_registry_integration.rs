@@ -73,7 +73,7 @@ async fn ae_registers_in_state() {
 
     // Connect AE client and serve
     let (_token, _headers, connected) = TlClient::connect(addr, HashMap::new()).await.unwrap();
-    tokio::spawn(async move { connected.serve(MockHandler).await });
+    tokio::spawn(async move { connected.serve(Arc::new(MockHandler)).await });
 
     // Give accept loop time to process
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -123,7 +123,7 @@ async fn dispatch_reaches_ae() {
     }
 
     let (_token, _headers, connected) = TlClient::connect(addr, HashMap::new()).await.unwrap();
-    tokio::spawn(async move { connected.serve(RecordingHandler(received_clone)).await });
+    tokio::spawn(async move { connected.serve(Arc::new(RecordingHandler(received_clone))).await });
 
     // Wait for registration
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;

@@ -4,7 +4,6 @@ use protofish2::mani::transfer::recv::{TransferReliableRecvStream, TransferUnrel
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::Instrument;
 use zako3_types::AudioRequestString;
@@ -252,18 +251,9 @@ async fn handle_new_connection(
                         .or_default()
                         .insert(connection_id, conn_arc.clone());
 
-                    // Keep stream alive/wait for disconnect with timeout
-                    let _ = tokio::time::timeout(
-                        Duration::from_secs(300),
-                        mani_stream.recv_payload(),
-                    )
-                    .await;
-
-                    // Explicitly close the underlying QUIC connection so the tap detects
-                    // the disconnect. Without this, the protofish2 keepalive task (which
-                    // holds its own quinn::Connection clone) keeps the QUIC connection alive
-                    // indefinitely, and the tap's keepalive timer never fires.
-                    conn_arc.lock().await.close();
+                    // Wait until the client disconnects. The ProtofishConnection's Drop impl
+                    // will cancel the keepalive task, allowing the QUIC connection to close cleanly.
+                    let _ = mani_stream.recv_payload().await;
 
                     {
                         let mut sessions = sessions.lock().await;
