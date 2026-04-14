@@ -184,6 +184,7 @@
           "admin": "관리자"
         },
         "searchPlaceholder": "사용자 검색...",
+        "settings": "설정",
         "status": "상태",
         "subtitle": "시스템의 모든 사용자를 관리합니다.",
         "title": "사용자",
@@ -196,6 +197,19 @@
         "user": "사용자",
         "userDetails": "사용자 상세정보",
         "userId": "사용자 ID"
+      },
+      "userSettings": {
+        "changeGuild": "서버 변경",
+        "currentGuild": "현재 서버: {{guild}}",
+        "guildSearchPlaceholder": "서버 검색...",
+        "guildUserScope": "서버 사용자",
+        "noGuilds": "서버를 찾을 수 없습니다",
+        "noGuildSelected": "선택된 서버 없음",
+        "selectGuild": "서버 선택",
+        "selectGuildDesc": "설정을 관리할 서버를 선택하세요.",
+        "title": "사용자 설정",
+        "userId": "사용자 ID",
+        "userScope": "사용자"
       },
       "verifications": {
         "approve": "승인",
@@ -392,6 +406,7 @@
       "profile": "프로필",
       "profileSubtitle": "개인 정보",
       "replacement": "대체 텍스트",
+      "reset": "초기화",
       "save": "저장",
       "saveError": "설정 저장 중 오류가 발생했습니다. 나중에 다시 시도하세요.",
       "saveSuccess": "설정이 성공적으로 저장되었습니다.",
@@ -417,8 +432,7 @@
       "ttsSubtitle": "메시지를 소리 내어 읽는 방법을 설정합니다.",
       "ttsVoice": "TTS 음성",
       "ttsVoiceNone": "없음 (기본값 사용)",
-      "unsavedChanges": "저장되지 않은 변경사항이 있습니다",
-      "reset": "초기화"
+      "unsavedChanges": "저장되지 않은 변경사항이 있습니다"
     },
     "taps": {
       "activeCount": "{{value}} 온라인",

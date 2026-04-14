@@ -16,6 +16,9 @@ import {
   AdminDashboardPage,
   AdminUsersPage,
   AdminUserDetailPage,
+  AdminUserSettingsPage,
+  AdminUserSettingsUserPage,
+  AdminUserSettingsGuildUserPage,
   AdminTapsPage,
   AdminTapDetailPage,
   AdminNotificationsPage,
@@ -96,6 +99,11 @@ export const AppRouter = () => {
             path="/admin/users/:userId"
             element={<AdminUserDetailPage />}
           />
+          <Route path="/admin/users/:userId/settings" element={<AdminUserSettingsPage />}>
+            <Route index element={<Navigate to="user" replace />} />
+            <Route path="user" element={<AdminUserSettingsUserPage />} />
+            <Route path="guild-user" element={<AdminUserSettingsGuildUserPage />} />
+          </Route>
           <Route path={ROUTES.ADMIN_TAPS} element={<AdminTapsPage />} />
           <Route path="/admin/taps/:tapId" element={<AdminTapDetailPage />} />
           <Route

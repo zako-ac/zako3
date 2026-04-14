@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
+use zako3_states::CacheRepositoryRef;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -18,14 +19,20 @@ pub struct Claims {
 pub struct AuthService {
     config: Arc<AppConfig>,
     user_repo: Arc<dyn UserRepository>,
+    cache: CacheRepositoryRef,
     client: Client,
 }
 
 impl AuthService {
-    pub fn new(config: Arc<AppConfig>, user_repo: Arc<dyn UserRepository>) -> Self {
+    pub fn new(
+        config: Arc<AppConfig>,
+        user_repo: Arc<dyn UserRepository>,
+        cache: CacheRepositoryRef,
+    ) -> Self {
         Self {
             config,
             user_repo,
+            cache,
             client: Client::new(),
         }
     }
@@ -247,11 +254,23 @@ impl AuthService {
 
     /// Fetch user's Discord guilds from Discord API using OAuth token.
     /// Returns a list of guild IDs where the user is a member.
+    /// Result is cached in Redis with a 5-minute TTL.
     #[tracing::instrument(skip(self, access_token), name = "auth.fetch_discord_guilds")]
     pub async fn fetch_discord_guilds_for_user(
         &self,
+        discord_user_id: &str,
         access_token: &str,
     ) -> CoreResult<Vec<GuildInfo>> {
+        let cache_key = format!("discord_guilds:{}", discord_user_id);
+
+        // Check cache first
+        if let Some(cached) = self.cache.get(&cache_key).await {
+            if let Ok(guilds) = serde_json::from_str::<Vec<GuildInfo>>(&cached) {
+                tracing::info!(discord_user_id, "Discord guilds cache hit");
+                return Ok(guilds);
+            }
+        }
+
         tracing::info!("Fetching guilds from Discord API using OAuth token");
 
         let response = self
@@ -342,6 +361,13 @@ impl AuthService {
             .collect();
 
         tracing::info!(count = guild_infos.len(), "Successfully fetched {} guilds from Discord API", guild_infos.len());
+
+        // Store in cache with 5-minute TTL
+        if let Ok(json) = serde_json::to_string(&guild_infos) {
+            self.cache.set_ex(&cache_key, &json, 300).await;
+            tracing::debug!(discord_user_id, "Discord guilds cached");
+        }
+
         Ok(guild_infos)
     }
 

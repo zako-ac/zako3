@@ -6,6 +6,7 @@ import { useNameCache } from './name-cache'
 export const guildKeys = {
     all: ['guilds'] as const,
     myGuilds: () => [...guildKeys.all, 'my'] as const,
+    adminUserGuilds: (userId: string) => [...guildKeys.all, 'admin', userId] as const,
 }
 
 export const useMyGuilds = () => {
@@ -20,3 +21,10 @@ export const useMyGuilds = () => {
     }, [query.data, ingestGuilds])
     return query
 }
+
+export const useAdminUserGuilds = (userId: string) =>
+    useQuery({
+        queryKey: guildKeys.adminUserGuilds(userId),
+        queryFn: () => guildApi.getAdminUserGuilds(userId),
+        enabled: !!userId,
+    })

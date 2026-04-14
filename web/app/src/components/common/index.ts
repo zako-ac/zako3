@@ -15,3 +15,4 @@ export {
   DataTableEmpty,
   type DataTableColumn,
 } from './data-table'
+export { GuildSelectDialog } from './GuildSelectDialog'

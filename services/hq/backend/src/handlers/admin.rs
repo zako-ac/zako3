@@ -8,6 +8,7 @@ use hq_types::hq::{
     AuthUserDto, PaginatedResponseDto, RejectVerificationDto, UpdateUserRoleDto, UserId,
     VerificationRequest, VerificationRequestId, VerificationStatus,
 };
+use hq_types::hq::settings::PartialUserSettings;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -339,4 +340,147 @@ pub async fn reject_verification(
         .map_err(map_error)?;
 
     Ok(Json(request))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}/settings",
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "User settings (User scope)", body = PartialUserSettings)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_user_settings(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let settings = service
+        .user_settings
+        .get_settings(user_id)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(settings))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}/settings/guilds/{guild_id}",
+    params(
+        ("id" = String, Path, description = "User ID"),
+        ("guild_id" = String, Path, description = "Discord guild ID"),
+    ),
+    responses(
+        (status = 200, description = "Guild-user settings override", body = PartialUserSettings)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_user_guild_settings(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path((id, guild_id)): Path<(String, String)>,
+) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let settings = service
+        .user_settings
+        .get_guild_user_settings(&user_id, &guild_id)
+        .await
+        .map_err(map_error)?
+        .unwrap_or_default();
+
+    Ok(Json(settings))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/users/{id}/settings",
+    request_body = PartialUserSettings,
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "Updated user settings (User scope)", body = PartialUserSettings)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn update_user_settings(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+    Json(body): Json<PartialUserSettings>,
+) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let settings = service
+        .user_settings
+        .save_settings(user_id, body)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(settings))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/users/{id}/settings/guilds/{guild_id}",
+    request_body = PartialUserSettings,
+    params(
+        ("id" = String, Path, description = "User ID"),
+        ("guild_id" = String, Path, description = "Discord guild ID"),
+    ),
+    responses(
+        (status = 200, description = "Updated guild-user settings override", body = PartialUserSettings)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn update_user_guild_settings(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path((id, guild_id)): Path<(String, String)>,
+    Json(body): Json<PartialUserSettings>,
+) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
+    let user_id = UserId::from_str(&id).map_err(|_| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid user ID".to_string(),
+        )
+    })?;
+
+    let settings = service
+        .user_settings
+        .save_guild_user_settings(&user_id, &guild_id, body)
+        .await
+        .map_err(map_error)?;
+
+    Ok(Json(settings))
 }

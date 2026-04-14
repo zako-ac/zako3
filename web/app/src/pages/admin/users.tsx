@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { MoreHorizontal, Ban, UserCheck, Shield, ShieldOff } from 'lucide-react'
+import { MoreHorizontal, Ban, UserCheck, Shield, ShieldOff, Settings } from 'lucide-react'
 import { useUsers, useBanUser, useUnbanUser, useUpdateUserRole } from '@/features/users'
+import { ROUTES } from '@/lib/constants'
 import { SearchInput, DataPagination, ConfirmDialog } from '@/components/common'
 import { usePagination, useDebounce } from '@/hooks'
 import { formatRelativeTime } from '@/lib/date'
@@ -28,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { User } from '@zako-ac/zako3-data'
 
 export const AdminUsersPage = () => {
+    const navigate = useNavigate()
     const { t, i18n } = useTranslation()
     const { pagination, setPage, setPerPage, getPaginationInfo } = usePagination()
     const [search, setSearch] = useState('')
@@ -189,6 +192,13 @@ export const AdminUsersPage = () => {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                    onClick={() => navigate(ROUTES.ADMIN_USER_SETTINGS(user.id))}
+                                                >
+                                                    <Settings className="mr-2 h-4 w-4" />
+                                                    {t('admin.users.settings')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
                                                 <DropdownMenuItem
                                                     onClick={() => handleToggleAdmin(user)}
                                                     disabled={isUpdatingRole}

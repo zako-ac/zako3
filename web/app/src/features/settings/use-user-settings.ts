@@ -9,6 +9,8 @@ export const settingsKeys = {
     guildUserSettings: (guildId: string) => ['guildUserSettings', guildId] as const,
     guildSettings: (guildId: string) => ['guildSettings', guildId] as const,
     globalSettings: () => ['globalSettings'] as const,
+    adminUserSettings: (userId: string) => ['adminUserSettings', userId] as const,
+    adminUserGuildSettings: (userId: string, guildId: string) => ['adminUserGuildSettings', userId, guildId] as const,
 }
 
 // Returns resolved (concrete) UserSettings — used where full concrete values are needed
@@ -112,6 +114,42 @@ export const useSaveGlobalSettings = () => {
         mutationFn: (settings) => settingsApi.saveGlobalSettings(settings),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: settingsKeys.globalSettings() })
+        },
+    })
+}
+
+// --- Admin user scope ---
+
+export const useAdminUserSettings = (userId: string) =>
+    useQuery({
+        queryKey: settingsKeys.adminUserSettings(userId),
+        queryFn: () => settingsApi.getAdminUserSettings(userId),
+        enabled: !!userId,
+    })
+
+export const useAdminUserGuildSettings = (userId: string, guildId: string) =>
+    useQuery({
+        queryKey: settingsKeys.adminUserGuildSettings(userId, guildId),
+        queryFn: () => settingsApi.getAdminUserGuildSettings(userId, guildId),
+        enabled: !!userId && !!guildId,
+    })
+
+export const useSaveAdminUserSettings = (userId: string) => {
+    const queryClient = useQueryClient()
+    return useMutation<PartialUserSettings, Error, PartialUserSettings>({
+        mutationFn: (settings) => settingsApi.saveAdminUserSettings(userId, settings),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: settingsKeys.adminUserSettings(userId) })
+        },
+    })
+}
+
+export const useSaveAdminUserGuildSettings = (userId: string, guildId: string) => {
+    const queryClient = useQueryClient()
+    return useMutation<PartialUserSettings, Error, PartialUserSettings>({
+        mutationFn: (settings) => settingsApi.saveAdminUserGuildSettings(userId, guildId, settings),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: settingsKeys.adminUserGuildSettings(userId, guildId) })
         },
     })
 }

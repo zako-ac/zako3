@@ -62,6 +62,10 @@ use handlers::users;
         handlers::admin::ban_user,
         handlers::admin::unban_user,
         handlers::admin::update_user_role,
+        handlers::admin::get_user_settings,
+        handlers::admin::update_user_settings,
+        handlers::admin::get_user_guild_settings,
+        handlers::admin::update_user_guild_settings,
         handlers::tap::request_verification,
         handlers::notification::list_notifications,
         handlers::notification::mark_notification_read,
@@ -77,6 +81,7 @@ use handlers::users;
         handlers::playback::get_history,
 
         handlers::guild::get_my_guilds,
+        handlers::guild::get_user_guilds,
 
         handlers::mapper::list_mappers,
         handlers::mapper::get_mapper,
@@ -222,6 +227,18 @@ pub fn app(
         .route(
             "/api/v1/admin/users/:id/role",
             axum::routing::patch(admin::update_user_role),
+        )
+        .route(
+            "/api/v1/admin/users/:id/settings",
+            get(admin::get_user_settings).put(admin::update_user_settings),
+        )
+        .route(
+            "/api/v1/admin/users/:id/settings/guilds/:guild_id",
+            get(admin::get_user_guild_settings).put(admin::update_user_guild_settings),
+        )
+        .route(
+            "/api/v1/admin/users/:id/guilds",
+            get(guild::get_user_guilds),
         )
         .route(
             "/api/v1/admin/taps/:id",

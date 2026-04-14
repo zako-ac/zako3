@@ -134,7 +134,7 @@ impl Service {
 
         Ok(Self {
             config: config.clone(),
-            auth: AuthService::new(config.clone(), user_repo.clone()),
+            auth: AuthService::new(config.clone(), user_repo.clone(), redis_repo.clone()),
             tap: tap_service,
             api_key: api_key_service,
             notification: notification_service,

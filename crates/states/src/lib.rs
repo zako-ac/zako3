@@ -19,6 +19,7 @@ type Result<T> = std::result::Result<T, StateServiceError>;
 pub trait CacheRepository: Send + Sync {
     async fn get(&self, key: &str) -> Option<String>;
     async fn set(&self, key: &str, value: &str);
+    async fn set_ex(&self, key: &str, value: &str, ttl_secs: u64);
     async fn del(&self, key: &str);
     async fn incr(&self, key: &str) -> Result<i64>;
     async fn decr(&self, key: &str) -> Result<i64>;
@@ -447,6 +448,12 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let _: redis::RedisResult<()> = conn.set(key, value).await;
+    }
+
+    async fn set_ex(&self, key: &str, value: &str, ttl_secs: u64) {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: redis::RedisResult<()> = conn.set_ex(key, value, ttl_secs).await;
     }
 
     async fn del(&self, key: &str) {

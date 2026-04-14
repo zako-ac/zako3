@@ -1,10 +1,10 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::{State, Path}, http::StatusCode};
 use hq_core::Service;
 use hq_types::hq::guild::GuildSummaryDto;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::middleware::auth::AuthUser;
+use crate::middleware::auth::{AuthUser, AdminUser};
 
 fn map_error(e: hq_core::CoreError) -> (StatusCode, String) {
     match e {
@@ -64,7 +64,7 @@ pub async fn get_my_guilds(
     // Try to fetch guilds from Discord API using OAuth token
     let guild_infos = if let Some(token) = &db_user.oauth_access_token {
         tracing::info!("User has OAuth token, attempting Discord API call");
-        match service.auth.fetch_discord_guilds_for_user(token).await {
+        match service.auth.fetch_discord_guilds_for_user(&discord_id_str, token).await {
             Ok(guilds) => {
                 tracing::info!(
                     count = guilds.len(),
@@ -159,5 +159,68 @@ pub async fn get_my_guilds(
         "Returning {} guilds to client",
         dtos.len()
     );
+    Ok(Json(dtos))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}/guilds",
+    params(
+        ("id" = String, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "Guilds where user is a member and bot is present", body = Vec<GuildSummaryDto>)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn get_user_guilds(
+    State(service): State<Arc<Service>>,
+    AdminUser(_admin_id): AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<GuildSummaryDto>>, (StatusCode, String)> {
+    // Get target user's discord ID
+    let db_user = service
+        .auth
+        .get_full_user(&id)
+        .await
+        .map_err(map_error)?;
+
+    let discord_id_str = db_user.discord_user_id.0.clone();
+    let discord_id: u64 = discord_id_str.parse().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "invalid discord id".into(),
+        )
+    })?;
+
+    // Use bot cache resolver (no OAuth token needed for admin view)
+    let resolver = service.name_resolver_slot.get();
+    let guild_infos = resolver
+        .map(|r| r.guilds_for_user(discord_id))
+        .unwrap_or_default();
+
+    // Get bot's guild list and intersect with user's guilds
+    let bot_guild_ids: std::collections::HashSet<u64> = resolver
+        .map(|r| r.bot_guilds().into_iter().collect())
+        .unwrap_or_default();
+
+    // Filter to only mutual guilds (where bot is present)
+    let mutual_guild_infos: Vec<_> = guild_infos
+        .into_iter()
+        .filter(|g| bot_guild_ids.contains(&g.id))
+        .collect();
+
+    let dtos = mutual_guild_infos
+        .into_iter()
+        .map(|g| GuildSummaryDto {
+            guild_id: g.id.to_string(),
+            guild_name: g.name,
+            guild_icon_url: g.icon_url,
+            active_channel_id: None,
+            active_channel_name: None,
+            can_manage: g.can_manage,
+        })
+        .collect::<Vec<_>>();
+
     Ok(Json(dtos))
 }

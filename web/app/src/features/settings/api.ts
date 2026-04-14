@@ -37,4 +37,17 @@ export const settingsApi = {
 
     saveGlobalSettings: async (settings: PartialUserSettings): Promise<PartialUserSettings> =>
         apiCall(apiClient.put<PartialUserSettings>('/settings/global', settings)),
+
+    // Admin endpoints
+    getAdminUserSettings: async (userId: string): Promise<PartialUserSettings> =>
+        apiCall(apiClient.get<PartialUserSettings>(`/admin/users/${encodeURIComponent(userId)}/settings`)),
+
+    saveAdminUserSettings: async (userId: string, settings: PartialUserSettings): Promise<PartialUserSettings> =>
+        apiCall(apiClient.put<PartialUserSettings>(`/admin/users/${encodeURIComponent(userId)}/settings`, settings)),
+
+    getAdminUserGuildSettings: async (userId: string, guildId: string): Promise<PartialUserSettings> =>
+        apiCall(apiClient.get<PartialUserSettings>(`/admin/users/${encodeURIComponent(userId)}/settings/guilds/${encodeURIComponent(guildId)}`)),
+
+    saveAdminUserGuildSettings: async (userId: string, guildId: string, settings: PartialUserSettings): Promise<PartialUserSettings> =>
+        apiCall(apiClient.put<PartialUserSettings>(`/admin/users/${encodeURIComponent(userId)}/settings/guilds/${encodeURIComponent(guildId)}`, settings)),
 }

@@ -184,6 +184,7 @@
           "admin": "Admin"
         },
         "searchPlaceholder": "Search users...",
+        "settings": "Settings",
         "status": "Status",
         "subtitle": "Manage all users in the system.",
         "title": "Users",
@@ -196,6 +197,19 @@
         "user": "User",
         "userDetails": "User Details",
         "userId": "User ID"
+      },
+      "userSettings": {
+        "changeGuild": "Change Guild",
+        "currentGuild": "Current guild: {{guild}}",
+        "guildSearchPlaceholder": "Search guilds...",
+        "guildUserScope": "Guild User",
+        "noGuilds": "No guilds found",
+        "noGuildSelected": "No guild selected",
+        "selectGuild": "Select Guild",
+        "selectGuildDesc": "Select a guild to manage settings for.",
+        "title": "User Settings",
+        "userId": "User ID",
+        "userScope": "User"
       },
       "verifications": {
         "approve": "Approve",
@@ -393,6 +407,7 @@
       "profile": "Profile",
       "profileSubtitle": "Your personal information",
       "replacement": "Replacement",
+      "reset": "Reset",
       "save": "Save",
       "saveError": "Failed to save settings. Please try again.",
       "saveSuccess": "Settings saved successfully!",
@@ -418,8 +433,7 @@
       "ttsSubtitle": "Configure how your messages are read aloud.",
       "ttsVoice": "TTS Voice",
       "ttsVoiceNone": "None (use default)",
-      "unsavedChanges": "You have unsaved changes",
-      "reset": "Reset"
+      "unsavedChanges": "You have unsaved changes"
     },
     "taps": {
       "activeCount": "{{value}} online",
