@@ -123,6 +123,16 @@ export const AppSidebar = () => {
                     },
                 ],
             },
+            {
+                title: t('nav.settings'),
+                items: [
+                    {
+                        title: t('nav.settings'),
+                        url: ROUTES.SETTINGS,
+                        icon: Settings,
+                    },
+                ],
+            },
             ...(isValidTapId && tapData
                 ? [
                     {
@@ -246,18 +256,8 @@ export const AppSidebar = () => {
                                 align="start"
                                 sideOffset={4}
                             >
-                                <DropdownMenuItem asChild>
-                                    <Link
-                                        to={ROUTES.SETTINGS}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <Settings className="h-4 w-4" />
-                                        {t('nav.settings')}
-                                    </Link>
-                                </DropdownMenuItem>
                                 {user?.isAdmin && (
                                     <>
-                                        <DropdownMenuSeparator />
                                         <DropdownMenuItem asChild>
                                             <Link
                                                 to={ROUTES.ADMIN}
@@ -267,9 +267,9 @@ export const AppSidebar = () => {
                                                 {t('nav.adminPanel')}
                                             </Link>
                                         </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
                                     </>
                                 )}
-                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                     onClick={() => logout()}
                                     className="text-destructive focus:text-destructive"

@@ -6,4 +6,5 @@ export {
   useVerificationRequests,
   useApproveVerification,
   useRejectVerification,
+  useAdminStats,
 } from './hooks'

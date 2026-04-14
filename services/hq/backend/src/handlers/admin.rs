@@ -5,7 +5,7 @@ use axum::{
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::{
-    AuthUserDto, PaginatedResponseDto, RejectVerificationDto, UpdateUserRoleDto, UserId,
+    AuthUserDto, PaginatedResponseDto, PlatformStatsDto, RejectVerificationDto, UpdateUserRoleDto, UserId,
     VerificationRequest, VerificationRequestId, VerificationStatus,
 };
 use hq_types::hq::settings::PartialUserSettings;
@@ -483,4 +483,19 @@ pub async fn update_user_guild_settings(
         .map_err(map_error)?;
 
     Ok(Json(settings))
+}
+
+pub async fn get_platform_stats(
+    State(state): State<Arc<Service>>,
+    AdminUser(_): AdminUser,
+) -> Result<Json<PlatformStatsDto>, (axum::http::StatusCode, String)> {
+    let global_unique_users = state
+        .tap_metrics
+        .get_global_unique_users()
+        .await
+        .map_err(|e| {
+            let core_error = CoreError::StateError(e);
+            map_error(core_error)
+        })?;
+    Ok(Json(PlatformStatsDto { global_unique_users }))
 }

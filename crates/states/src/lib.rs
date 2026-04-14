@@ -26,6 +26,7 @@ pub trait CacheRepository: Send + Sync {
     async fn incrby(&self, key: &str, amount: i64) -> Result<i64>;
     async fn pfadd(&self, key: &str, element: &str) -> Result<()>;
     async fn pfcount(&self, key: &str) -> Result<u64>;
+    async fn pfcount_multi(&self, keys: &[String]) -> Result<u64>;
     async fn sadd(&self, key: &str, member: &str) -> Result<()>;
     async fn smembers(&self, key: &str) -> Result<Vec<String>>;
 }
@@ -172,6 +173,18 @@ impl TapMetricsStateService {
     pub async fn get_unique_users_count(&self, tap_id: TapId) -> Result<u64> {
         let key = self.get_key(tap_id, TapMetricKey::UniqueUsers);
         self.cache_repository.pfcount(&key).await
+    }
+
+    pub async fn get_global_unique_users(&self) -> Result<u64> {
+        let taps = self.get_known_taps().await?;
+        if taps.is_empty() {
+            return Ok(0);
+        }
+        let keys: Vec<String> = taps
+            .iter()
+            .map(|id| format!("metrics:{}:unique_users", id.0))
+            .collect();
+        self.cache_repository.pfcount_multi(&keys).await
     }
 
     pub async fn get_metric(&self, tap_id: TapId, key: TapMetricKey) -> Result<u64> {
@@ -494,6 +507,13 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let val: u64 = conn.pfcount(key).await?;
+        Ok(val)
+    }
+
+    async fn pfcount_multi(&self, keys: &[String]) -> Result<u64> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let val: u64 = conn.pfcount(keys).await?;
         Ok(val)
     }
 

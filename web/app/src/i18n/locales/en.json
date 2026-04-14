@@ -121,6 +121,7 @@
       "recentActivity": "Recent Activity",
       "stats": {
         "allSystemsOperational": "All systems operational",
+        "globalUniqueUsers": "Global Unique Users",
         "healthy": "Healthy",
         "pendingVerifications": "Pending Verifications",
         "requiresReview": "Requires review",

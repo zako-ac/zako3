@@ -125,6 +125,12 @@ pub struct TapStatsDto {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct PlatformStatsDto {
+    pub global_unique_users: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PaginationMetaDto {
     pub total: u64,
     pub page: u64,

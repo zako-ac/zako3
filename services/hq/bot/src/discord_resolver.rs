@@ -32,6 +32,7 @@ impl DiscordNameResolver for SerenityNameResolver {
             id: user_id,
             name: user.name.clone(),
             avatar_url: Some(user.face()),
+            global_name: user.global_name.clone(),
         })
     }
 
@@ -75,6 +76,15 @@ impl DiscordNameResolver for SerenityNameResolver {
             total_bot_guilds
         );
         result
+    }
+
+    fn guild_nickname(&self, guild_id: u64, user_id: u64) -> Option<String> {
+        self.cache
+            .guild(GuildId::new(guild_id))?
+            .members
+            .get(&UserId::new(user_id))?
+            .nick
+            .clone()
     }
 
     fn bot_guilds(&self) -> Vec<u64> {

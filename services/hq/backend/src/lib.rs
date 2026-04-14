@@ -249,6 +249,10 @@ pub fn app(
             axum::routing::patch(tap::admin_update_tap_occupation),
         )
         .route(
+            "/api/v1/admin/stats",
+            get(admin::get_platform_stats),
+        )
+        .route(
             "/api/v1/notifications/unread-count",
             get(notification::get_unread_count),
         )

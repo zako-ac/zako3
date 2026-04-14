@@ -54,7 +54,9 @@ export const VoiceSidebarSection = () => {
                                         <span>{guild.guildName || `Server ...${guild.guildId.slice(-6)}`}</span>
                                     </SidebarMenuButton>
                                     <SidebarMenuAction asChild>
-                                        <Settings className="h-3.5 w-3.5" />
+                                        <div className="flex items-center justify-center">
+                                            <Settings className="h-3.5 w-3.5 opacity-60" />
+                                        </div>
                                     </SidebarMenuAction>
                                 </Link>
 

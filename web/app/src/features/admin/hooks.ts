@@ -15,6 +15,7 @@ export const adminKeys = {
     [...adminKeys.all, 'pending-verifications'] as const,
   verifications: (params: GetVerificationRequestsParams) =>
     [...adminKeys.all, 'verifications', params] as const,
+  stats: () => [...adminKeys.all, 'stats'] as const,
 }
 
 export const useAdminActivity = (params: Partial<PaginationParams> = {}) => {
@@ -82,5 +83,12 @@ export const useUpdateTapOccupation = (tapId: string) => {
       })
       queryClient.invalidateQueries({ queryKey: tapKeys.lists() })
     },
+  })
+}
+
+export const useAdminStats = () => {
+  return useQuery({
+    queryKey: adminKeys.stats(),
+    queryFn: () => adminApi.getStats(),
   })
 }

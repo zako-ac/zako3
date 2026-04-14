@@ -121,6 +121,7 @@
       "recentActivity": "최근 활동",
       "stats": {
         "allSystemsOperational": "모든 시스템 정상 작동",
+        "globalUniqueUsers": "글로벌 고유 사용자",
         "healthy": "정상",
         "pendingVerifications": "보류 중인 인증",
         "requiresReview": "검토 필요",

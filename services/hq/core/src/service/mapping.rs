@@ -33,8 +33,15 @@ impl DiscordInfoProvider for HqDiscordInfoProvider {
         Some(ChannelInfo { name })
     }
 
-    async fn get_user_info(&self, _user_id: &DiscordUserId) -> Option<UserInfo> {
-        None
+    async fn get_user_info(&self, user_id: &DiscordUserId) -> Option<UserInfo> {
+        let id: u64 = user_id.0.parse().ok()?;
+        let resolver = self.resolver.get()?;
+        let info = resolver.user_info(id)?;
+        Some(UserInfo {
+            username: info.name,
+            global_nickname: info.global_name,
+            guild_nickname: resolver.guild_nickname(self.guild_id, id),
+        })
     }
 }
 

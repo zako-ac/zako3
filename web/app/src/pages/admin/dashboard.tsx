@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useUsers, userKeys } from '@/features/users'
 import { useTaps, tapKeys } from '@/features/taps'
-import { useAdminActivity, usePendingVerifications, adminKeys } from '@/features/admin'
+import { useAdminActivity, usePendingVerifications, useAdminStats, adminKeys } from '@/features/admin'
 import { useStatsSSE } from '@/features/stats'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,9 +33,11 @@ export const AdminDashboardPage = () => {
   )
   const { data: pendingTaps, isLoading: isPendingLoading, isFetching: isPendingFetching, refetch: refetchPending } =
     usePendingVerifications()
+  const { data: statsData, isLoading: isStatsLoading, isFetching: isStatsFetching, refetch: refetchStats } = useAdminStats()
 
   const totalUsers = usersData?.meta.total ?? 0
   const totalTaps = tapsData?.meta.total ?? 0
+  const globalUniqueUsers = statsData?.globalUniqueUsers ?? 0
   const recentActivity = activityData?.data ?? []
   const pendingVerifications = pendingTaps ?? []
   const grafanaUrl = import.meta.env.VITE_GRAFANA_URL
@@ -63,6 +65,14 @@ export const AdminDashboardPage = () => {
           isLoading={isTapsLoading}
           onRefresh={refetchTaps}
           isRefreshing={isTapsFetching}
+        />
+        <StatsCard
+          title={t('admin.stats.globalUniqueUsers')}
+          value={globalUniqueUsers.toLocaleString()}
+          icon={<Users className="h-4 w-4" />}
+          isLoading={isStatsLoading}
+          onRefresh={refetchStats}
+          isRefreshing={isStatsFetching}
         />
         <StatsCard
           title={t('admin.stats.pendingVerifications')}

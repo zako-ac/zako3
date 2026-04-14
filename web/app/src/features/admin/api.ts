@@ -70,4 +70,8 @@ export const adminApi = {
       apiClient.post(`/admin/verifications/${requestId}/reject`, { reason })
     )
   },
+
+  getStats: async (): Promise<{ globalUniqueUsers: number }> => {
+    return apiCall(apiClient.get<{ globalUniqueUsers: number }>('/admin/stats'))
+  },
 }
