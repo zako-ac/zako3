@@ -535,6 +535,73 @@ impl TlService {
         info!(route_count = all_routes.len(), "reconcile: done");
     }
 
+    /// Detects and evicts duplicate bots in the same channel.
+    /// Multiple routes pointing to the same (guild_id, channel_id) can accumulate via
+    /// TOCTOU races on concurrent Joins. Keeps one route per channel and sends Leave
+    /// to the rest.
+    /// Called from the periodic reconcile task (every 1 min).
+    pub async fn evict_duplicates(&self) {
+        let sessions: Vec<(SessionRoute, SessionInfo)> = {
+            let state = self.state.read().await;
+            state.sessions.iter().map(|(r, i)| (*r, *i)).collect()
+        };
+
+        // Group routes by channel — SessionInfo is (guild_id, channel_id)
+        let mut by_channel: std::collections::HashMap<SessionInfo, Vec<SessionRoute>> =
+            std::collections::HashMap::new();
+        for (route, info) in &sessions {
+            by_channel.entry(*info).or_default().push(*route);
+        }
+
+        let duplicates: Vec<(SessionRoute, SessionInfo)> = by_channel
+            .into_iter()
+            .filter(|(_, routes)| routes.len() > 1)
+            .flat_map(|(info, routes)| {
+                // Keep the first, evict the rest
+                routes.into_iter().skip(1).map(move |route| (route, info))
+            })
+            .collect();
+
+        if duplicates.is_empty() {
+            tracing::debug!("evict_duplicates: no duplicates found");
+            return;
+        }
+
+        warn!(
+            count = duplicates.len(),
+            "evict_duplicates: {} duplicate bot(s) in same channel — evicting",
+            duplicates.len()
+        );
+
+        for (route, session_info) in duplicates {
+            warn!(
+                worker_id = route.worker_id.0,
+                ae_id = route.ae_id.0,
+                guild_id = ?session_info.guild_id,
+                channel_id = ?session_info.channel_id,
+                "evict_duplicates: sending Leave to duplicate bot"
+            );
+            let leave_req = AudioEngineCommandRequest {
+                session: Some(session_info),
+                command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave),
+                headers: std::collections::HashMap::new(),
+                idempotency_key: None,
+            };
+            if let Err(e) = self.dispatcher.send(route, leave_req).await {
+                warn!(
+                    worker_id = route.worker_id.0,
+                    ae_id = route.ae_id.0,
+                    error = %e,
+                    "evict_duplicates: dispatch failed"
+                );
+            }
+            let mut state = self.state.write().await;
+            state.sessions.remove(&route);
+        }
+
+        info!("evict_duplicates: done");
+    }
+
     /// Fetches current session state from all connected AEs and removes stale sessions.
     /// Called periodically (every 1 min) and on command failures to reconcile state drift.
     pub async fn sync_sessions(&self) {
@@ -828,5 +895,63 @@ mod tests {
 
         TlService::new(state, dispatcher).reconcile().await;
         // Should complete without panic
+    }
+
+    fn two_routes_same_channel() -> Arc<RwLock<ZakoState>> {
+        let s = session(1, 100);
+        let route_a = SessionRoute { worker_id: WorkerId(0), ae_id: AeId(1) };
+        let route_b = SessionRoute { worker_id: WorkerId(1), ae_id: AeId(1) };
+        let mut sessions: FxHashMap<SessionRoute, SessionInfo> = Default::default();
+        sessions.insert(route_a, s);
+        sessions.insert(route_b, s);
+        let mut workers = FxHashMap::default();
+        for &wid in &[0u16, 1u16] {
+            workers.insert(WorkerId(wid), Worker {
+                worker_id: WorkerId(wid),
+                bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+                discord_token: DiscordToken(String::new()),
+                connected_ae_ids: vec![1],
+                permissions: WorkerPermissions::new(),
+                ae_cursor: 0,
+            });
+        }
+        Arc::new(RwLock::new(ZakoState { workers, sessions, worker_cursor: 0 }))
+    }
+
+    #[tokio::test]
+    async fn evict_duplicates_sends_leave_to_extra_bot() {
+        let state = two_routes_same_channel();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        let svc = TlService::new(state.clone(), dispatcher);
+        svc.evict_duplicates().await;
+
+        let call_list = calls.lock().unwrap();
+        // One Leave should have been sent for the duplicate
+        let leaves: Vec<_> = call_list.iter().filter(|c| matches!(c, MockCall::Leave(_))).collect();
+        assert_eq!(leaves.len(), 1, "exactly one duplicate should be evicted");
+
+        // State should now have one session remaining
+        let remaining = state.read().await.sessions.len();
+        assert_eq!(remaining, 1, "one session should remain after eviction");
+    }
+
+    #[tokio::test]
+    async fn evict_duplicates_no_duplicates_does_nothing() {
+        let s = session(1, 100);
+        let state = state_with_session(s);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        TlService::new(state, dispatcher).evict_duplicates().await;
+
+        assert_eq!(calls.lock().unwrap().len(), 0, "no calls when no duplicates");
     }
 }

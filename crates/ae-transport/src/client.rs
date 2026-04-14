@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use backon::{ExponentialBuilder, Retryable};
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::Instrument;
 
@@ -86,33 +85,24 @@ impl TlClient {
         let server_hs: TlServerHandshake = recv_frame(&mut framed).await?;
         tracing::debug!(token = %server_hs.token.0, "ae-transport: handshake complete");
 
-        let framed = Arc::new(Mutex::new(framed));
-
         loop {
-            let wire_req: WireRequest = {
-                let mut f = framed.lock().await;
-                recv_frame(&mut *f).await?
-            };
+            let wire_req: WireRequest = recv_frame(&mut framed).await?;
 
-            let handler = self.handler.clone();
-            let framed_clone = framed.clone();
-            tokio::spawn(async move {
-                let span = child_span(&wire_req.headers);
-                let response = handler
-                    .handle(wire_req.payload, &wire_req.headers)
-                    .instrument(span)
-                    .await;
-
-                let mut f = framed_clone.lock().await;
-                let _ = send_frame(
-                    &mut *f,
-                    &WireResponse {
-                        id: wire_req.id,
-                        payload: response,
-                    },
-                )
+            let span = child_span(&wire_req.headers);
+            let response = self
+                .handler
+                .handle(wire_req.payload, &wire_req.headers)
+                .instrument(span)
                 .await;
-            });
+
+            send_frame(
+                &mut framed,
+                &WireResponse {
+                    id: wire_req.id,
+                    payload: response,
+                },
+            )
+            .await?;
         }
     }
 }
@@ -123,34 +113,24 @@ pub struct ConnectedClient {
 }
 
 impl ConnectedClient {
-    pub async fn serve(self, handler: Arc<dyn TlClientHandler>) -> Result<(), TlError> {
-        let framed = Arc::new(Mutex::new(self.framed));
-
+    pub async fn serve(mut self, handler: impl TlClientHandler) -> Result<(), TlError> {
         loop {
-            let wire_req: WireRequest = {
-                let mut f = framed.lock().await;
-                recv_frame(&mut *f).await?
-            };
+            let wire_req: WireRequest = recv_frame(&mut self.framed).await?;
 
-            let handler_clone = handler.clone();
-            let framed_clone = framed.clone();
-            tokio::spawn(async move {
-                let span = child_span(&wire_req.headers);
-                let response = handler_clone
-                    .handle(wire_req.payload, &wire_req.headers)
-                    .instrument(span)
-                    .await;
-
-                let mut f = framed_clone.lock().await;
-                let _ = send_frame(
-                    &mut *f,
-                    &WireResponse {
-                        id: wire_req.id,
-                        payload: response,
-                    },
-                )
+            let span = child_span(&wire_req.headers);
+            let response = handler
+                .handle(wire_req.payload, &wire_req.headers)
+                .instrument(span)
                 .await;
-            });
+
+            send_frame(
+                &mut self.framed,
+                &WireResponse {
+                    id: wire_req.id,
+                    payload: response,
+                },
+            )
+            .await?;
         }
     }
 }

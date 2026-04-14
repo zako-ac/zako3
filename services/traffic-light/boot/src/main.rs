@@ -173,7 +173,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Spawn reconcile task — detects dangling sessions and leaves them every 60 seconds
+    // Spawn reconcile task — detects dangling sessions and duplicate bots every 60 seconds
     let tl_for_reconcile = tl_service.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
@@ -181,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             tl_for_reconcile.reconcile().await;
+            tl_for_reconcile.evict_duplicates().await;
         }
     });
 

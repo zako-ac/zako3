@@ -9,7 +9,7 @@ use songbird::Songbird;
 use tracing::instrument;
 use zako3_audio_engine_audio::OpusCons;
 use zako3_audio_engine_core::{
-    error::ZakoResult,
+    error::{ZakoError, ZakoResult},
     service::discord::DiscordService,
     types::{ChannelId, GuildId},
 };
@@ -72,7 +72,13 @@ impl DiscordService for SongbirdDiscordService {
         let g_id = Self::to_songbird_guild_id(guild_id);
         let c_id = Self::to_serenity_channel_id(channel_id);
 
-        let _handler = self.manager.join(g_id, c_id).await?;
+        match tokio::time::timeout(Duration::from_secs(10), self.manager.join(g_id, c_id)).await {
+            Ok(join_result) => join_result.map(|_| ())?,
+            Err(_) => {
+                tracing::warn!(guild_id = ?guild_id, channel_id = ?channel_id, "join_voice_channel timed out after 10s");
+                return Err(ZakoError::Rpc("join_voice_channel timed out after 10s".to_string()));
+            }
+        }
         Ok(())
     }
 

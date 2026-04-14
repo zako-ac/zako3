@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: Serve requests. On TL disconnect, reconnect TL only (Discord stays alive).
     report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-    let handler = Arc::new(AeTransportHandler::new(session_manager.clone()));
+    let handler = AeTransportHandler::new(session_manager.clone());
     if let Err(e) = connected.serve(handler).await {
         tracing::warn!("TL connection lost: {e}, reconnecting...");
     }
@@ -160,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((_, _, connected)) => {
                 tracing::info!("Reconnected to TL server");
                 report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-                let handler = Arc::new(AeTransportHandler::new(session_manager.clone()));
+                let handler = AeTransportHandler::new(session_manager.clone());
                 if let Err(e) = connected.serve(handler).await {
                     tracing::warn!("TL connection lost: {e}, reconnecting...");
                 }
