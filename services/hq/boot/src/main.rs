@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
-use hq_core::{get_pool, run_migrations, AppConfig, PlaybackEvent, Service};
+use hq_core::{AppConfig, PlaybackEvent, Service, get_pool, run_migrations};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;

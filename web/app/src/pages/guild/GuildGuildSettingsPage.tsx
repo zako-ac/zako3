@@ -50,6 +50,7 @@ export const GuildGuildSettingsPage = () => {
                     isSaving={savingGuild || !canManage}
                     showImportant={canManage}
                     upstreamSettings={globalUpstream}
+                    filterOwnerOnly={true}
                 />
             )}
         </>

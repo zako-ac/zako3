@@ -15,12 +15,26 @@ use zako3_audio_engine_core::error::ZakoError;
 use zako3_taphub_transport_client::TransportClient;
 
 pub struct RealTapHubService {
-    client: Arc<TransportClient>,
+    client: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>>,
 }
 
 impl RealTapHubService {
     pub fn new(client: Arc<TransportClient>) -> Self {
+        Self {
+            client: Arc::new(tokio::sync::Mutex::new(Some(client))),
+        }
+    }
+
+    pub fn new_lazy(client: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>>) -> Self {
         Self { client }
+    }
+
+    async fn get_client(&self) -> ZakoResult<Arc<TransportClient>> {
+        self.client
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| ZakoError::TapHub("taphub not yet connected".to_string()))
     }
 }
 
@@ -33,8 +47,8 @@ impl TapHubService for RealTapHubService {
 
         let start = std::time::Instant::now();
 
-        let result = self
-            .client
+        let client = self.get_client().await?;
+        let result = client
             .request_audio(request)
             .await
             .map_err(ZakoError::TapHub);
@@ -57,8 +71,8 @@ impl TapHubService for RealTapHubService {
 
         let start = std::time::Instant::now();
 
-        let result = self
-            .client
+        let client = self.get_client().await?;
+        let result = client
             .preload_audio(request)
             .await
             .map_err(ZakoError::TapHub);
@@ -81,8 +95,8 @@ impl TapHubService for RealTapHubService {
 
         let start = std::time::Instant::now();
 
-        let result = self
-            .client
+        let client = self.get_client().await?;
+        let result = client
             .request_audio_meta(request)
             .await
             .map_err(ZakoError::TapHub);

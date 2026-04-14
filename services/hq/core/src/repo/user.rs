@@ -34,7 +34,7 @@ impl PgUserRepository {
 impl UserRepository for PgUserRepository {
     async fn find_by_discord_id(&self, discord_id: &str) -> CoreResult<Option<User>> {
         let row = sqlx::query(
-            "SELECT id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at FROM users WHERE discord_user_id = $1",
+            "SELECT id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at FROM users WHERE discord_user_id = $1",
         )
         .bind(discord_id)
         .fetch_optional(&self.pool)
@@ -46,6 +46,7 @@ impl UserRepository for PgUserRepository {
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
             let email: Option<String> = row.try_get("email")?;
+            let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
             let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
             let banned: bool = row.try_get("banned")?;
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
@@ -57,6 +58,7 @@ impl UserRepository for PgUserRepository {
                 username: Username(username),
                 avatar_url,
                 email,
+                oauth_access_token,
                 permissions,
                 banned,
                 timestamp: hq_types::hq::ResourceTimestamp {
@@ -75,6 +77,7 @@ impl UserRepository for PgUserRepository {
         let username: String = user.username.clone().into();
         let avatar_url = user.avatar_url.clone();
         let email = user.email.clone();
+        let oauth_access_token = user.oauth_access_token.clone();
         let permissions = user.permissions.clone();
         let banned = user.banned;
         let created_at = user.timestamp.created_at;
@@ -82,8 +85,8 @@ impl UserRepository for PgUserRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO users (id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO users (id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(id)
@@ -91,6 +94,7 @@ impl UserRepository for PgUserRepository {
         .bind(username)
         .bind(avatar_url)
         .bind(email)
+        .bind(oauth_access_token)
         .bind(permissions)
         .bind(banned)
         .bind(created_at)
@@ -102,7 +106,7 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn find_by_id(&self, id: UserId) -> CoreResult<Option<User>> {
-        let row = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at FROM users WHERE id = $1")
+        let row = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at FROM users WHERE id = $1")
             .bind(id.0)
             .fetch_optional(&self.pool)
             .await?;
@@ -113,6 +117,7 @@ impl UserRepository for PgUserRepository {
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
             let email: Option<String> = row.try_get("email")?;
+            let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
             let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
             let banned: bool = row.try_get("banned")?;
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
@@ -124,6 +129,7 @@ impl UserRepository for PgUserRepository {
                 username: Username(username),
                 avatar_url,
                 email,
+                oauth_access_token,
                 permissions,
                 banned,
                 timestamp: hq_types::hq::ResourceTimestamp {
@@ -143,7 +149,7 @@ impl UserRepository for PgUserRepository {
             .fetch_one(&self.pool)
             .await?;
 
-        let rows = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2")
+        let rows = sqlx::query("SELECT id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2")
             .bind(per_page as i64)
             .bind(offset as i64)
             .fetch_all(&self.pool)
@@ -156,6 +162,7 @@ impl UserRepository for PgUserRepository {
             let username: String = row.try_get("username")?;
             let avatar_url: Option<String> = row.try_get("avatar_url")?;
             let email: Option<String> = row.try_get("email")?;
+            let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
             let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
             let banned: bool = row.try_get("banned")?;
             let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
@@ -167,6 +174,7 @@ impl UserRepository for PgUserRepository {
                 username: Username(username),
                 avatar_url,
                 email,
+                oauth_access_token,
                 permissions,
                 banned,
                 timestamp: hq_types::hq::ResourceTimestamp {
@@ -180,7 +188,7 @@ impl UserRepository for PgUserRepository {
 
     async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User> {
         let row = sqlx::query(
-            "UPDATE users SET permissions = $1, updated_at = $2 WHERE id = $3 RETURNING id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at",
+            "UPDATE users SET permissions = $1, updated_at = $2 WHERE id = $3 RETURNING id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at",
         )
         .bind(&permissions)
         .bind(chrono::Utc::now())
@@ -193,6 +201,7 @@ impl UserRepository for PgUserRepository {
         let username: String = row.try_get("username")?;
         let avatar_url: Option<String> = row.try_get("avatar_url")?;
         let email: Option<String> = row.try_get("email")?;
+        let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
         let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
         let banned: bool = row.try_get("banned")?;
         let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
@@ -204,6 +213,7 @@ impl UserRepository for PgUserRepository {
             username: Username(username),
             avatar_url,
             email,
+            oauth_access_token,
             permissions,
             banned,
             timestamp: hq_types::hq::ResourceTimestamp {
@@ -215,7 +225,7 @@ impl UserRepository for PgUserRepository {
 
     async fn set_banned_status(&self, id: UserId, banned: bool) -> CoreResult<User> {
         let row = sqlx::query(
-            "UPDATE users SET banned = $1, updated_at = $2 WHERE id = $3 RETURNING id, discord_user_id, username, avatar_url, email, permissions, banned, created_at, updated_at",
+            "UPDATE users SET banned = $1, updated_at = $2 WHERE id = $3 RETURNING id, discord_user_id, username, avatar_url, email, oauth_access_token, permissions, banned, created_at, updated_at",
         )
         .bind(banned)
         .bind(chrono::Utc::now())
@@ -228,6 +238,7 @@ impl UserRepository for PgUserRepository {
         let username: String = row.try_get("username")?;
         let avatar_url: Option<String> = row.try_get("avatar_url")?;
         let email: Option<String> = row.try_get("email")?;
+        let oauth_access_token: Option<String> = row.try_get("oauth_access_token")?;
         let permissions: Vec<String> = row.try_get("permissions").unwrap_or_default();
         let banned: bool = row.try_get("banned")?;
         let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
@@ -239,6 +250,7 @@ impl UserRepository for PgUserRepository {
             username: Username(username),
             avatar_url,
             email,
+            oauth_access_token,
             permissions,
             banned,
             timestamp: hq_types::hq::ResourceTimestamp {

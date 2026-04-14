@@ -14,12 +14,15 @@ interface TtsVoiceFieldProps {
     value: string | null
     onChange: (value: string | null) => void
     taps: TapWithAccess[]
+    filterOwnerOnly?: boolean
 }
 
-export function TtsVoiceField({ value, onChange, taps }: TtsVoiceFieldProps) {
+export function TtsVoiceField({ value, onChange, taps, filterOwnerOnly }: TtsVoiceFieldProps) {
     const { t } = useTranslation()
 
-    const ttsTaps = taps.filter((tap) => tap.roles.includes('tts'))
+    const ttsTaps = taps
+        .filter((tap) => tap.roles.includes('tts'))
+        .filter((tap) => !filterOwnerOnly || tap.permission.type !== 'owner_only')
 
     return (
         <Select

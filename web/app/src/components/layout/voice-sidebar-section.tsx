@@ -40,23 +40,25 @@ export const VoiceSidebarSection = () => {
 
                         return (
                             <SidebarMenuItem key={guild.guildId}>
-                                <SidebarMenuButton tooltip={guild.guildName || guild.guildId}>
-                                    <Avatar className="h-5 w-5 rounded-sm">
-                                        <AvatarImage src={guild.guildIconUrl ?? undefined} />
-                                        <AvatarFallback className="rounded-sm">
-                                            <Server className="h-3 w-3" />
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <span>{guild.guildName || `Server ...${guild.guildId.slice(-6)}`}</span>
-                                </SidebarMenuButton>
-                                <SidebarMenuAction asChild>
-                                    <Link
-                                        to={ROUTES.GUILD_SETTINGS(guild.guildId)}
-                                        title={t('guilds.settings.action')}
-                                    >
+                                <Link
+                                    to={ROUTES.GUILD_SETTINGS(guild.guildId)}
+                                    title={t('guilds.settings.action')}
+                                >
+                                    <SidebarMenuButton tooltip={guild.guildName || guild.guildId}>
+                                        <Avatar className="h-5 w-5 rounded-sm">
+                                            <AvatarImage src={guild.guildIconUrl ?? undefined} />
+                                            <AvatarFallback className="rounded-sm">
+                                                <Server className="h-3 w-3" />
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <span>{guild.guildName || `Server ...${guild.guildId.slice(-6)}`}</span>
+                                    </SidebarMenuButton>
+                                    <SidebarMenuAction asChild>
                                         <Settings className="h-3.5 w-3.5" />
-                                    </Link>
-                                </SidebarMenuAction>
+                                    </SidebarMenuAction>
+                                </Link>
+
+
                                 {guild.activeChannelId && guild.activeChannelName && (
                                     <SidebarMenuSub>
                                         <SidebarMenuSubItem>

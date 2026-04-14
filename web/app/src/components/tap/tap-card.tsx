@@ -28,6 +28,7 @@ interface TapCardProps {
     onReport: (tapId: string) => void
     onClick?: (tapId: string) => void
     onSettingsClick?: (tapId: string) => void
+    showSetAsMyVoice?: boolean
 }
 
 export const TapCard = ({
@@ -35,6 +36,7 @@ export const TapCard = ({
     onReport,
     onClick,
     onSettingsClick,
+    showSetAsMyVoice = true,
 }: TapCardProps) => {
     const { t, i18n } = useTranslation()
 
@@ -70,12 +72,14 @@ export const TapCard = ({
                                 <OccupationBadge occupation={tap.occupation} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                            <SetAsMyVoice
-                                tapId={tap.id}
-                                hasTtsRole={tap.roles.includes('tts')}
-                                hasAccess={tap.hasAccess}
-                            />
+                        <div className="flex items-center gap-1 shrink-0">
+                            {showSetAsMyVoice &&
+                                <SetAsMyVoice
+                                    tapId={tap.id}
+                                    hasTtsRole={tap.roles.includes('tts')}
+                                    hasAccess={tap.hasAccess}
+                                />
+                            }
                             {onSettingsClick && (
                                 <TooltipProvider>
                                     <Tooltip>

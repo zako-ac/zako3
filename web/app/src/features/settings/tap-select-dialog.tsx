@@ -52,7 +52,7 @@ export function TapSelectDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex w-[95vw] max-h-[100vh] flex-col sm:w-auto sm:max-h-[80vh] sm:max-w-4xl lg:max-w-6xl">
+            <DialogContent className="flex w-[95vw] max-h-screen flex-col sm:w-auto sm:max-h-[80vh] sm:max-w-4xl lg:max-w-6xl">
                 <DialogHeader>
                     <DialogTitle>{t('settings.selectTap')}</DialogTitle>
                     <DialogDescription>{t('settings.selectTapDescription')}</DialogDescription>
@@ -75,12 +75,13 @@ export function TapSelectDialog({
                             description={t('settings.noTapsDescription')}
                         />
                     ) : (
-                        <div className="grid auto-rows-max gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 w-full">
+                        <div className="flex flex-wrap gap-4 w-full">
                             {taps.map((tap) => (
                                 <TapCard
                                     key={tap.id}
                                     tap={tap}
-                                    onReport={() => {}}
+                                    showSetAsMyVoice={false}
+                                    onReport={() => { }}
                                     onClick={handleSelect}
                                 />
                             ))}

@@ -13,7 +13,7 @@ pub async fn list(ctx: Context<'_>) -> Result<(), Error> {
 
     let user = service
         .auth
-        .get_or_create_user(&discord_id, username, None, None)
+        .get_or_create_user(&discord_id, username, None, None, None)
         .await?;
     let taps = service.tap.list_by_user(user.id).await?;
 

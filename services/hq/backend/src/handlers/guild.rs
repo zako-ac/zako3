@@ -33,21 +33,18 @@ pub async fn get_my_guilds(
     State(service): State<Arc<Service>>,
     AuthUser(user_id): AuthUser,
 ) -> Result<Json<Vec<GuildSummaryDto>>, (StatusCode, String)> {
-    let user = service
+    // Get full user object (which includes oauth_access_token)
+    let db_user = service
         .auth
-        .get_user(&user_id.to_string())
+        .get_full_user(&user_id.to_string())
         .await
         .map_err(map_error)?;
 
-    let discord_id_str = user.discord_id;
+    let discord_id_str = db_user.discord_user_id.0.clone();
     let discord_id: u64 = discord_id_str.parse()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "invalid discord id".into()))?;
 
-    let resolver = service.name_resolver_slot.get();
-    let guild_infos = resolver
-        .map(|r| r.guilds_for_user(discord_id))
-        .unwrap_or_default();
-
+    // Get voice channel info (used to enrich guild data)
     let voice_channels = service
         .voice_state
         .get_user_channels(&discord_id_str)
@@ -58,6 +55,26 @@ pub async fn get_my_guilds(
         .into_iter()
         .map(|loc| (loc.guild_id, loc))
         .collect();
+
+    // Try to fetch guilds from Discord API using OAuth token
+    let guild_infos = if let Some(token) = &db_user.oauth_access_token {
+        match service.auth.fetch_discord_guilds_for_user(token).await {
+            Ok(guilds) => guilds,
+            Err(_) => {
+                // Fall back to bot cache if API call fails
+                let resolver = service.name_resolver_slot.get();
+                resolver
+                    .map(|r| r.guilds_for_user(discord_id))
+                    .unwrap_or_default()
+            }
+        }
+    } else {
+        // No OAuth token, fall back to bot cache
+        let resolver = service.name_resolver_slot.get();
+        resolver
+            .map(|r| r.guilds_for_user(discord_id))
+            .unwrap_or_default()
+    };
 
     let dtos = guild_infos
         .into_iter()

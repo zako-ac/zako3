@@ -300,7 +300,7 @@ pub async fn voice(
 
     let user = service
         .auth
-        .get_or_create_user(&discord_id, username, None, None)
+        .get_or_create_user(&discord_id, username, None, None, None)
         .await?;
 
     if let Some(ref tap_name) = provider {

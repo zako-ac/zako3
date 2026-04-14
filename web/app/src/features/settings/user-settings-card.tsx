@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     Card,
@@ -25,6 +25,7 @@ import { FieldScopeSelector, type FieldScope } from './field-scope-selector'
 import type { PartialUserSettings, UserSettingsField } from './types'
 import { defaultUserSettings, emptyPartial } from './types'
 import { TapSelectDialog } from './tap-select-dialog'
+import { UnsavedChangesBar } from './unsaved-changes-bar'
 
 function OverrideAlert({
     fieldKey,
@@ -68,6 +69,7 @@ interface UserSettingsCardProps {
     isSaving?: boolean
     showImportant?: boolean
     upstreamSettings?: PartialUserSettings
+    filterOwnerOnly?: boolean
 }
 
 // Extract the value from a field, or return the default if None
@@ -82,10 +84,29 @@ export function UserSettingsCard({
     isSaving = false,
     showImportant = false,
     upstreamSettings,
+    filterOwnerOnly = false,
 }: UserSettingsCardProps) {
     const { t } = useTranslation()
     const [value, setValue] = useState<PartialUserSettings>(initialValue)
     const [dialogOpen, setDialogOpen] = useState(false)
+
+    // Track if settings have unsaved changes
+    const isDirty = JSON.stringify(value) !== JSON.stringify(initialValue)
+
+    // Warn when user tries to close/refresh the tab
+    useEffect(() => {
+        if (!isDirty) return
+        const handler = (e: BeforeUnloadEvent) => {
+            e.preventDefault()
+        }
+        window.addEventListener('beforeunload', handler)
+        return () => window.removeEventListener('beforeunload', handler)
+    }, [isDirty])
+
+    // Reset to initial saved state
+    const handleReset = () => {
+        setValue(initialValue)
+    }
 
     // Change a field's scope type (None/Normal/Important)
     // When enabling from None, initializes with the default value
@@ -127,7 +148,8 @@ export function UserSettingsCard({
     const upstream = upstreamSettings ?? emptyPartial
 
     return (
-        <Card>
+        <>
+            <Card>
             <CardHeader>
                 <CardTitle>{t('settings.tts')}</CardTitle>
                 <CardDescription>{t('settings.ttsSubtitle')}</CardDescription>
@@ -150,6 +172,7 @@ export function UserSettingsCard({
                                 value={getValue(value.tts_voice, defaultUserSettings.tts_voice)}
                                 onChange={(v) => patchValue('tts_voice', v)}
                                 taps={taps}
+                                filterOwnerOnly={filterOwnerOnly}
                             />
                             <Button variant="outline" onClick={() => setDialogOpen(true)}>
                                 <Compass />
@@ -304,5 +327,14 @@ export function UserSettingsCard({
                 </Button>
             </CardFooter>
         </Card>
+            {isDirty && (
+                <UnsavedChangesBar
+                    onSave={() => onSave(value)}
+                    onReset={handleReset}
+                    isSaving={isSaving}
+                />
+            )}
+        </>
     )
 }
+

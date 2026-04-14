@@ -1,17 +1,20 @@
 use std::sync::Arc;
 
-use hq_types::hq::settings::{PartialUserSettings, UserSettings};
+use hq_types::hq::settings::{PartialUserSettings, UserSettings, UserSettingsField};
+use hq_types::hq::tap::TapPermission;
 use hq_types::hq::UserId;
 use zako3_states::UserSettingsStateService;
 
 use crate::repo::{
-    GlobalSettingsRepository, GuildSettingsRepository, UserGuildSettingsRepository, UserRepository,
+    GlobalSettingsRepository, GuildSettingsRepository, TapRepository, UserGuildSettingsRepository,
+    UserRepository,
 };
-use crate::CoreResult;
+use crate::{CoreError, CoreResult};
 
 #[derive(Clone)]
 pub struct UserSettingsService {
     user_repo: Arc<dyn UserRepository>,
+    tap_repo: Arc<dyn TapRepository>,
     guild_settings_repo: Arc<dyn GuildSettingsRepository>,
     user_guild_settings_repo: Arc<dyn UserGuildSettingsRepository>,
     global_settings_repo: Arc<dyn GlobalSettingsRepository>,
@@ -21,6 +24,7 @@ pub struct UserSettingsService {
 impl UserSettingsService {
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
+        tap_repo: Arc<dyn TapRepository>,
         guild_settings_repo: Arc<dyn GuildSettingsRepository>,
         user_guild_settings_repo: Arc<dyn UserGuildSettingsRepository>,
         global_settings_repo: Arc<dyn GlobalSettingsRepository>,
@@ -28,6 +32,7 @@ impl UserSettingsService {
     ) -> Self {
         Self {
             user_repo,
+            tap_repo,
             guild_settings_repo,
             user_guild_settings_repo,
             global_settings_repo,
@@ -135,6 +140,17 @@ impl UserSettingsService {
         guild_id: &str,
         settings: PartialUserSettings,
     ) -> CoreResult<PartialUserSettings> {
+        // Validate tts_voice: OwnerOnly taps may not be used as guild settings
+        if let UserSettingsField::Normal(Some(tap_id)) | UserSettingsField::Important(Some(tap_id)) = &settings.tts_voice {
+            if let Some(tap) = self.tap_repo.find_by_id(tap_id.clone()).await? {
+                if matches!(tap.permission, TapPermission::OwnerOnly) {
+                    return Err(CoreError::InvalidInput(
+                        "owner_only taps cannot be used as guild-scope tts_voice".to_string(),
+                    ));
+                }
+            }
+        }
+
         let saved = self.guild_settings_repo.upsert(guild_id, &settings).await?;
         self.cache.invalidate_guild(guild_id).await;
         Ok(saved)

@@ -143,6 +143,7 @@ impl Service {
             verification: verification_service,
             user_settings: UserSettingsService::new(
                 user_repo.clone(),
+                tap_repo.clone(),
                 guild_settings_repo,
                 user_guild_settings_repo,
                 global_settings_repo,

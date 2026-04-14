@@ -416,7 +416,9 @@
       "ttsQueue": "TTS 대기열",
       "ttsSubtitle": "메시지를 소리 내어 읽는 방법을 설정합니다.",
       "ttsVoice": "TTS 음성",
-      "ttsVoiceNone": "없음 (기본값 사용)"
+      "ttsVoiceNone": "없음 (기본값 사용)",
+      "unsavedChanges": "저장되지 않은 변경사항이 있습니다",
+      "reset": "초기화"
     },
     "taps": {
       "activeCount": "{{value}} 온라인",

@@ -40,22 +40,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let certs = load_certs(&config.taphub_transport_cert_file).unwrap_or_else(|_| vec![]);
 
-    let taphub_transport = match TransportClient::connect(
-        "0.0.0.0:0".parse()?,
-        &config.taphub_url,
-        config.taphub_sni.clone(),
-        certs,
-    )
-    .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::warn!("Failed to connect to taphub: {:?}", e);
-            return Err(e.into());
-        }
-    };
+    // Create shared lazy cell for taphub connection
+    let taphub_cell: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>> =
+        Arc::new(tokio::sync::Mutex::new(None));
 
-    let taphub_service = Arc::new(RealTapHubService::new(Arc::new(taphub_transport)));
+    // Spawn background retry task
+    {
+        let cell = taphub_cell.clone();
+        let config = config.clone();
+        let certs = certs.clone();
+        tokio::spawn(async move {
+            loop {
+                match TransportClient::connect(
+                    "0.0.0.0:0".parse().unwrap(),
+                    &config.taphub_url,
+                    config.taphub_sni.clone(),
+                    certs.clone(),
+                )
+                .await
+                {
+                    Ok(t) => {
+                        tracing::info!("Connected to taphub");
+                        *cell.lock().await = Some(Arc::new(t));
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Taphub connect failed: {:?}. Retrying in 5s...", e);
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                }
+            }
+        });
+    }
+
+    let taphub_service = Arc::new(RealTapHubService::new_lazy(taphub_cell));
     let state_service = Arc::new(InMemoryStateService::new());
 
     let addr = config.ae_transport_addr.clone();

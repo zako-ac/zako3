@@ -1,4 +1,5 @@
 use crate::repo::UserRepository;
+use crate::service::GuildInfo;
 use crate::{AppConfig, CoreError, CoreResult};
 use hq_types::hq::{AuthResponseDto, AuthUserDto, User, UserId};
 use jsonwebtoken::{EncodingKey, Header, encode};
@@ -31,7 +32,7 @@ impl AuthService {
 
     pub fn get_login_url(&self, redirect: Option<&str>) -> String {
         let mut url = format!(
-            "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify%20email",
+            "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify%20email%20guilds",
             self.config.discord_client_id,
             urlencoding::encode(&self.config.discord_redirect_uri)
         );
@@ -112,7 +113,7 @@ impl AuthService {
 
         // Find or create user
         let user = self
-            .get_or_create_user(discord_id, username, avatar.as_deref(), email.as_deref())
+            .get_or_create_user(discord_id, username, avatar.as_deref(), email.as_deref(), Some(access_token))
             .await?;
 
         if user.banned {
@@ -167,10 +168,14 @@ impl AuthService {
         username: &str,
         avatar: Option<&str>,
         email: Option<&str>,
+        oauth_access_token: Option<&str>,
     ) -> CoreResult<User> {
         match self.user_repo.find_by_discord_id(discord_id).await? {
-            Some(u) => {
-                // Here we might want to update user if info changed, but for now just return
+            Some(mut u) => {
+                // Update token if provided
+                if let Some(token) = oauth_access_token {
+                    u.oauth_access_token = Some(token.to_string());
+                }
                 Ok(u)
             }
             None => {
@@ -187,6 +192,7 @@ impl AuthService {
                     ));
                 }
                 new_user.email = email.map(|s| s.to_string());
+                new_user.oauth_access_token = oauth_access_token.map(|s| s.to_string());
 
                 self.user_repo.create(&new_user).await
             }
@@ -212,6 +218,68 @@ impl AuthService {
             is_admin: user.permissions.contains(&"admin".to_string()),
             banned: user.banned,
         })
+    }
+
+    #[tracing::instrument(skip(self), name = "auth.get_full_user", fields(user_id = id), err)]
+    pub async fn get_full_user(&self, id: &str) -> CoreResult<User> {
+        let user_id = UserId::from_str(id)
+            .map_err(|_| CoreError::InvalidInput("Invalid user ID format".to_string()))?;
+        self.user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(CoreError::NotFound("User not found".to_string()))
+    }
+
+    /// Fetch user's Discord guilds from Discord API using OAuth token.
+    /// Returns a list of guild IDs where the user is a member.
+    pub async fn fetch_discord_guilds_for_user(
+        &self,
+        access_token: &str,
+    ) -> CoreResult<Vec<GuildInfo>> {
+        let response = self
+            .client
+            .get("https://discord.com/api/users/@me/guilds")
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| CoreError::Internal(format!("Failed to fetch guilds from Discord: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(CoreError::Unauthorized(format!(
+                "Discord API error: {}",
+                response.status()
+            )));
+        }
+
+        let guilds: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .map_err(|e| CoreError::Internal(format!("Failed to parse Discord response: {}", e)))?;
+
+        let guild_infos: Vec<GuildInfo> = guilds
+            .into_iter()
+            .filter_map(|g| {
+                let id: u64 = g["id"].as_str()?.parse().ok()?;
+                let name = g["name"].as_str()?.to_string();
+                let icon = g["icon"].as_str().map(|icon| {
+                    format!("https://cdn.discordapp.com/icons/{}/{}.png", id, icon)
+                });
+
+                // Check if user has MANAGE_GUILD permission (bit 5 = 0x20)
+                let permissions_str = g["permissions"].as_str()?;
+                let permissions: u64 = permissions_str.parse().ok()?;
+                let can_manage = (permissions & 0x20) != 0;
+
+                Some(GuildInfo {
+                    id,
+                    name,
+                    icon_url: icon,
+                    can_manage,
+                })
+            })
+            .collect();
+
+        Ok(guild_infos)
     }
 
     #[tracing::instrument(skip(self), name = "auth.refresh_token", fields(user_id = id), err)]

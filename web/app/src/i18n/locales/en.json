@@ -417,7 +417,9 @@
       "ttsQueue": "TTS Queue",
       "ttsSubtitle": "Configure how your messages are read aloud.",
       "ttsVoice": "TTS Voice",
-      "ttsVoiceNone": "None (use default)"
+      "ttsVoiceNone": "None (use default)",
+      "unsavedChanges": "You have unsaved changes",
+      "reset": "Reset"
     },
     "taps": {
       "activeCount": "{{value}} online",
