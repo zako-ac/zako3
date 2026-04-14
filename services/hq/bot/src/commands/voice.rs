@@ -41,7 +41,7 @@ pub(crate) async fn bot_join_and_announce(
                 channel_id,
                 queue_name,
                 TapName::from("papago".to_string()),
-                AudioRequestString::from(format!("{bot_name} 등장")),
+                AudioRequestString::from(format!("자코 등장")),
                 1.0.into(),
                 DiscordUserId::from(bot_user_id.get().to_string()),
             )
