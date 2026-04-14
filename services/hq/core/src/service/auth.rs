@@ -175,6 +175,14 @@ impl AuthService {
                 // Update token if provided
                 if let Some(token) = oauth_access_token {
                     u.oauth_access_token = Some(token.to_string());
+                    // Persist the token to database
+                    self.user_repo
+                        .update_oauth_token(u.id.clone(), u.oauth_access_token.clone())
+                        .await?;
+                    tracing::info!(
+                        user_id = %u.id.0,
+                        "OAuth token saved for existing user"
+                    );
                 }
                 Ok(u)
             }
@@ -193,6 +201,13 @@ impl AuthService {
                 }
                 new_user.email = email.map(|s| s.to_string());
                 new_user.oauth_access_token = oauth_access_token.map(|s| s.to_string());
+
+                if new_user.oauth_access_token.is_some() {
+                    tracing::info!(
+                        user_id = %new_user.id.0,
+                        "OAuth token saved for new user"
+                    );
+                }
 
                 self.user_repo.create(&new_user).await
             }
@@ -232,42 +247,89 @@ impl AuthService {
 
     /// Fetch user's Discord guilds from Discord API using OAuth token.
     /// Returns a list of guild IDs where the user is a member.
+    #[tracing::instrument(skip(self, access_token), name = "auth.fetch_discord_guilds")]
     pub async fn fetch_discord_guilds_for_user(
         &self,
         access_token: &str,
     ) -> CoreResult<Vec<GuildInfo>> {
+        tracing::info!("Fetching guilds from Discord API using OAuth token");
+
         let response = self
             .client
             .get("https://discord.com/api/users/@me/guilds")
             .bearer_auth(access_token)
             .send()
             .await
-            .map_err(|e| CoreError::Internal(format!("Failed to fetch guilds from Discord: {}", e)))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to fetch guilds from Discord: {}", e);
+                tracing::error!("{}", err_msg);
+                CoreError::Internal(err_msg)
+            })?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            tracing::error!(status = %status, "Discord API returned error");
             return Err(CoreError::Unauthorized(format!(
                 "Discord API error: {}",
-                response.status()
+                status
             )));
         }
 
         let guilds: Vec<serde_json::Value> = response
             .json()
             .await
-            .map_err(|e| CoreError::Internal(format!("Failed to parse Discord response: {}", e)))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to parse Discord response: {}", e);
+                tracing::error!("{}", err_msg);
+                CoreError::Internal(err_msg)
+            })?;
+
+        tracing::debug!(count = guilds.len(), "Received guilds from Discord API");
 
         let guild_infos: Vec<GuildInfo> = guilds
             .into_iter()
             .filter_map(|g| {
-                let id: u64 = g["id"].as_str()?.parse().ok()?;
+                // Log raw guild data for debugging
+                tracing::debug!(raw_guild = ?g, "Processing guild from Discord API");
+
+                let id: u64 = match g["id"].as_str() {
+                    Some(id_str) => match id_str.parse() {
+                        Ok(id) => id,
+                        Err(e) => {
+                            tracing::debug!(id_str = %id_str, error = %e, "Failed to parse guild ID");
+                            return None;
+                        }
+                    },
+                    None => {
+                        tracing::debug!(id_field = ?g["id"], "Guild ID is not a string");
+                        return None;
+                    }
+                };
+
                 let name = g["name"].as_str()?.to_string();
                 let icon = g["icon"].as_str().map(|icon| {
                     format!("https://cdn.discordapp.com/icons/{}/{}.png", id, icon)
                 });
 
                 // Check if user has MANAGE_GUILD permission (bit 5 = 0x20)
-                let permissions_str = g["permissions"].as_str()?;
-                let permissions: u64 = permissions_str.parse().ok()?;
+                // Discord API returns permissions as either a number or a string depending on the endpoint
+                let permissions: u64 = if let Some(perm_num) = g["permissions"].as_u64() {
+                    // Modern format: permissions as JSON number
+                    perm_num
+                } else if let Some(perm_str) = g["permissions"].as_str() {
+                    // Legacy format: permissions as JSON string
+                    match perm_str.parse() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            tracing::debug!(guild_id = id, guild_name = %name, permissions_str = %perm_str, error = %e, "Failed to parse permissions string as u64");
+                            return None;
+                        }
+                    }
+                } else {
+                    tracing::warn!(guild_id = id, guild_name = %name, permissions_field = ?g["permissions"], "Guild has invalid permissions field (not a number or string)");
+                    return None;
+                };
+
                 let can_manage = (permissions & 0x20) != 0;
 
                 Some(GuildInfo {
@@ -279,6 +341,7 @@ impl AuthService {
             })
             .collect();
 
+        tracing::info!(count = guild_infos.len(), "Successfully fetched {} guilds from Discord API", guild_infos.len());
         Ok(guild_infos)
     }
 

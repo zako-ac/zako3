@@ -12,6 +12,7 @@ pub trait UserRepository: Send + Sync {
     async fn list_all(&self, page: u32, per_page: u32) -> CoreResult<(Vec<User>, u64)>;
     async fn update_permissions(&self, id: UserId, permissions: Vec<String>) -> CoreResult<User>;
     async fn set_banned_status(&self, id: UserId, banned: bool) -> CoreResult<User>;
+    async fn update_oauth_token(&self, id: UserId, oauth_token: Option<String>) -> CoreResult<()>;
     async fn get_settings(&self, id: UserId) -> CoreResult<Option<PartialUserSettings>>;
     async fn save_settings(
         &self,
@@ -258,6 +259,25 @@ impl UserRepository for PgUserRepository {
                 updated_at,
             },
         })
+    }
+
+    async fn update_oauth_token(&self, id: UserId, oauth_token: Option<String>) -> CoreResult<()> {
+        tracing::info!(
+            user_id = %id.0,
+            has_token = oauth_token.is_some(),
+            "Updating OAuth token for user"
+        );
+
+        sqlx::query(
+            "UPDATE users SET oauth_access_token = $1, updated_at = $2 WHERE id = $3",
+        )
+        .bind(&oauth_token)
+        .bind(chrono::Utc::now())
+        .bind(id.0)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     async fn get_settings(&self, id: UserId) -> CoreResult<Option<PartialUserSettings>> {

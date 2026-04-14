@@ -35,22 +35,53 @@ impl DiscordNameResolver for SerenityNameResolver {
         })
     }
 
+    #[tracing::instrument(skip(self), name = "discord_resolver.guilds_for_user")]
     fn guilds_for_user(&self, discord_user_id: u64) -> Vec<GuildInfo> {
         let user_id = UserId::new(discord_user_id);
-        self.cache
-            .guilds()
+        let all_guild_ids: Vec<_> = self.cache.guilds().into_iter().collect();
+        let total_bot_guilds = all_guild_ids.len();
+        tracing::debug!(total_bot_guilds, "Bot is in {} total guilds", total_bot_guilds);
+
+        let result: Vec<GuildInfo> = all_guild_ids
             .into_iter()
             .filter_map(|guild_id| {
                 let guild = self.cache.guild(guild_id)?;
                 let member = guild.members.get(&user_id)?;
                 let permissions = guild.member_permissions(member);
+                let can_manage = permissions.manage_guild();
+
+                tracing::debug!(
+                    guild_id = %guild_id.get(),
+                    guild_name = %guild.name,
+                    member_count = guild.members.len(),
+                    can_manage,
+                    "User is member of guild"
+                );
+
                 Some(GuildInfo {
                     id: guild_id.get(),
                     name: guild.name.clone(),
                     icon_url: guild.icon_url(),
-                    can_manage: permissions.manage_guild(),
+                    can_manage,
                 })
             })
+            .collect();
+
+        tracing::info!(
+            found_user_in = result.len(),
+            total_bot_guilds,
+            "User found in {} guilds (out of {} bot guilds)",
+            result.len(),
+            total_bot_guilds
+        );
+        result
+    }
+
+    fn bot_guilds(&self) -> Vec<u64> {
+        self.cache
+            .guilds()
+            .into_iter()
+            .map(|gid| gid.get())
             .collect()
     }
 }
