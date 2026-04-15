@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait.workspace = true
 derive_more = { version = "2.1.1", features = ["from", "into", "from_str", "default", "display", "add", "full"] }
+opentelemetry = "0.31"
 parking_lot = "0.12.5"
 rustc-hash = "2.1.2"
 serde = { workspace = true, features = ["derive"] }
@@ -13,5 +14,6 @@ thiserror.workspace = true
 tl-protocol.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tracing-opentelemetry = "0.32"
 zako3-types.workspace = true
 

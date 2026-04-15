@@ -2,11 +2,13 @@ use std::collections::HashMap;
 
 use anyhow::{Context as _, Result};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use opentelemetry::global;
 use thiserror::Error;
 use tl_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
     AudioEngineSessionCommand, AudioPlayRequest, SessionInfo, TrafficLightRpcClient,
 };
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_types::{
     AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
     TrackId, Volume, hq::DiscordUserId,
@@ -67,13 +69,16 @@ impl TlClient {
         channel_id: ChannelId,
         command: AudioEngineCommand,
     ) -> AudioEngineCommandRequest {
+        let mut headers = HashMap::new();
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut headers));
         AudioEngineCommandRequest {
             session: Some(SessionInfo {
                 guild_id,
                 channel_id,
             }),
             command,
-            headers: HashMap::new(),
+            headers,
             idempotency_key: None,
         }
     }
@@ -114,7 +119,12 @@ impl TlClient {
                     ars,
                     volume,
                     initiator,
-                    headers: HashMap::new(),
+                    headers: {
+                        let mut h = HashMap::new();
+                        let cx = tracing::Span::current().context();
+                        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut h));
+                        h
+                    },
                 },
             )),
         );

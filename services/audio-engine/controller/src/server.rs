@@ -3,11 +3,13 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;
+use opentelemetry::global;
 use tl_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
     AudioEngineSessionCommand, AudioEngineRpcServer,
 };
 use tracing::{error, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 
@@ -24,6 +26,11 @@ impl AeTransportHandler {
 #[async_trait]
 impl AudioEngineRpcServer for AeTransportHandler {
     async fn execute(&self, req: AudioEngineCommandRequest) -> RpcResult<AudioEngineCommandResponse> {
+        let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
+        let span = tracing::info_span!("ae.execute");
+        let _ = span.set_parent(parent_cx);
+        let _span_guard = span.enter();
+
         let response = self.handle_command(req).await;
         Ok(response)
     }

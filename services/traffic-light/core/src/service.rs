@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use opentelemetry::global;
 use tl_protocol::{
     AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
     AudioEngineSessionCommand, SessionInfo, AudioEngineCommand,
 };
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_types::{GuildId, SessionState};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
@@ -34,6 +36,12 @@ impl TlService {
             },
             AudioEngineCommand::FetchDiscordVoiceState => "FetchDiscordVoiceState",
         };
+
+        let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
+        let span = tracing::info_span!("tl.execute", cmd = cmd_name);
+        let _ = span.set_parent(parent_cx);
+        let _span_guard = span.enter();
+
         if let Some(session) = &request.session {
             info!(
                 cmd = cmd_name,

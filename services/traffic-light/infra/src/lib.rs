@@ -4,9 +4,11 @@ use std::sync::atomic::AtomicUsize;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use jsonrpsee::http_client::HttpClientBuilder;
+use opentelemetry::global;
 use tl_protocol::{AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineRpcClient};
 use tokio::sync::RwLock;
 use tracing::info;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_tl_core::{AeDispatcher, AeId, DiscordToken, SessionRoute, TlError, WorkerId, ZakoState};
 
 use anyhow;
@@ -207,14 +209,15 @@ impl AeDispatcher for AeRegistry {
     async fn send(
         &self,
         route: SessionRoute,
-        request: AudioEngineCommandRequest,
+        mut request: AudioEngineCommandRequest,
     ) -> Result<AudioEngineCommandResponse, TlError> {
         let key = (route.worker_id, route.ae_id);
         let client_ref = self.clients.get(&key).ok_or(TlError::NoSuchAe)?;
         let client = client_ref.value();
 
-        // Inject tracing span into request headers
-        // TODO: call inject_span here once it's moved to shared location
+        // Inject current span context into request headers for W3C trace propagation
+        let cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
 
         // Call the RPC method
         let response = AudioEngineRpcClient::execute(client, request)

@@ -12,3 +12,5 @@ zako3-types.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 backon = "1"
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"

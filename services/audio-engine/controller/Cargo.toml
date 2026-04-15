@@ -23,3 +23,5 @@ async-trait = "0.1.89"
 anyhow.workspace = true
 jsonrpsee.workspace = true
 gethostname.workspace = true
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"

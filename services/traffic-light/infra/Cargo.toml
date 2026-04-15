@@ -13,6 +13,8 @@ dashmap.workspace = true
 jsonrpsee.workspace = true
 anyhow.workspace = true
 http = "1.4.0"
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"
 
 [dev-dependencies]
 tokio = { workspace = true }
