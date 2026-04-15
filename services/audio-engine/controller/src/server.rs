@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use jsonrpsee::core::RpcResult;
 use tl_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
-    AudioEngineSessionCommand,
+    AudioEngineSessionCommand, AudioEngineRpcServer,
 };
 use tracing::{error, warn};
-use zako3_ae_transport::TlClientHandler;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 
@@ -22,12 +22,15 @@ impl AeTransportHandler {
 }
 
 #[async_trait]
-impl TlClientHandler for AeTransportHandler {
-    async fn handle(
-        &self,
-        req: AudioEngineCommandRequest,
-        _headers: &HashMap<String, String>,
-    ) -> AudioEngineCommandResponse {
+impl AudioEngineRpcServer for AeTransportHandler {
+    async fn execute(&self, req: AudioEngineCommandRequest) -> RpcResult<AudioEngineCommandResponse> {
+        let response = self.handle_command(req).await;
+        Ok(response)
+    }
+}
+
+impl AeTransportHandler {
+    async fn handle_command(&self, req: AudioEngineCommandRequest) -> AudioEngineCommandResponse {
         match req.command {
             AudioEngineCommand::FetchDiscordVoiceState => {
                 use tl_protocol::SessionInfo;
@@ -191,7 +194,7 @@ mod tests {
             idempotency_key: None,
         };
 
-        let resp = handler.handle(req, &HashMap::new()).await;
+        let resp = handler.handle_command(req).await;
 
         match resp {
             AudioEngineCommandResponse::DiscordVoiceState(sessions) => {
@@ -233,7 +236,7 @@ mod tests {
             idempotency_key: None,
         };
 
-        let resp = handler.handle(req, &HashMap::new()).await;
+        let resp = handler.handle_command(req).await;
 
         match resp {
             AudioEngineCommandResponse::DiscordVoiceState(sessions) => {
@@ -270,7 +273,7 @@ mod tests {
             idempotency_key: None,
         };
 
-        let resp = handler.handle(req, &HashMap::new()).await;
+        let resp = handler.handle_command(req).await;
 
         match resp {
             AudioEngineCommandResponse::Error(_) => {

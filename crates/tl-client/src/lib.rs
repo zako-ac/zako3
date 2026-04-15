@@ -236,6 +236,13 @@ impl TlClient {
             .map_err(Self::map_err)
     }
 
+    pub async fn register_ae(&self, listen_addr: String) -> Result<String, TlClientError> {
+        self.client
+            .register_ae(listen_addr)
+            .await
+            .map_err(Self::map_err)
+    }
+
     pub async fn get_session_state(
         &self,
         guild_id: GuildId,

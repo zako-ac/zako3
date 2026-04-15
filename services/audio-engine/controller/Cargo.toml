@@ -16,9 +16,10 @@ zako3-audio-engine-core.path = "../core"
 zako3-audio-engine-infra.path = "../infra"
 zako3-telemetry.workspace = true
 zako3-taphub-transport-client.workspace = true
-zako3-ae-transport.workspace = true
 tl-protocol.workspace = true
 tracing = "0.1.44"
 rustls = { version = "0.23.37", features = ["aws-lc-rs"] }
 async-trait = "0.1.89"
 anyhow.workspace = true
+jsonrpsee.workspace = true
+gethostname.workspace = true

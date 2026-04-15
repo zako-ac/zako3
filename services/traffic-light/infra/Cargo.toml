@@ -5,18 +5,18 @@ edition = "2024"
 
 [dependencies]
 zako3-tl-core.workspace = true
-zako3-ae-transport.workspace = true
 tl-protocol.workspace = true
 async-trait.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
 dashmap.workspace = true
+jsonrpsee.workspace = true
+anyhow.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }
-zako3-ae-transport = { workspace = true }
-zako3-tl-core = { workspace = true }
 tl-protocol = { workspace = true }
 zako3-types = { workspace = true }
 async-trait = { workspace = true }
 rustc-hash = "2.1.2"
+jsonrpsee.workspace = true

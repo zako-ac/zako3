@@ -13,7 +13,7 @@ members = [
     "libs/*",
     "services/*/*",
     "workers/*",
-    "zakoctl", "crates/tl-protocol", "crates/ae-transport", "crates/tl-client",
+    "zakoctl", "crates/tl-protocol", "crates/tl-client",
 ]
 
 [workspace.dependencies]
@@ -65,7 +65,7 @@ protofish2 = { version = "0.6.6", features = ["opus", "jitter"] }
 async-nats = "0.45.0"
 dashmap = "6"
 envy = "0.4"
-zako3-ae-transport = { path = "crates/ae-transport" }
+gethostname = "0.4"
 tl-protocol = { path = "crates/tl-protocol" }
 zako3-tl-core = { path = "services/traffic-light/core" }
 zako3-tl-infra = { path = "services/traffic-light/infra" }

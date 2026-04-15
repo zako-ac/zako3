@@ -1,12 +1,15 @@
-use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use std::net::SocketAddr;
 
 use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
+use jsonrpsee::server::Server;
+use tl_protocol::AudioEngineRpcServer;
 
 use zako3_audio_engine_controller::{
+    address::{SelfAddressResolver, HeuristicSelfAddressResolver},
     config::AppConfig,
     guild_reporter::{report_guilds_once, run_guild_reporter},
     ready_waiter::create_ready_waiter,
@@ -20,7 +23,7 @@ use zako3_audio_engine_infra::{
 };
 
 use zako3_telemetry::TelemetryConfig;
-use zako3_ae_transport::TlClient;
+use zako3_tl_client::TlClient;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -77,20 +80,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let taphub_service = Arc::new(RealTapHubService::new_lazy(taphub_cell));
     let state_service = Arc::new(InMemoryStateService::new());
 
-    let addr = config.ae_transport_addr.clone();
+    // Step 1: Resolve advertised address and register with TL.
+    let address_resolver = HeuristicSelfAddressResolver::new(config.ae_port);
+    let advertised_addr = match address_resolver.resolve() {
+        Ok(addr) => addr,
+        Err(e) => {
+            tracing::error!("Failed to resolve advertised address: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    // Step 1: Connect to TL to receive our assigned Discord token.
-    tracing::info!("Connecting to TL server at {} to receive Discord token", addr);
-    let (token, _, connected) = loop {
-        match TlClient::connect(addr.as_str(), HashMap::new()).await {
-            Ok(result) => break result,
+    tracing::info!("Advertised address: {}", advertised_addr);
+
+    // Step 1b: Register with TL and receive Discord token.
+    let tl_client = loop {
+        match TlClient::connect(&config.tl_rpc_url).await {
+            Ok(c) => break c,
             Err(e) => {
-                tracing::warn!("Failed to connect to TL server: {e}, retrying in 2s");
+                tracing::warn!("Failed to connect to TL client: {e}, retrying in 2s");
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
         }
     };
-    tracing::info!("Received Discord token from TL server");
+
+    let token_str = loop {
+        match tl_client.register_ae(advertised_addr.clone()).await {
+            Ok(t) => {
+                tracing::info!("Registered with TL and received Discord token");
+                break t;
+            }
+            Err(e) => {
+                tracing::warn!("Failed to register with TL: {e}, retrying in 2s");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
+    };
 
     // Step 2: Build the Discord / audio infrastructure with the assigned token.
     let songbird_manager = songbird::Songbird::serenity();
@@ -103,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let intents = GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILDS;
-    let mut discord_client = Client::builder(&token.0, intents)
+    let mut discord_client = Client::builder(&token_str, intents)
         .event_handler_arc(ready_waiter)
         .event_handler_arc(voice_state_handler)
         .register_songbird_with(songbird_manager.clone())
@@ -139,35 +163,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Audio Engine is ready and connected to Discord!");
     telemetry.healthy();
 
-    // Step 3b: Spawn background guild reporter.
+    // Step 4: Start jsonrpsee HTTP server for TL to call this AE.
+    let ae_listen_addr: SocketAddr = format!("0.0.0.0:{}", config.ae_port)
+        .parse()
+        .expect("Invalid AE listen address");
+
+    let handler = AeTransportHandler::new(session_manager.clone());
+    let server = Server::builder()
+        .build(ae_listen_addr)
+        .await
+        .expect("Failed to bind AE HTTP server");
+
+    tracing::info!("AE HTTP server listening on {}", ae_listen_addr);
+
+    let server_handle = server.start(handler.into_rpc());
+
+    // Step 5: Spawn background guild reporter.
     tokio::spawn(run_guild_reporter(
         serenity_ctx.clone(),
         config.tl_rpc_url.clone(),
-        token.0.clone(),
+        token_str.clone(),
     ));
 
-    // Step 4: Serve requests. On TL disconnect, reconnect TL only (Discord stays alive).
-    report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-    let handler = AeTransportHandler::new(session_manager.clone());
-    if let Err(e) = connected.serve(handler).await {
-        tracing::warn!("TL connection lost: {e}, reconnecting...");
-    }
+    // Report guilds once on startup
+    report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token_str).await;
 
-    // Step 5: Reconnect loop — TL only, Discord client continues running.
-    loop {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        match TlClient::connect(addr.as_str(), HashMap::new()).await {
-            Ok((_, _, connected)) => {
-                tracing::info!("Reconnected to TL server");
-                report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token.0).await;
-                let handler = AeTransportHandler::new(session_manager.clone());
-                if let Err(e) = connected.serve(handler).await {
-                    tracing::warn!("TL connection lost: {e}, reconnecting...");
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to reconnect to TL: {e}");
-            }
-        }
-    }
+    tracing::info!("Audio Engine is serving requests");
+
+    // Wait for server to stop (should not happen normally)
+    server_handle.stopped().await;
+    tracing::error!("AE HTTP server stopped unexpectedly");
+    std::process::exit(1);
 }

@@ -43,6 +43,15 @@ pub trait TrafficLightRpc {
 
     #[method(name = "report_guilds")]
     async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> jsonrpsee::core::RpcResult<()>;
+
+    #[method(name = "register_ae")]
+    async fn register_ae(&self, listen_addr: String) -> jsonrpsee::core::RpcResult<String>;
+}
+
+#[jsonrpsee::proc_macros::rpc(server, client)]
+pub trait AudioEngineRpc {
+    #[method(name = "execute")]
+    async fn execute(&self, request: AudioEngineCommandRequest) -> jsonrpsee::core::RpcResult<AudioEngineCommandResponse>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

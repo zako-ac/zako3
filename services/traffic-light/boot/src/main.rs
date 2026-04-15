@@ -30,10 +30,6 @@ struct AppConfig {
     #[serde(default = "default_rpc_addr")]
     pub rpc_addr: SocketAddr,
 
-    // ae-transport listener (AEs connect here)
-    #[serde(default = "default_ae_transport_addr")]
-    pub ae_transport_addr: SocketAddr,
-
     // Comma-separated Discord bot tokens, e.g. "tokenA,tokenB,tokenC"
     pub discord_tokens: String,
 }
@@ -44,10 +40,6 @@ fn default_metrics_port() -> u16 {
 
 fn default_rpc_addr() -> SocketAddr {
     "0.0.0.0:7070".parse().unwrap()
-}
-
-fn default_ae_transport_addr() -> SocketAddr {
-    "0.0.0.0:7071".parse().unwrap()
 }
 
 impl AppConfig {
@@ -70,6 +62,7 @@ impl AppConfig {
 #[derive(Clone)]
 struct TrafficLightServiceImpl {
     tl: Arc<TlService>,
+    ae_registry: Arc<AeRegistry>,
 }
 
 #[async_trait]
@@ -84,6 +77,16 @@ impl TrafficLightRpcServer for TrafficLightServiceImpl {
 
     async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> RpcResult<()> {
         Ok(self.tl.report_guilds(token, guilds).await)
+    }
+
+    async fn register_ae(&self, listen_addr: String) -> RpcResult<String> {
+        match self.ae_registry.register(listen_addr).await {
+            Ok(token) => Ok(token),
+            Err(e) => {
+                tracing::error!("Failed to register AE: {:?}", e);
+                Err(jsonrpsee::types::error::ErrorCode::InternalError.into())
+            }
+        }
     }
 }
 
@@ -142,18 +145,12 @@ async fn main() -> anyhow::Result<()> {
         worker_cursor: 0,
     };
 
-    // Build AE registry (TlServer that AEs connect to)
+    // Build AE registry (now HTTP-based, AEs register themselves)
     let state = Arc::new(RwLock::new(initial_state));
     let ae_registry = Arc::new(
-        AeRegistry::new(config.ae_transport_addr, state, tokens).await?,
+        AeRegistry::new(state.clone(), tokens).await?,
     );
-    info!("AE transport listening on {}", config.ae_transport_addr);
-
-    // Spawn the AE accept loop
-    let registry_for_loop = ae_registry.clone();
-    tokio::spawn(async move {
-        registry_for_loop.accept_loop().await;
-    });
+    info!("AE registry initialized; AEs will register via register_ae RPC");
 
     // Build TlService backed by the AE registry — shares the same state Arc so
     // accept_loop writes (connected_ae_ids) are immediately visible to the router.
@@ -185,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let svc = TrafficLightServiceImpl { tl: tl_service };
+    let svc = TrafficLightServiceImpl { tl: tl_service, ae_registry };
 
     // Start JSON-RPC HTTP listener
     let server = Server::builder().build(config.rpc_addr).await?;
