@@ -1,5 +1,6 @@
 import { http, HttpResponse, delay } from 'msw'
 import { faker } from '@faker-js/faker'
+import { API_BASE } from './base'
 import type {
   AdminActivity,
   PaginatedResponse,
@@ -7,8 +8,6 @@ import type {
   VerificationStatus,
 } from '@zako-ac/zako3-data'
 import { createTapWithAccess } from '../data'
-
-const API_BASE = '/api'
 
 // Mock admin activity data
 const generateMockActivity = (): AdminActivity => ({

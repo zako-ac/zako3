@@ -8,7 +8,7 @@ const enableMocking = async () => {
     if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK_API === 'true') {
         const { worker } = await import('@/mocks/browser')
         return worker.start({
-            onUnhandledRequest: 'bypass',
+            onUnhandledRequest: 'warn',
         })
     }
     return Promise.resolve()

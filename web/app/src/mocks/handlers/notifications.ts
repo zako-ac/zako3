@@ -1,13 +1,12 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockNotifications } from '../data/notifications'
+import { API_BASE } from './base'
 import type {
   PaginatedResponse,
   Notification,
   NotificationFilters,
   NotificationSort,
 } from '@zako-ac/zako3-data'
-
-const API_BASE = '/api'
 
 const mockNotificationsStore = [...mockNotifications]
 

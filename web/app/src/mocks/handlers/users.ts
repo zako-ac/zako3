@@ -1,5 +1,6 @@
 import { http, HttpResponse, delay } from 'msw'
 import { allMockUsers } from '../data/users'
+import { API_BASE } from './base'
 import type {
   PaginatedResponse,
   UserWithActivity,
@@ -8,8 +9,6 @@ import type {
   BanUserInput,
   UpdateUserRoleInput,
 } from '@zako-ac/zako3-data'
-
-const API_BASE = '/api'
 
 const mockUsersStore = [...allMockUsers]
 

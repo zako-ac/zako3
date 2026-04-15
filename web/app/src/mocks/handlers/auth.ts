@@ -1,8 +1,7 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockCurrentUser, mockAdminUser } from '../data/users'
+import { API_BASE } from './base'
 import type { AuthUser, AuthCallbackResponse } from '@zako-ac/zako3-data'
-
-const API_BASE = '/api'
 
 let currentUser: AuthUser | null = null
 let useAdminUser = false

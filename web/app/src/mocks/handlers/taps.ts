@@ -5,6 +5,7 @@ import {
   createTapStats,
   createAuditLogForTap,
 } from '../data'
+import { API_BASE } from './base'
 import type {
   PaginatedResponse,
   TapWithAccess,
@@ -19,8 +20,6 @@ import type {
   UpdateTapApiTokenInput,
   TapApiTokenExpiry,
 } from '@zako-ac/zako3-data'
-
-const API_BASE = '/api'
 
 const mockTapsStore = [...allMockTaps]
 
