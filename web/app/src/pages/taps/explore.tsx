@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -29,6 +29,11 @@ export const TapExplorePage = () => {
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [selectedTap, setSelectedTap] = useState<TapWithAccess | null>(null)
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [search, roles, accessible, sortField, sortDirection, setPage])
 
   const { data, isLoading } = useTaps({
     page: pagination.page,
