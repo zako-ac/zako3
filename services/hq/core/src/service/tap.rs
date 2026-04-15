@@ -4,7 +4,7 @@ use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
 use chrono::{DateTime, Utc};
 use hq_types::hq::{
-    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapStatsDto,
+    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapRole, TapStatsDto,
     TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
 use serde::Deserialize;
@@ -142,9 +142,35 @@ impl TapService {
         user_id: Option<UserId>,
         sort_field: Option<TapSortField>,
         sort_direction: Option<SortDirection>,
+        search: Option<String>,
+        roles: Option<String>,
+        accessible: Option<bool>,
+        page: Option<i64>,
+        per_page: Option<i64>,
     ) -> CoreResult<PaginatedResponseDto<TapWithAccessDto>> {
-        let taps = self.tap_repo.list_all().await?;
+        let mut taps = self.tap_repo.list_all().await?;
 
+        // 1. Filter by search (case-insensitive name match) before expensive enrichment
+        if let Some(ref q) = search {
+            let q_lower = q.to_lowercase();
+            taps.retain(|t| t.name.0.to_lowercase().contains(&q_lower));
+        }
+
+        // 2. Filter by roles before expensive enrichment
+        if let Some(ref roles_str) = roles {
+            let requested: Vec<&str> = roles_str.split(',').map(str::trim).collect();
+            taps.retain(|t| {
+                t.roles.iter().any(|r| {
+                    let s = match r {
+                        TapRole::Music => "music",
+                        TapRole::TTS => "tts",
+                    };
+                    requested.contains(&s)
+                })
+            });
+        }
+
+        // 3. Enrich surviving taps
         let mut tap_dtos = Vec::new();
         for tap in taps {
             let owner = self
@@ -154,10 +180,9 @@ impl TapService {
                 .ok_or(CoreError::NotFound("Owner not found".to_string()))?;
 
             let has_access = self.check_access(&tap, user_id.clone()).await;
-
             let tap_dto = self.map_to_tap_dto(tap).await;
 
-            let tap_with_access = TapWithAccessDto {
+            tap_dtos.push(TapWithAccessDto {
                 tap: tap_dto,
                 has_access,
                 owner: UserSummaryDto {
@@ -165,11 +190,15 @@ impl TapService {
                     username: owner.username.0.clone(),
                     avatar: owner.avatar_url.clone().unwrap_or_default(),
                 },
-            };
-
-            tap_dtos.push(tap_with_access);
+            });
         }
 
+        // 4. Filter by accessible
+        if accessible == Some(true) {
+            tap_dtos.retain(|t| t.has_access);
+        }
+
+        // 5. Sort
         let desc = sort_direction.as_ref() != Some(&SortDirection::Asc);
         match sort_field.unwrap_or(TapSortField::MostUsed) {
             TapSortField::MostUsed => {
@@ -186,14 +215,25 @@ impl TapService {
             tap_dtos.reverse();
         }
 
+        // 6. Paginate
         let total = tap_dtos.len() as u64;
+        let per_page = per_page.unwrap_or(20).max(1) as u64;
+        let page = page.unwrap_or(1).max(1) as u64;
+        let total_pages = (total + per_page - 1) / per_page; // ceil division
+        let offset = ((page - 1) * per_page) as usize;
+        let data = tap_dtos
+            .into_iter()
+            .skip(offset)
+            .take(per_page as usize)
+            .collect();
+
         Ok(PaginatedResponseDto {
-            data: tap_dtos,
+            data,
             meta: PaginationMetaDto {
                 total,
-                page: 1,
-                per_page: 50,
-                total_pages: 1,
+                page,
+                per_page,
+                total_pages,
             },
         })
     }

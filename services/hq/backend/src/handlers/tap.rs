@@ -108,7 +108,16 @@ pub async fn list_taps(
 ) -> Result<Json<PaginatedResponseDto<TapWithAccessDto>>, (axum::http::StatusCode, String)> {
     let taps = service
         .tap
-        .list_all_paginated(user_id, query.sort_field, query.sort_direction)
+        .list_all_paginated(
+            user_id,
+            query.sort_field,
+            query.sort_direction,
+            query.search,
+            query.roles,
+            query.accessible,
+            query.page,
+            query.per_page,
+        )
         .await
         .map_err(map_error)?;
 
