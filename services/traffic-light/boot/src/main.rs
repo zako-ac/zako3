@@ -82,6 +82,15 @@ impl TrafficLightRpcServer for TrafficLightServiceImpl {
     async fn register_ae(&self, listen_addr: String) -> RpcResult<String> {
         match self.ae_registry.register(listen_addr).await {
             Ok(token) => Ok(token),
+            Err(zako3_tl_infra::RegistrationError::InvalidListenAddress(msg)) => {
+                tracing::warn!("Invalid listen address: {}", msg);
+                Err(jsonrpsee::types::error::ErrorObject::owned(
+                    jsonrpsee::types::error::INVALID_PARAMS_CODE,
+                    msg,
+                    None::<()>,
+                )
+                .into())
+            }
             Err(e) => {
                 tracing::error!("Failed to register AE: {:?}", e);
                 Err(jsonrpsee::types::error::ErrorCode::InternalError.into())

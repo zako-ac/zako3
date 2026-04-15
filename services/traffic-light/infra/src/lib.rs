@@ -14,6 +14,7 @@ use anyhow;
 #[derive(Debug, Clone)]
 pub enum RegistrationError {
     TokenNotFound,
+    InvalidListenAddress(String),
     HttpClientBuild(String),
 }
 
@@ -21,8 +22,64 @@ impl std::fmt::Display for RegistrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TokenNotFound => write!(f, "Token not found in state"),
+            Self::InvalidListenAddress(msg) => write!(f, "Invalid listen address: {}", msg),
             Self::HttpClientBuild(e) => write!(f, "Failed to build HTTP client: {}", e),
         }
+    }
+}
+
+/// Validate a listen address format before registration.
+/// Accepts formats like "127.0.0.1:8090" or "http://127.0.0.1:8090".
+fn validate_listen_addr(addr: &str) -> Result<(), RegistrationError> {
+    let trimmed = addr.trim();
+
+    // Reject empty input
+    if trimmed.is_empty() {
+        return Err(RegistrationError::InvalidListenAddress(
+            "Address cannot be empty".to_string(),
+        ));
+    }
+
+    // Reject overly long input (RFC 1035 hostname limit is 253)
+    if trimmed.len() > 300 {
+        return Err(RegistrationError::InvalidListenAddress(
+            "Address too long (max 300 chars)".to_string(),
+        ));
+    }
+
+    // If no scheme, assume http:// will be prepended
+    let url_str = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("http://{}", trimmed)
+    };
+
+    // Try to parse as a URI to validate basic structure
+    match url_str.parse::<http::Uri>() {
+        Ok(uri) => {
+            // Check for required components
+            if uri.host().is_none() || uri.host().map(|h| h.is_empty()).unwrap_or(true) {
+                return Err(RegistrationError::InvalidListenAddress(
+                    "Host cannot be empty".to_string(),
+                ));
+            }
+
+            // Check scheme is http or https
+            let scheme_ok = uri
+                .scheme()
+                .map(|s| s == &http::uri::Scheme::HTTP || s == &http::uri::Scheme::HTTPS)
+                .unwrap_or(false);
+            if !scheme_ok {
+                return Err(RegistrationError::InvalidListenAddress(
+                    "Scheme must be http or https".to_string(),
+                ));
+            }
+
+            Ok(())
+        }
+        Err(_) => Err(RegistrationError::InvalidListenAddress(
+            "Invalid URL format".to_string(),
+        )),
     }
 }
 
@@ -60,6 +117,9 @@ impl AeRegistry {
     /// Register an AE that advertises itself at listen_addr. Picks the next token from the pool.
     /// Returns the assigned token. Evicts stale entries and updates state.
     pub async fn register(&self, listen_addr: String) -> Result<String, RegistrationError> {
+        // Validate address before consuming a token from the pool
+        validate_listen_addr(&listen_addr)?;
+
         let token = self.pick_next_token();
         self.register_with_token(token.clone(), listen_addr)
             .await?;

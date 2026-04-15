@@ -20,12 +20,22 @@ jobs:
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
 
+      - name: Check disk space
+        run: df -h
+
       - name: Build all binaries
-        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl --exclude zako3-tap-sdk
+        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl --exclude zako3-tap-sdk -j 2
+        env:
+          CARGO_INCREMENTAL: 1
+          RUSTFLAGS: -C embed-bitcode=no -C opt-level=3 -C lto=fat -C codegen-units=1
 
       - name: Stage binaries
         run: |

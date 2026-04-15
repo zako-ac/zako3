@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;
@@ -12,11 +12,11 @@ use tracing::{error, warn};
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 
 pub struct AeTransportHandler {
-    pub session_manager: Arc<SessionManager>,
+    pub session_manager: Arc<OnceLock<Arc<SessionManager>>>,
 }
 
 impl AeTransportHandler {
-    pub fn new(session_manager: Arc<SessionManager>) -> Self {
+    pub fn new(session_manager: Arc<OnceLock<Arc<SessionManager>>>) -> Self {
         Self { session_manager }
     }
 }
@@ -31,10 +31,15 @@ impl AudioEngineRpcServer for AeTransportHandler {
 
 impl AeTransportHandler {
     async fn handle_command(&self, req: AudioEngineCommandRequest) -> AudioEngineCommandResponse {
+        let session_manager = match self.session_manager.get() {
+            Some(sm) => sm.clone(),
+            None => return err("Audio Engine not yet initialized"),
+        };
+
         match req.command {
             AudioEngineCommand::FetchDiscordVoiceState => {
                 use tl_protocol::SessionInfo;
-                match self.session_manager.fetch_discord_voice_state().await {
+                match session_manager.fetch_discord_voice_state().await {
                     Ok(voice_states) => {
                         let sessions: Vec<SessionInfo> = voice_states
                             .into_iter()
@@ -49,14 +54,13 @@ impl AeTransportHandler {
                 let Some(session_info) = req.session else {
                     return err("session required for Join");
                 };
-                if self
-                    .session_manager
+                if session_manager
                     .get_session(session_info.guild_id, session_info.channel_id)
                     .is_some()
                 {
                     return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
                 }
-                match self.session_manager.join(session_info.guild_id, session_info.channel_id).await {
+                match session_manager.join(session_info.guild_id, session_info.channel_id).await {
                     Ok(_) => AudioEngineCommandResponse::Ok,
                     Err(e) => err(&e.to_string()),
                 }
@@ -68,14 +72,14 @@ impl AeTransportHandler {
                 };
                 let guild_id = session_info.guild_id;
                 let channel_id = session_info.channel_id;
-                let Some(session) = self.session_manager.get_session(guild_id, channel_id) else {
+                let Some(session) = session_manager.get_session(guild_id, channel_id) else {
                     warn!(guild_id = ?guild_id, channel_id = ?channel_id, "Session not found");
                     return AudioEngineCommandResponse::Error(AudioEngineError::NotJoined);
                 };
 
                 match cmd {
                     AudioEngineSessionCommand::Leave => {
-                        match self.session_manager.leave(guild_id, channel_id).await {
+                        match session_manager.leave(guild_id, channel_id).await {
                             Ok(_) => AudioEngineCommandResponse::Ok,
                             Err(e) => err(&e.to_string()),
                         }
@@ -164,7 +168,7 @@ mod tests {
     use zako3_audio_engine_core::service::taphub::MockTapHubService;
     use zako3_audio_engine_core::types::{ChannelId, GuildId};
     use zako3_audio_engine_core::engine::session_manager::SessionManager;
-    use std::sync::Arc;
+    use std::sync::{Arc, OnceLock};
 
     #[tokio::test]
     async fn handler_fetch_discord_voice_state_returns_sessions() {
@@ -186,7 +190,10 @@ mod tests {
             Arc::new(mock_taphub),
         ));
 
-        let handler = AeTransportHandler::new(session_manager);
+        let sm_cell = Arc::new(OnceLock::new());
+        let _ = sm_cell.set(session_manager);
+
+        let handler = AeTransportHandler::new(sm_cell);
         let req = AudioEngineCommandRequest {
             session: None,
             command: AudioEngineCommand::FetchDiscordVoiceState,
@@ -228,7 +235,10 @@ mod tests {
             Arc::new(mock_taphub),
         ));
 
-        let handler = AeTransportHandler::new(session_manager);
+        let sm_cell = Arc::new(OnceLock::new());
+        let _ = sm_cell.set(session_manager);
+
+        let handler = AeTransportHandler::new(sm_cell);
         let req = AudioEngineCommandRequest {
             session: None,
             command: AudioEngineCommand::FetchDiscordVoiceState,
@@ -265,7 +275,10 @@ mod tests {
             Arc::new(mock_taphub),
         ));
 
-        let handler = AeTransportHandler::new(session_manager);
+        let sm_cell = Arc::new(OnceLock::new());
+        let _ = sm_cell.set(session_manager);
+
+        let handler = AeTransportHandler::new(sm_cell);
         let req = AudioEngineCommandRequest {
             session: None,
             command: AudioEngineCommand::FetchDiscordVoiceState,

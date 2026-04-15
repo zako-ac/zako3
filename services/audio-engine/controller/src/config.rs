@@ -4,6 +4,9 @@ use serde::Deserialize;
 pub struct AppConfig {
     #[serde(default = "default_ae_port")]
     pub ae_port: u16,
+    /// Optional override for advertised address (e.g., "host:port" or "http://host:port").
+    /// If set, the heuristic address resolver is skipped.
+    pub ae_advertise_addr: Option<String>,
     #[serde(default = "default_tl_rpc_url")]
     pub tl_rpc_url: String,
     #[serde(default = "default_taphub_url")]

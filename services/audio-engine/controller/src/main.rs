@@ -80,19 +80,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let taphub_service = Arc::new(RealTapHubService::new_lazy(taphub_cell));
     let state_service = Arc::new(InMemoryStateService::new());
 
-    // Step 1: Resolve advertised address and register with TL.
-    let address_resolver = HeuristicSelfAddressResolver::new(config.ae_port);
-    let advertised_addr = match address_resolver.resolve() {
-        Ok(addr) => addr,
-        Err(e) => {
-            tracing::error!("Failed to resolve advertised address: {}", e);
-            std::process::exit(1);
+    // Step 1: Resolve advertised address.
+    let advertised_addr = if let Some(addr) = &config.ae_advertise_addr {
+        // Use explicit override if provided
+        addr.clone()
+    } else {
+        // Otherwise, use heuristic resolution
+        let address_resolver = HeuristicSelfAddressResolver::new(config.ae_port);
+        match address_resolver.resolve() {
+            Ok(addr) => addr,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to resolve advertised address: {}. \
+                     Set AE_ADVERTISE_ADDR=host:port to override.",
+                    e
+                );
+                std::process::exit(1);
+            }
         }
     };
 
     tracing::info!("Advertised address: {}", advertised_addr);
 
-    // Step 1b: Register with TL and receive Discord token.
+    // Step 2: Create OnceLock for session_manager (will be filled later).
+    let sm_cell: Arc<OnceLock<Arc<SessionManager>>> = Arc::new(OnceLock::new());
+
+    // Step 3: Start jsonrpsee HTTP server for TL to call this AE (before registering).
+    let ae_listen_addr: SocketAddr = format!("0.0.0.0:{}", config.ae_port)
+        .parse()
+        .expect("Invalid AE listen address");
+
+    let handler = AeTransportHandler::new(sm_cell.clone());
+    let server = Server::builder()
+        .build(ae_listen_addr)
+        .await
+        .expect("Failed to bind AE HTTP server");
+
+    tracing::info!("AE HTTP server listening on {}", ae_listen_addr);
+
+    let server_handle = server.start(handler.into_rpc());
+
+    // Step 4: Register with TL and receive Discord token.
     let tl_client = loop {
         match TlClient::connect(&config.tl_rpc_url).await {
             Ok(c) => break c,
@@ -116,12 +144,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Step 2: Build the Discord / audio infrastructure with the assigned token.
+    // Step 5: Build the Discord / audio infrastructure with the assigned token.
     let songbird_manager = songbird::Songbird::serenity();
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
-    // Create OnceLock for session_manager to break circular dependency
-    let sm_cell: Arc<OnceLock<Arc<SessionManager>>> = Arc::new(OnceLock::new());
     let voice_state_handler = Arc::new(VoiceStateHandler {
         session_manager: sm_cell.clone(),
     });
@@ -163,22 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Audio Engine is ready and connected to Discord!");
     telemetry.healthy();
 
-    // Step 4: Start jsonrpsee HTTP server for TL to call this AE.
-    let ae_listen_addr: SocketAddr = format!("0.0.0.0:{}", config.ae_port)
-        .parse()
-        .expect("Invalid AE listen address");
-
-    let handler = AeTransportHandler::new(session_manager.clone());
-    let server = Server::builder()
-        .build(ae_listen_addr)
-        .await
-        .expect("Failed to bind AE HTTP server");
-
-    tracing::info!("AE HTTP server listening on {}", ae_listen_addr);
-
-    let server_handle = server.start(handler.into_rpc());
-
-    // Step 5: Spawn background guild reporter.
+    // Step 6: Spawn background guild reporter.
     tokio::spawn(run_guild_reporter(
         serenity_ctx.clone(),
         config.tl_rpc_url.clone(),
@@ -190,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Audio Engine is serving requests");
 
-    // Wait for server to stop (should not happen normally)
+    // Step 7: Wait for server to stop (should not happen normally)
     server_handle.stopped().await;
     tracing::error!("AE HTTP server stopped unexpectedly");
     std::process::exit(1);

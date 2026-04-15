@@ -16,6 +16,9 @@ spec:
     app.kubernetes.io/name: audio-engine
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
+    - name: http
+      port: 8090
+      targetPort: http
     - name: metrics
       port: 9090
       targetPort: metrics
@@ -48,13 +51,25 @@ spec:
           image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "audio-engine" "tag" .Values.image.tag) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
+            - name: http
+              containerPort: 8090
             - name: metrics
               containerPort: 9090
           env:
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
-            - name: AE_TRANSPORT_ADDR
-              value: "{{ $fullname }}-traffic-light:{{ .Values.ports.tlAeTransport }}"
+            - name: AE_PORT
+              value: "8090"
+            - name: AE_ADVERTISE_ADDR
+              value: "$(POD_NAME).{{ $fullname }}-audio-engine.$(POD_NAMESPACE).svc.cluster.local:8090"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: TL_RPC_URL
               value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: TAPHUB_URL

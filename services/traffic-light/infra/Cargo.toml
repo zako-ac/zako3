@@ -12,6 +12,7 @@ tracing.workspace = true
 dashmap.workspace = true
 jsonrpsee.workspace = true
 anyhow.workspace = true
+http = "1.4.0"
 
 [dev-dependencies]
 tokio = { workspace = true }
