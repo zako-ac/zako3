@@ -13,19 +13,10 @@ pub(crate) async fn bot_join_and_announce(
     service: &Service,
     serenity_ctx: &serenity::Context,
     guild_id: GuildId,
-    serenity_guild_id: serenity::GuildId,
+    _serenity_guild_id: serenity::GuildId,
     channel_id: ChannelId,
 ) -> CoreResult<()> {
     let bot_user_id = serenity_ctx.cache.current_user().id;
-    let bot_name = serenity_ctx
-        .cache
-        .guild(serenity_guild_id)
-        .and_then(|g| {
-            g.members
-                .get(&bot_user_id)
-                .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name.clone()))
-        })
-        .unwrap_or_else(|| serenity_ctx.cache.current_user().name.clone());
 
     service.audio_engine.join(guild_id, channel_id).await?;
 

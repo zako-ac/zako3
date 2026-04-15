@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -6,7 +5,7 @@ use jsonrpsee::core::RpcResult;
 use opentelemetry::global;
 use tl_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
-    AudioEngineSessionCommand, AudioEngineRpcServer,
+    AudioEngineRpcServer, AudioEngineSessionCommand,
 };
 use tracing::{error, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -25,7 +24,10 @@ impl AeTransportHandler {
 
 #[async_trait]
 impl AudioEngineRpcServer for AeTransportHandler {
-    async fn execute(&self, req: AudioEngineCommandRequest) -> RpcResult<AudioEngineCommandResponse> {
+    async fn execute(
+        &self,
+        req: AudioEngineCommandRequest,
+    ) -> RpcResult<AudioEngineCommandResponse> {
         let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
         let span = tracing::info_span!("ae.execute");
         let _ = span.set_parent(parent_cx);
@@ -50,10 +52,13 @@ impl AeTransportHandler {
                     Ok(voice_states) => {
                         let sessions: Vec<SessionInfo> = voice_states
                             .into_iter()
-                            .map(|(guild_id, channel_id)| SessionInfo { guild_id, channel_id })
+                            .map(|(guild_id, channel_id)| SessionInfo {
+                                guild_id,
+                                channel_id,
+                            })
                             .collect();
                         AudioEngineCommandResponse::DiscordVoiceState(sessions)
-                    },
+                    }
                     Err(e) => err(&e.to_string()),
                 }
             }
@@ -67,7 +72,10 @@ impl AeTransportHandler {
                 {
                     return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
                 }
-                match session_manager.join(session_info.guild_id, session_info.channel_id).await {
+                match session_manager
+                    .join(session_info.guild_id, session_info.channel_id)
+                    .await
+                {
                     Ok(_) => AudioEngineCommandResponse::Ok,
                     Err(e) => err(&e.to_string()),
                 }
@@ -169,13 +177,13 @@ fn err(msg: &str) -> AudioEngineCommandResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, OnceLock};
     use tl_protocol::SessionInfo;
+    use zako3_audio_engine_core::engine::session_manager::SessionManager;
     use zako3_audio_engine_core::service::discord::MockDiscordService;
     use zako3_audio_engine_core::service::state::MockStateService;
     use zako3_audio_engine_core::service::taphub::MockTapHubService;
     use zako3_audio_engine_core::types::{ChannelId, GuildId};
-    use zako3_audio_engine_core::engine::session_manager::SessionManager;
-    use std::sync::{Arc, OnceLock};
 
     #[tokio::test]
     async fn handler_fetch_discord_voice_state_returns_sessions() {
