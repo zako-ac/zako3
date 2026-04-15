@@ -16,3 +16,4 @@ dotenvy = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 zako3-states = { workspace = true, features = ["redis"] }
+dashmap.workspace = true

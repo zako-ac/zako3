@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use dashmap::DashSet;
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     AudioRequestString, ChannelId, GuildId, QueueName,
@@ -16,6 +17,9 @@ pub struct VoiceStateHandler {
     pub voice_state_service: VoiceStateService,
     pub service: Arc<Service>,
     pub event_tx: broadcast::Sender<PlaybackEvent>,
+    /// Tracks (guild_id, channel_id) pairs where a join is currently in-flight.
+    /// Prevents concurrent voice state events from each firing a separate join RPC.
+    pub joining: Arc<DashSet<(u64, u64)>>,
 }
 
 struct ChannelSnapshot {
@@ -79,7 +83,7 @@ impl EventHandler for VoiceStateHandler {
 
         update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
 
-        if is_bot(&ctx, new.user_id) {
+        if is_bot(&ctx, guild_id_typed, new.user_id) {
             return;
         }
 
@@ -111,6 +115,7 @@ impl EventHandler for VoiceStateHandler {
             guild_id_typed,
             guild_id,
             affected_channels(old_ch, new_ch),
+            &self.joining,
         )
         .await
         {
@@ -169,8 +174,14 @@ async fn update_tracking(
 // Pure sync helpers
 // ---------------------------------------------------------------------------
 
-fn is_bot(ctx: &Context, user_id: serenity::UserId) -> bool {
-    ctx.cache.user(user_id).map(|u| u.bot).unwrap_or(false)
+fn is_bot(ctx: &Context, guild_id: serenity::GuildId, user_id: serenity::UserId) -> bool {
+    if let Some(user) = ctx.cache.user(user_id) {
+        return user.bot;
+    }
+    ctx.cache
+        .guild(guild_id)
+        .and_then(|g| g.members.get(&user_id).map(|m| m.user.bot))
+        .unwrap_or(true) // unknown → treat as bot (conservative: skip)
 }
 
 fn get_display_name(
@@ -236,7 +247,7 @@ fn count_real_users(guild: &serenity::Guild, channel_id: serenity::ChannelId) ->
                 .members
                 .get(&vs.user_id)
                 .map(|m| !m.user.bot)
-                .unwrap_or(true)
+                .unwrap_or(false) // unknown → exclude (conservative: don't count as real user)
         })
         .count()
 }
@@ -251,6 +262,7 @@ async fn handle_auto_leave_rejoin(
     guild_id_typed: serenity::GuildId,
     guild_id: u64,
     channels: Vec<serenity::ChannelId>,
+    joining: &Arc<DashSet<(u64, u64)>>,
 ) -> CoreResult<()> {
     if channels.is_empty() {
         return Ok(());
@@ -269,7 +281,7 @@ async fn handle_auto_leave_rejoin(
     let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels);
 
     for snap in snapshots {
-        act_on_snapshot(service, ctx, &sessions, snap).await;
+        act_on_snapshot(service, ctx, &sessions, snap, joining).await;
     }
 
     Ok(())
@@ -309,6 +321,7 @@ async fn act_on_snapshot(
     ctx: &Context,
     sessions: &[ChannelId],
     snap: ChannelSnapshot,
+    joining: &Arc<DashSet<(u64, u64)>>,
 ) {
     let is_intended = service
         .intended_vc
@@ -329,19 +342,23 @@ async fn act_on_snapshot(
             .await;
         // Keep in intended_vc — will rejoin when someone comes back.
     } else if snap.real_user_count > 0 && !bot_is_present {
-        if let Err(e) = bot_join_and_announce(
-            service,
-            ctx,
-            snap.guild_id,
-            snap.serenity_guild_id,
-            snap.channel_id,
-        )
-        .await
-        {
-            tracing::warn!(
-                "Failed to auto-rejoin channel {}: {e}",
-                snap.serenity_channel_id
-            );
+        let key = (u64::from(snap.guild_id), u64::from(snap.channel_id));
+        if joining.insert(key) {
+            if let Err(e) = bot_join_and_announce(
+                service,
+                ctx,
+                snap.guild_id,
+                snap.serenity_guild_id,
+                snap.channel_id,
+            )
+            .await
+            {
+                tracing::warn!(
+                    "Failed to auto-rejoin channel {}: {e}",
+                    snap.serenity_channel_id
+                );
+            }
+            joining.remove(&key);
         }
     }
 }

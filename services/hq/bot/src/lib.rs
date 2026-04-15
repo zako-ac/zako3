@@ -61,6 +61,7 @@ pub async fn run(
         voice_state_service: service.voice_state.clone(),
         service: Arc::new(service.clone()),
         event_tx,
+        joining: Arc::new(dashmap::DashSet::new()),
     };
 
     let message_handler = events::MessageCreateHandler {
