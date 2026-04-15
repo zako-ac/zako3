@@ -2,15 +2,18 @@ use std::sync::Arc;
 
 use opentelemetry::global;
 use tl_protocol::{
-    AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
-    AudioEngineSessionCommand, SessionInfo, AudioEngineCommand,
+    AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
+    AudioEngineSessionCommand, SessionInfo,
 };
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use zako3_types::{GuildId, SessionState};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use zako3_types::{GuildId, SessionState};
 
-use crate::{AeDispatcher, AeId, RouterError, RouterResult, SessionRoute, StateChangeEvent, ZakoState, router};
+use crate::{
+    router, AeDispatcher, AeId, RouterError, RouterResult, SessionRoute, StateChangeEvent,
+    ZakoState,
+};
 
 pub struct TlService {
     state: Arc<RwLock<ZakoState>>,
@@ -136,7 +139,12 @@ impl TlService {
                             info!(
                                 worker_id = route.worker_id.0,
                                 ae_id = route.ae_id.0,
-                                already_joined = matches!(&resp, AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined)),
+                                already_joined = matches!(
+                                    &resp,
+                                    AudioEngineCommandResponse::Error(
+                                        AudioEngineError::AlreadyJoined
+                                    )
+                                ),
                                 "fallback Join succeeded"
                             );
                             if let Some(session_info) = request.session {
@@ -194,27 +202,38 @@ impl TlService {
                         "Join: dispatching to AE"
                     );
                     match self.dispatcher.send(candidate.route, request.clone()).await {
-                        Ok(resp) if matches!(
-                            &resp,
-                            AudioEngineCommandResponse::Ok
-                                | AudioEngineCommandResponse::Error(
-                                    AudioEngineError::AlreadyJoined
-                                )
-                        ) => {
+                        Ok(resp)
+                            if matches!(
+                                &resp,
+                                AudioEngineCommandResponse::Ok
+                                    | AudioEngineCommandResponse::Error(
+                                        AudioEngineError::AlreadyJoined
+                                    )
+                            ) =>
+                        {
                             // AlreadyJoined from AE means the session is active there —
                             // treat as success (covers state-drift resync joins).
                             //
                             // Targeted write: only apply what this Join actually changes.
                             // Replacing the entire state with a pre-snapshot would silently
                             // erase concurrent Join commits for other guilds (TOCTOU).
-                            let already_joined = matches!(&resp, AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined));
+                            let already_joined = matches!(
+                                &resp,
+                                AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined)
+                            );
                             if let Some(session_info) = request.session {
                                 let mut state = self.state.write().await;
                                 state.sessions.insert(candidate.route, session_info);
                                 // Carry over round-robin cursor advances from the routing decision.
                                 state.worker_cursor = candidate.new_state_on_success.worker_cursor;
-                                if let Some(worker) = state.workers.get_mut(&candidate.route.worker_id) {
-                                    if let Some(new_worker) = candidate.new_state_on_success.workers.get(&candidate.route.worker_id) {
+                                if let Some(worker) =
+                                    state.workers.get_mut(&candidate.route.worker_id)
+                                {
+                                    if let Some(new_worker) = candidate
+                                        .new_state_on_success
+                                        .workers
+                                        .get(&candidate.route.worker_id)
+                                    {
                                         worker.ae_cursor = new_worker.ae_cursor;
                                     }
                                 }
@@ -421,8 +440,15 @@ impl TlService {
 
     pub async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) {
         let mut state = self.state.write().await;
-        if let Some(worker) = state.workers.values_mut().find(|w| w.discord_token.0 == token) {
-            info!(token, guild_count = guilds.len(), "Updating worker guild permissions");
+        if let Some(worker) = state
+            .workers
+            .values_mut()
+            .find(|w| w.discord_token.0 == token)
+        {
+            info!(
+                guild_count = guilds.len(),
+                "Updating worker guild permissions"
+            );
             worker.permissions.set_allowed_guilds(guilds);
         } else {
             warn!(token, "report_guilds: no worker found for token");
@@ -616,11 +642,7 @@ impl TlService {
         // Snapshot all current routes
         let routes: Vec<(SessionRoute, SessionInfo)> = {
             let state = self.state.read().await;
-            state
-                .sessions
-                .iter()
-                .map(|(r, i)| (*r, *i))
-                .collect()
+            state.sessions.iter().map(|(r, i)| (*r, *i)).collect()
         };
 
         if routes.is_empty() {
@@ -628,14 +650,20 @@ impl TlService {
             return;
         }
 
-        info!(session_count = routes.len(), "sync_sessions: checking {} session(s)", routes.len());
+        info!(
+            session_count = routes.len(),
+            "sync_sessions: checking {} session(s)",
+            routes.len()
+        );
 
         let mut to_remove = Vec::new();
 
         for (route, session_info) in &routes {
             let req = AudioEngineCommandRequest {
                 session: Some(*session_info),
-                command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::GetSessionState),
+                command: AudioEngineCommand::SessionCommand(
+                    AudioEngineSessionCommand::GetSessionState,
+                ),
                 headers: std::collections::HashMap::new(),
                 idempotency_key: None,
             };
@@ -691,15 +719,22 @@ impl TlService {
         if !to_remove.is_empty() {
             info!(
                 remove_count = to_remove.len(),
-                "sync_sessions: removing {} stale session(s)", to_remove.len()
+                "sync_sessions: removing {} stale session(s)",
+                to_remove.len()
             );
             let mut state = self.state.write().await;
             for route in to_remove {
                 state.sessions.remove(&route);
             }
-            info!(remaining_sessions = state.sessions.len(), "sync_sessions: done");
+            info!(
+                remaining_sessions = state.sessions.len(),
+                "sync_sessions: done"
+            );
         } else {
-            info!(session_count = routes.len(), "sync_sessions: all sessions alive");
+            info!(
+                session_count = routes.len(),
+                "sync_sessions: all sessions alive"
+            );
         }
     }
 }
@@ -707,11 +742,11 @@ impl TlService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{AeId, DiscordToken, TlError, Worker, WorkerId, WorkerPermissions};
     use rustc_hash::FxHashMap;
     use std::sync::Mutex;
-    use tl_protocol::{AudioEngineCommand, SessionInfo, AudioEngineSessionCommand};
+    use tl_protocol::{AudioEngineCommand, AudioEngineSessionCommand, SessionInfo};
     use zako3_types::{ChannelId, GuildId};
-    use crate::{AeId, DiscordToken, TlError, Worker, WorkerId, WorkerPermissions};
 
     #[derive(Clone)]
     enum MockCall {
@@ -733,7 +768,10 @@ mod tests {
         ) -> Result<AudioEngineCommandResponse, TlError> {
             match &req.command {
                 AudioEngineCommand::FetchDiscordVoiceState => {
-                    self.calls.lock().unwrap().push(MockCall::FetchDiscordVoiceState);
+                    self.calls
+                        .lock()
+                        .unwrap()
+                        .push(MockCall::FetchDiscordVoiceState);
                 }
                 AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave) => {
                     if let Some(s) = req.session {
@@ -817,7 +855,9 @@ mod tests {
             calls: calls.clone(),
             response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
         });
-        TlService::new(state_with_no_ae(), dispatcher).reconcile().await;
+        TlService::new(state_with_no_ae(), dispatcher)
+            .reconcile()
+            .await;
         assert_eq!(calls.lock().unwrap().len(), 0);
     }
 
@@ -829,7 +869,9 @@ mod tests {
         let dispatcher = Arc::new(TestDispatcher {
             calls: calls.clone(),
             response: Arc::new(move || {
-                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![discord_session]))
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![
+                    discord_session,
+                ]))
             }),
         });
 
@@ -854,7 +896,11 @@ mod tests {
         TlService::new(state, dispatcher).reconcile().await;
 
         let call_list = calls.lock().unwrap();
-        assert_eq!(call_list.len(), 1, "Should only call FetchDiscordVoiceState, no Leave");
+        assert_eq!(
+            call_list.len(),
+            1,
+            "Should only call FetchDiscordVoiceState, no Leave"
+        );
         assert!(matches!(call_list[0], MockCall::FetchDiscordVoiceState));
     }
 
@@ -867,7 +913,9 @@ mod tests {
         let dispatcher = Arc::new(TestDispatcher {
             calls: calls.clone(),
             response: Arc::new(move || {
-                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![cached, dangling]))
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![
+                    cached, dangling,
+                ]))
             }),
         });
 
@@ -907,23 +955,36 @@ mod tests {
 
     fn two_routes_same_channel() -> Arc<RwLock<ZakoState>> {
         let s = session(1, 100);
-        let route_a = SessionRoute { worker_id: WorkerId(0), ae_id: AeId(1) };
-        let route_b = SessionRoute { worker_id: WorkerId(1), ae_id: AeId(1) };
+        let route_a = SessionRoute {
+            worker_id: WorkerId(0),
+            ae_id: AeId(1),
+        };
+        let route_b = SessionRoute {
+            worker_id: WorkerId(1),
+            ae_id: AeId(1),
+        };
         let mut sessions: FxHashMap<SessionRoute, SessionInfo> = Default::default();
         sessions.insert(route_a, s);
         sessions.insert(route_b, s);
         let mut workers = FxHashMap::default();
         for &wid in &[0u16, 1u16] {
-            workers.insert(WorkerId(wid), Worker {
-                worker_id: WorkerId(wid),
-                bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
-                discord_token: DiscordToken(String::new()),
-                connected_ae_ids: vec![1],
-                permissions: WorkerPermissions::new(),
-                ae_cursor: 0,
-            });
+            workers.insert(
+                WorkerId(wid),
+                Worker {
+                    worker_id: WorkerId(wid),
+                    bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+                    discord_token: DiscordToken(String::new()),
+                    connected_ae_ids: vec![1],
+                    permissions: WorkerPermissions::new(),
+                    ae_cursor: 0,
+                },
+            );
         }
-        Arc::new(RwLock::new(ZakoState { workers, sessions, worker_cursor: 0 }))
+        Arc::new(RwLock::new(ZakoState {
+            workers,
+            sessions,
+            worker_cursor: 0,
+        }))
     }
 
     #[tokio::test]
@@ -940,7 +1001,10 @@ mod tests {
 
         let call_list = calls.lock().unwrap();
         // One Leave should have been sent for the duplicate
-        let leaves: Vec<_> = call_list.iter().filter(|c| matches!(c, MockCall::Leave(_))).collect();
+        let leaves: Vec<_> = call_list
+            .iter()
+            .filter(|c| matches!(c, MockCall::Leave(_)))
+            .collect();
         assert_eq!(leaves.len(), 1, "exactly one duplicate should be evicted");
 
         // State should now have one session remaining
@@ -960,6 +1024,10 @@ mod tests {
 
         TlService::new(state, dispatcher).evict_duplicates().await;
 
-        assert_eq!(calls.lock().unwrap().len(), 0, "no calls when no duplicates");
+        assert_eq!(
+            calls.lock().unwrap().len(),
+            0,
+            "no calls when no duplicates"
+        );
     }
 }

@@ -11,7 +11,7 @@ use tl_protocol::AudioEngineRpcServer;
 use zako3_audio_engine_controller::{
     address::{SelfAddressResolver, HeuristicSelfAddressResolver},
     config::AppConfig,
-    guild_reporter::{report_guilds_once, run_guild_reporter},
+    guild_reporter::{report_guilds_once, run_ae_heartbeat, run_guild_reporter},
     ready_waiter::create_ready_waiter,
     server::AeTransportHandler,
     voice_state::VoiceStateHandler,
@@ -144,7 +144,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Step 5: Build the Discord / audio infrastructure with the assigned token.
+    // Step 5: Spawn AE heartbeat to re-register with TL every 15 s (handles TL restarts).
+    tokio::spawn(run_ae_heartbeat(
+        config.tl_rpc_url.clone(),
+        token_str.clone(),
+        advertised_addr.clone(),
+    ));
+
+    // Step 6: Build the Discord / audio infrastructure with the assigned token.
     let songbird_manager = songbird::Songbird::serenity();
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 

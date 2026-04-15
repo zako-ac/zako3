@@ -46,6 +46,9 @@ pub trait TrafficLightRpc {
 
     #[method(name = "register_ae")]
     async fn register_ae(&self, listen_addr: String) -> jsonrpsee::core::RpcResult<String>;
+
+    #[method(name = "heartbeat_ae")]
+    async fn heartbeat_ae(&self, token: String, listen_addr: String) -> jsonrpsee::core::RpcResult<()>;
 }
 
 #[jsonrpsee::proc_macros::rpc(server, client)]

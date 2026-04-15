@@ -253,6 +253,13 @@ impl TlClient {
             .map_err(Self::map_err)
     }
 
+    pub async fn heartbeat_ae(&self, token: String, listen_addr: String) -> Result<(), TlClientError> {
+        self.client
+            .heartbeat_ae(token, listen_addr)
+            .await
+            .map_err(Self::map_err)
+    }
+
     pub async fn get_session_state(
         &self,
         guild_id: GuildId,

@@ -32,7 +32,7 @@ impl SelfAddressResolver for HeuristicSelfAddressResolver {
 
         if hostname.contains("audio-engine") {
             // Kubernetes StatefulSet mode: use the hostname directly
-            Ok(format!("{}:{}", hostname, self.port))
+            Ok(format!("http://{}:{}", hostname, self.port))
         } else {
             // Fallback: resolve outbound IP by connecting to an external socket
             resolve_outbound_ip(self.port)
@@ -47,7 +47,9 @@ fn resolve_outbound_ip(port: u16) -> Result<String, String> {
     use std::net::UdpSocket;
 
     // Connect to a public DNS server (doesn't actually send data, just determines routing)
-    let target: SocketAddr = "8.8.8.8:80".parse().map_err(|e| format!("Parse error: {}", e))?;
+    let target: SocketAddr = "8.8.8.8:80"
+        .parse()
+        .map_err(|e| format!("Parse error: {}", e))?;
 
     let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("Bind error: {}", e))?;
 
@@ -57,7 +59,7 @@ fn resolve_outbound_ip(port: u16) -> Result<String, String> {
 
     socket
         .local_addr()
-        .map(|addr| format!("{}:{}", addr.ip(), port))
+        .map(|addr| format!("http://{}:{}", addr.ip(), port))
         .map_err(|e| format!("Local addr error: {}", e))
 }
 

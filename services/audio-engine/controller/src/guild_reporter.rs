@@ -40,3 +40,21 @@ pub async fn run_guild_reporter(
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
+
+/// Periodically re-registers this AE with TL using the existing token.
+/// Runs forever, sleeping first so the initial registration is not duplicated.
+pub async fn run_ae_heartbeat(tl_rpc_url: String, token: String, advertised_addr: String) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(15)).await;
+        match zako3_tl_client::TlClient::connect(&tl_rpc_url).await {
+            Ok(client) => {
+                if let Err(e) = client.heartbeat_ae(token.clone(), advertised_addr.clone()).await {
+                    tracing::warn!("ae_heartbeat: heartbeat_ae failed: {e}");
+                } else {
+                    tracing::debug!("ae_heartbeat: re-registered with TL");
+                }
+            }
+            Err(e) => tracing::warn!("ae_heartbeat: failed to connect to TL at {tl_rpc_url}: {e}"),
+        }
+    }
+}

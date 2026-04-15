@@ -202,6 +202,13 @@ impl AeRegistry {
 
         Ok(())
     }
+
+    /// Heartbeat from an already-registered AE. Re-registers using the existing token
+    /// without picking a new one from the pool.
+    pub async fn heartbeat(&self, token: String, listen_addr: String) -> Result<(), RegistrationError> {
+        validate_listen_addr(&listen_addr)?;
+        self.register_with_token(DiscordToken(token), listen_addr).await
+    }
 }
 
 #[async_trait]

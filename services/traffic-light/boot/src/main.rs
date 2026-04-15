@@ -97,6 +97,16 @@ impl TrafficLightRpcServer for TrafficLightServiceImpl {
             }
         }
     }
+
+    async fn heartbeat_ae(&self, token: String, listen_addr: String) -> RpcResult<()> {
+        match self.ae_registry.heartbeat(token, listen_addr).await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                tracing::warn!("heartbeat_ae failed: {e}");
+                Err(jsonrpsee::types::error::ErrorCode::InternalError.into())
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
