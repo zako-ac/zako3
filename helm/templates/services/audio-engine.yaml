@@ -60,6 +60,8 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: AE_PORT
               value: "8090"
+            - name: AE_ADVERTISE_ADDR
+              value: "http://$(POD_NAME).{{ $fullname }}-audio-engine.$(POD_NAMESPACE).svc.cluster.local:8090"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
