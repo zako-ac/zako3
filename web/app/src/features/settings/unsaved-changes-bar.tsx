@@ -12,7 +12,7 @@ export function UnsavedChangesBar({ onSave, onReset, isSaving }: UnsavedChangesB
     const { t } = useTranslation()
 
     return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg shadow-lg p-4 flex items-center gap-4 max-w-md">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg shadow-lg p-4 flex flex-wrap items-center gap-4 max-w-md">
             <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
             <div className="flex-1">
                 <p className="text-sm font-medium text-yellow-900 dark:text-yellow-300">
