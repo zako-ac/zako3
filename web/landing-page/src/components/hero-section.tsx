@@ -4,13 +4,13 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SettingsMenu } from "@/components/settings-menu"
-import { DiscordIcon } from "@/components/shared/discord-icon"
+import { DiscordInviteButton } from "@/components/shared/discord-invite-button"
 
 const translations = {
     ko: {
         hero: "ZAKO",
         tagline: "통화 채널을 더 다채롭게",
-        description: "마이크 없이 음성 채널에서 활동하는 유저들을 위한 강력한 TTS 및 미디어 봇",
+        description: "마이크 없이 음성 채널에서 활동하는 유저들을 위한 강력한 TTS 및 미디어 봇 (베타)",
         addBot: "디스코드에 추가하기",
         documentation: "문서 보기",
         stats1: "1K+",
@@ -21,6 +21,7 @@ const translations = {
         stats3Label: "가동시간",
         available: "지금 사용 가능",
         dashboard: "대시보드",
+        usage: "사용법",
     },
     en: {
         hero: "ZAKO",
@@ -36,6 +37,7 @@ const translations = {
         stats3Label: "Uptime",
         available: "Now Available",
         dashboard: "Dashboard",
+        usage: "Usage",
     },
 }
 
@@ -69,7 +71,7 @@ export function HeroSection() {
                     {t.hero}
                 </h1>
 
-                <p className="text-2xl md:text-3xl lg:text-4xl font-medium text-balance max-w-3xl mx-auto bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+                <p className="text-2xl md:text-3xl lg:text-4xl font-medium text-balance max-w-3xl mx-auto bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
                     {t.tagline}
                 </p>
 
@@ -77,18 +79,23 @@ export function HeroSection() {
                     {t.description}
                 </p>
 
-                <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-                    <Button asChild size="lg" className="gap-2 text-base px-8 py-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25">
-                        <a href={process.env.NEXT_PUBLIC_DISCORD_INVITE} target="_blank" rel="noopener noreferrer">
-                            <DiscordIcon className="h-5 w-5" />
-                            {t.addBot}
-                        </a>
-                    </Button>
-                    <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 py-6">
-                        <a href='/dashboard' target="_blank" rel="noopener noreferrer">
-                            {t.dashboard}
-                        </a>
-                    </Button>
+                <div className="flex flex-wrap flex-col items-center justify-center gap-4 pt-4">
+                    <DiscordInviteButton
+                        label={t.addBot}
+                        className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
+                    />
+                    <div className="flex gap-4">
+                        <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 py-6">
+                            <a href='/dashboard' target="_blank" rel="noopener noreferrer">
+                                {t.dashboard}
+                            </a>
+                        </Button>
+                        <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 py-6">
+                            <a href={process.env.NEXT_PUBLIC_DOCS_URL + '/docs'} target="_blank" rel="noopener noreferrer">
+                                {t.usage}
+                            </a>
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-12 max-w-3xl mx-auto">

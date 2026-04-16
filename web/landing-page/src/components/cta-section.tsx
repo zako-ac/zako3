@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ArrowRight } from "lucide-react"
-import { DiscordIcon } from "@/components/shared/discord-icon"
+import { DiscordInviteButton } from "@/components/shared/discord-invite-button"
 
 export function CTASection() {
     return (
@@ -17,17 +16,10 @@ export function CTASection() {
                             무료로 자코를 디스코드 서버에 추가하고 음성 채널을 더욱 재미있게 만들어보세요
                         </p>
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                            <Button
-                                asChild
-                                size="lg"
-                                className="gap-2 text-base px-8 py-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 group"
-                            >
-                                <a href={process.env.NEXT_PUBLIC_DISCORD_INVITE} target="_blank" rel="noopener noreferrer">
-                                    <DiscordIcon className="h-5 w-5" />
-                                    디스코드에 추가하기
-                                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                                </a>
-                            </Button>
+                            <DiscordInviteButton
+                                label="디스코드에 추가하기"
+                                className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
+                            />
                             <Button asChild size="lg" variant="outline" className="gap-2 text-base px-8 py-6">
                                 <a href='/dashboard' target="_blank" rel="noopener noreferrer">
                                     대시보드
