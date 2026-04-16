@@ -107,4 +107,3 @@ refer hq todo
 - [x] Separate embeds and add theme color
 - [x] Don't read itself
 - [x] Use plain text for everyday messages, for friendly UX.
-- [ ] Tap list command: max 10 minutes live update

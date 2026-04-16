@@ -30,10 +30,6 @@ struct ChannelSnapshot {
     real_user_count: usize,
 }
 
-// ---------------------------------------------------------------------------
-// EventHandler impl
-// ---------------------------------------------------------------------------
-
 #[async_trait]
 impl EventHandler for VoiceStateHandler {
     async fn cache_ready(&self, ctx: Context, guilds: Vec<serenity::GuildId>) {
@@ -124,10 +120,6 @@ impl EventHandler for VoiceStateHandler {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Voice state tracking
-// ---------------------------------------------------------------------------
-
 async fn update_tracking(
     voice_state_service: &VoiceStateService,
     ctx: &Context,
@@ -169,10 +161,6 @@ async fn update_tracking(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Pure sync helpers
-// ---------------------------------------------------------------------------
 
 fn is_bot(ctx: &Context, guild_id: serenity::GuildId, user_id: serenity::UserId) -> bool {
     if let Some(user) = ctx.cache.user(user_id) {
@@ -252,10 +240,6 @@ fn count_real_users(guild: &serenity::Guild, channel_id: serenity::ChannelId) ->
         .count()
 }
 
-// ---------------------------------------------------------------------------
-// Auto-leave / rejoin
-// ---------------------------------------------------------------------------
-
 async fn handle_auto_leave_rejoin(
     service: &Service,
     ctx: &Context,
@@ -330,12 +314,22 @@ async fn act_on_snapshot(
         .unwrap_or(false);
 
     if !is_intended {
+        tracing::info!(
+            channel = %snap.serenity_channel_id,
+            guild = %snap.guild_id,
+            "Auto-leave/rejoin: skipping channel — not in intended_vc"
+        );
         return;
     }
 
     let bot_is_present = sessions.contains(&snap.channel_id);
 
     if snap.real_user_count == 0 && bot_is_present {
+        tracing::info!(
+            channel = %snap.serenity_channel_id,
+            guild = %snap.guild_id,
+            "Auto-leave: channel is empty, leaving"
+        );
         let _ = service
             .audio_engine
             .leave(snap.guild_id, snap.channel_id)
@@ -344,6 +338,12 @@ async fn act_on_snapshot(
     } else if snap.real_user_count > 0 && !bot_is_present {
         let key = (u64::from(snap.guild_id), u64::from(snap.channel_id));
         if joining.insert(key) {
+            tracing::info!(
+                channel = %snap.serenity_channel_id,
+                guild = %snap.guild_id,
+                real_users = snap.real_user_count,
+                "Auto-rejoin: users present, bot absent — rejoining"
+            );
             if let Err(e) = bot_join_and_announce(
                 service,
                 ctx,
@@ -359,13 +359,23 @@ async fn act_on_snapshot(
                 );
             }
             joining.remove(&key);
+        } else {
+            tracing::info!(
+                channel = %snap.serenity_channel_id,
+                guild = %snap.guild_id,
+                "Auto-rejoin: join already in-flight for this channel, skipping duplicate"
+            );
         }
+    } else {
+        tracing::info!(
+            channel = %snap.serenity_channel_id,
+            guild = %snap.guild_id,
+            real_users = snap.real_user_count,
+            bot_present = bot_is_present,
+            "Auto-leave/rejoin: no action needed"
+        );
     }
 }
-
-// ---------------------------------------------------------------------------
-// Join/leave announcement
-// ---------------------------------------------------------------------------
 
 async fn announce_join_leave(
     service: &Service,
