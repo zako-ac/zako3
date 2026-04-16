@@ -91,7 +91,7 @@ export function HeroSection() {
                             </a>
                         </Button>
                         <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 py-6">
-                            <a href={process.env.NEXT_PUBLIC_DOCS_URL + '/docs'} target="_blank" rel="noopener noreferrer">
+                            <a href={process.env.NEXT_PUBLIC_DOCS_URL} target="_blank" rel="noopener noreferrer">
                                 {t.usage}
                             </a>
                         </Button>
