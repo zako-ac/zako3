@@ -33,6 +33,7 @@ jobs:
           VITE_WS_BASE_URL: wss://zako.ac
           VITE_GRAFANA_URL: https://dash.zako.ac
           NEXT_PUBLIC_DISCORD_INVITE: "https://discord.com/oauth2/authorize?client_id=1365312197613453322&permissions=4613826774359104&integration_type=0&scope=applications.commands+bot"
+          NEXT_PUBLIC_EXTRA_INVITES: "https://discord.com/oauth2/authorize?client_id=1492215203423584408&permissions=4895026873161728&integration_type=0&scope=bot+applications.commands, https://discord.com/oauth2/authorize?client_id=1492215415118762046&permissions=4895026873161728&integration_type=0&scope=bot+applications.commands, https://discord.com/oauth2/authorize?client_id=1492215592244088984&permissions=4895026873161728&integration_type=0&scope=bot+applications.commands"
           NEXT_PUBLIC_DOCS_URL: "https://docs.zako.ac/docs"
         run: |
           pnpm --filter @zako-ac/web --filter @zako-ac/landing-page build
