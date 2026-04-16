@@ -24,8 +24,8 @@ pub(crate) async fn bot_join_and_announce(
 
     let service_clone = service.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let _ = service_clone
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        if let Err(e) = service_clone
             .audio_engine
             .play(
                 guild_id,
@@ -36,7 +36,10 @@ pub(crate) async fn bot_join_and_announce(
                 1.0.into(),
                 DiscordUserId::from(bot_user_id.get().to_string()),
             )
-            .await;
+            .await
+        {
+            tracing::error!("Failed to play bot join announcement: {:?}", e);
+        }
     });
 
     Ok(())
