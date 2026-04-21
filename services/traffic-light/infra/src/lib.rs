@@ -112,7 +112,9 @@ impl AeRegistry {
 
     /// Pick the next token from the pool using round-robin.
     fn pick_next_token(&self) -> DiscordToken {
-        let idx = self.token_cursor.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let idx = self
+            .token_cursor
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.token_pool[idx % self.token_pool.len()].clone()
     }
 
@@ -123,8 +125,7 @@ impl AeRegistry {
         validate_listen_addr(&listen_addr)?;
 
         let token = self.pick_next_token();
-        self.register_with_token(token.clone(), listen_addr)
-            .await?;
+        self.register_with_token(token.clone(), listen_addr).await?;
         Ok(token.0)
     }
 
@@ -154,6 +155,7 @@ impl AeRegistry {
 
         // Build the HTTP client to communicate with the AE
         let http_client = HttpClientBuilder::default()
+            .request_timeout(std::time::Duration::from_secs(15))
             .build(&url)
             .map_err(|e| RegistrationError::HttpClientBuild(e.to_string()))?;
 
@@ -176,7 +178,9 @@ impl AeRegistry {
         if !stale_ae_ids.is_empty() {
             let mut state = self.state.write().await;
             if let Some(worker) = state.workers.get_mut(&worker_id) {
-                worker.connected_ae_ids.retain(|id| !stale_ae_ids.iter().any(|ae| ae.0 == *id));
+                worker
+                    .connected_ae_ids
+                    .retain(|id| !stale_ae_ids.iter().any(|ae| ae.0 == *id));
             }
         }
 
@@ -205,9 +209,14 @@ impl AeRegistry {
 
     /// Heartbeat from an already-registered AE. Re-registers using the existing token
     /// without picking a new one from the pool.
-    pub async fn heartbeat(&self, token: String, listen_addr: String) -> Result<(), RegistrationError> {
+    pub async fn heartbeat(
+        &self,
+        token: String,
+        listen_addr: String,
+    ) -> Result<(), RegistrationError> {
         validate_listen_addr(&listen_addr)?;
-        self.register_with_token(DiscordToken(token), listen_addr).await
+        self.register_with_token(DiscordToken(token), listen_addr)
+            .await
     }
 }
 
@@ -219,15 +228,15 @@ impl AeDispatcher for AeRegistry {
         mut request: AudioEngineCommandRequest,
     ) -> Result<AudioEngineCommandResponse, TlError> {
         let key = (route.worker_id, route.ae_id);
-        let client_ref = self.clients.get(&key).ok_or(TlError::NoSuchAe)?;
-        let client = client_ref.value();
+        // fuck the DashMap lock
+        let client = self.clients.get(&key).ok_or(TlError::NoSuchAe)?.clone();
 
         // Inject current span context into request headers for W3C trace propagation
         let cx = tracing::Span::current().context();
         global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
 
         // Call the RPC method
-        let response = AudioEngineRpcClient::execute(client, request)
+        let response = AudioEngineRpcClient::execute(&client, request)
             .await
             .map_err(|e| TlError::Transport(e.to_string()))?;
 

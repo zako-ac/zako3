@@ -84,7 +84,13 @@ impl DiscordService for SongbirdDiscordService {
 
     async fn leave_voice_channel(&self, guild_id: GuildId) -> ZakoResult<()> {
         let g_id = Self::to_songbird_guild_id(guild_id);
-        self.manager.remove(g_id).await?;
+        match tokio::time::timeout(Duration::from_secs(10), self.manager.remove(g_id)).await {
+            Ok(result) => result?,
+            Err(_) => {
+                tracing::warn!(guild_id = ?guild_id, "leave_voice_channel timed out after 10s");
+                return Err(ZakoError::Rpc("leave_voice_channel timed out after 10s".to_string()));
+            }
+        }
         Ok(())
     }
 
