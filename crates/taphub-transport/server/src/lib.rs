@@ -103,7 +103,7 @@ impl TransportServer {
 }
 
 async fn handle_connection(
-    mut conn: ProtofishConnection,
+    conn: ProtofishConnection,
     handler: Arc<dyn TapHubBridgeHandler>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {

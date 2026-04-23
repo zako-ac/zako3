@@ -15,7 +15,7 @@ type SessionMap = Arc<
     Mutex<
         HashMap<
             zakofish::types::TapId,
-            HashMap<u64, Arc<Mutex<protofish2::connection::ProtofishConnection>>>,
+            HashMap<u64, Arc<protofish2::connection::ProtofishConnection>>,
         >,
     >,
 >;
@@ -117,10 +117,7 @@ impl ZakofishHub {
                 })?
         };
 
-        let mut stream = {
-            let mut conn = conn_arc.lock().await;
-            conn.open_mani().await?
-        };
+        let mut stream = conn_arc.open_mani().await?;
 
         let request = AudioRequestMessage {
             ars: wire_ars,
@@ -176,10 +173,7 @@ impl ZakofishHub {
                 })?
         };
 
-        let mut stream = {
-            let mut conn = conn_arc.lock().await;
-            conn.open_mani().await?
-        };
+        let mut stream = conn_arc.open_mani().await?;
 
         let request = AudioMetadataRequestMessage {
             ars: wire_ars,
@@ -212,7 +206,7 @@ impl ZakofishHub {
 }
 
 async fn handle_new_connection(
-    mut conn: protofish2::connection::ProtofishConnection,
+    conn: protofish2::connection::ProtofishConnection,
     handler: Arc<dyn HubHandler>,
     sessions: SessionMap,
     next_connection_id: Arc<AtomicU64>,
@@ -243,7 +237,7 @@ async fn handle_new_connection(
                         )
                         .await?;
 
-                    let conn_arc = Arc::new(Mutex::new(conn));
+                    let conn_arc = Arc::new(conn);
                     sessions
                         .lock()
                         .await
