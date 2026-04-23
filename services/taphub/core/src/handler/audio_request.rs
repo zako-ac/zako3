@@ -71,12 +71,12 @@ pub(crate) async fn handle_request_audio_inner(
         tracing::warn!(%e, "Failed to record unique_user metric");
     }
 
-    let tap = tap_hub
-        .app
-        .hq_repository
-        .get_tap_by_id(&tap_id.0.to_string())
-        .await
-        .ok_or_else(|| "Tap metadata not found".to_string())?;
+    let tap_id_str = tap_id.0.to_string();
+    let (tap_opt, conn_result) = tokio::join!(
+        tap_hub.app.hq_repository.get_tap_by_id(&tap_id_str),
+        tap_hub.select_connection(&tap_id),
+    );
+    let tap = tap_opt.ok_or_else(|| "Tap metadata not found".to_string())?;
 
     super::permission::verify_permission(tap_hub, &tap, &request.discord_user_id).await?;
 
@@ -148,7 +148,7 @@ pub(crate) async fn handle_request_audio_inner(
     );
 
     // Cache miss: request from zakofish
-    let (connection_id, disconnect_rx) = tap_hub.select_connection(&tap_id).await?;
+    let (connection_id, disconnect_rx) = conn_result?;
     tracing::Span::current().record("connection_id", connection_id);
 
     let (succ, rel, mut unrel) = {
@@ -157,17 +157,21 @@ pub(crate) async fn handle_request_audio_inner(
             tap_id = %tap_id.0,
             connection_id,
         );
-        tap_hub
-            .zf_hub
-            .request_audio(
-                tap_id.clone(),
-                connection_id,
-                request.audio_request.clone(),
-                request.headers.clone(),
-            )
-            .instrument(zakofish_span)
-            .await
-            .map_err(|e| format!("Failed to request audio from tap: {}", e))?
+        tokio::time::timeout(
+            tap_hub.request_timeout,
+            tap_hub
+                .zf_hub
+                .request_audio(
+                    tap_id.clone(),
+                    connection_id,
+                    request.audio_request.clone(),
+                    request.headers.clone(),
+                )
+                .instrument(zakofish_span),
+        )
+        .await
+        .map_err(|_| format!("Tap request timed out after {:?}", tap_hub.request_timeout))?
+        .map_err(|e| format!("Failed to request audio from tap: {}", e))?
     };
 
     tracing::info!(tap_id = %tap_id.0, connection_id, "Received audio from Tap");

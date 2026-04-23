@@ -28,12 +28,12 @@ pub(crate) async fn handle_preload_audio_inner(
         .map_err(|e| format!("Failed to get tap id: {}", e))?
         .ok_or_else(|| "Tap disconnected or not found".to_string())?;
 
-    let tap = tap_hub
-        .app
-        .hq_repository
-        .get_tap_by_id(&tap_id.0.to_string())
-        .await
-        .ok_or_else(|| "Tap metadata not found".to_string())?;
+    let tap_id_str = tap_id.0.to_string();
+    let (tap_opt, conn_result) = tokio::join!(
+        tap_hub.app.hq_repository.get_tap_by_id(&tap_id_str),
+        tap_hub.select_connection(&tap_id),
+    );
+    let tap = tap_opt.ok_or_else(|| "Tap metadata not found".to_string())?;
 
     super::permission::verify_permission(tap_hub, &tap, &req.discord_user_id).await?;
 
@@ -54,19 +54,23 @@ pub(crate) async fn handle_preload_audio_inner(
         }
 
     // Connection selection
-    let (connection_id, disconnect_rx) = tap_hub.select_connection(&tap_id).await?;
+    let (connection_id, disconnect_rx) = conn_result?;
 
     // Request audio from zakofish
-    let (succ, rel, _unrel) = tap_hub
-        .zf_hub
-        .request_audio(
-            tap_id.clone(),
-            connection_id,
-            req.audio_request.clone(),
-            req.headers.clone(),
-        )
-        .await
-        .map_err(|e| format!("Failed to request audio from tap: {}", e))?;
+    let (succ, rel, _unrel) = tokio::time::timeout(
+        tap_hub.request_timeout,
+        tap_hub
+            .zf_hub
+            .request_audio(
+                tap_id.clone(),
+                connection_id,
+                req.audio_request.clone(),
+                req.headers.clone(),
+            ),
+    )
+    .await
+    .map_err(|_| format!("Tap preload timed out after {:?}", tap_hub.request_timeout))?
+    .map_err(|e| format!("Failed to request audio from tap: {}", e))?;
 
     // Resolve metadata
     let metadatas = resolve_metadata(
