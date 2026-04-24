@@ -153,7 +153,7 @@ export const VoiceChannelPage = () => {
                                                             : track.audioRequestString}
                                                     </p>
                                                     <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                                                        {t('voice.tap')}: {track.tapName} · {t('voice.requestedBy')}:
+                                                        {t('voice.tap')}: {track.tapId} · {t('voice.requestedBy')}:
                                                         <CopyableId id={track.requestedBy} />
                                                     </p>
                                                     <div className="mt-2 flex items-center gap-2">

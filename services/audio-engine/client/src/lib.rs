@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use zako3_audio_engine_core::types::{
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
-    TrackId, Volume, hq::DiscordUserId,
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TrackId,
+    Volume, hq::{DiscordUserId, TapId},
 };
 
 pub mod client;
@@ -31,7 +31,7 @@ pub enum AudioEngineRequest {
     Play {
         guild_id: GuildId,
         queue_name: QueueName,
-        tap_name: TapName,
+        tap_id: TapId,
         audio_request_string: AudioRequestString,
         volume: Volume,
         discord_user_id: DiscordUserId,

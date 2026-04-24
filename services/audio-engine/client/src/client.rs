@@ -4,8 +4,8 @@ use std::time::Duration;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use zako3_audio_engine_core::types::{
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
-    TrackId, Volume, hq::DiscordUserId,
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TrackId,
+    Volume, hq::{DiscordUserId, TapId},
 };
 
 use crate::{AudioEngineRequest, AudioEngineResponse, TracedAudioEngineRequest};
@@ -81,7 +81,7 @@ impl AudioEngineRpcClient {
         guild_id: GuildId,
         channel_id: ChannelId,
         queue_name: QueueName,
-        tap_name: TapName,
+        tap_id: TapId,
         audio_request_string: AudioRequestString,
         volume: Volume,
         discord_user_id: DiscordUserId,
@@ -93,7 +93,7 @@ impl AudioEngineRpcClient {
                 AudioEngineRequest::Play {
                     guild_id,
                     queue_name,
-                    tap_name,
+                    tap_id,
                     audio_request_string,
                     volume,
                     discord_user_id,

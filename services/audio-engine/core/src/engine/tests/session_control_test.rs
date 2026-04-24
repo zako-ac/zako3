@@ -10,9 +10,10 @@ use crate::engine::session::create_session_control;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
-    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, TapName, Track,
+    AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, Track,
     TrackId, Volume,
 };
+use zako3_types::hq::TapId;
 use zako3_types::hq::DiscordUserId;
 
 // Helper to create a dummy track
@@ -21,7 +22,7 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
         track_id: TrackId::from(id),
         metadatas: vec![AudioMetadata::Title("Test Track".to_string())],
         request: CachedAudioRequest {
-            tap_name: TapName::from("yt".to_string()),
+            tap_id: TapId("test_tap_id".to_string()),
             audio_request: AudioRequestString::from("req".to_string()),
             cache_key: AudioCachePolicy {
                 cache_type: AudioCacheType::CacheKey("key".to_string()),
@@ -138,7 +139,7 @@ async fn test_play_success() {
     let res = control
         .play(
             QueueName::from("music".to_string()),
-            TapName::from("yt".to_string()),
+            TapId("yt_tap_id".to_string()),
             AudioRequestString::from("test".to_string()),
             Volume::from(1.0),
             DiscordUserId::from("123".to_string()),
@@ -226,7 +227,7 @@ async fn test_play_queued() {
     let res = control
         .play(
             QueueName::from("music".to_string()),
-            TapName::from("yt".to_string()),
+            TapId("yt_tap_id".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
             DiscordUserId::from("123".to_string()),
@@ -739,7 +740,7 @@ async fn test_end_of_track_handling_and_preload() {
     let _ = control
         .play(
             QueueName::from("music".to_string()),
-            TapName::from("yt".to_string()),
+            TapId("yt_tap_id".to_string()),
             AudioRequestString::from("t".to_string()),
             Volume::from(1.0),
             DiscordUserId::from("123".to_string()),

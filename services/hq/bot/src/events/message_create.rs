@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    hq::{DiscordUserId, Tap, TapName},
+    hq::{DiscordUserId, TapId},
     AudioRequestString, ChannelId, GuildId, QueueName,
 };
 use serenity::{
@@ -18,10 +18,6 @@ pub struct MessageCreateHandler {
 }
 
 const FALLBACK_TAP_NAME: &str = "google";
-
-fn fallback_tap_name() -> TapName {
-    TapName::from(FALLBACK_TAP_NAME.to_string())
-}
 
 #[async_trait]
 impl EventHandler for MessageCreateHandler {
@@ -83,7 +79,7 @@ async fn handle_message_create(
                     .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
                     .await?;
 
-        let tap_name = resolve_tap_name_for_user(&service, &settings).await?;
+        let tap_id = resolve_tap_id_for_user(&service, &settings).await?;
 
         let channel_ids = service
             .playback
@@ -116,7 +112,7 @@ async fn handle_message_create(
                             guild_id,
                             channel_id,
                             queue_name.clone(),
-                            tap_name.clone(),
+                            tap_id.clone(),
                             mapped.clone(),
                             1.0.into(),
                             author_id.clone(),
@@ -138,20 +134,16 @@ fn queue_name(user_id: &DiscordUserId, queue_tts: bool) -> QueueName {
     }
 }
 
-async fn resolve_tap_name_for_user(
+async fn resolve_tap_id_for_user(
     service: &Service,
     settings: &hq_types::hq::UserSettings,
-) -> CoreResult<TapName> {
-    let tap_name = match &settings.tts_voice {
-        Some(tap_id) => {
-            let tap: Option<Tap> = service.tap.get_tap(tap_id.clone()).await?;
-            if let Some(t) = tap {
-                t.name
-            } else {
-                fallback_tap_name()
-            }
-        }
-        None => fallback_tap_name(),
-    };
-    Ok(tap_name)
+) -> CoreResult<TapId> {
+    if let Some(tap_id) = &settings.tts_voice {
+        return Ok(tap_id.clone());
+    }
+    // Fallback: resolve default tap by name
+    if let Some(tap) = service.tap.get_tap_by_name(&hq_types::hq::TapName::from(FALLBACK_TAP_NAME.to_string())).await? {
+        return Ok(tap.id);
+    }
+    Err(hq_core::CoreError::NotFound(format!("Default tap '{}' not found.", FALLBACK_TAP_NAME)))
 }

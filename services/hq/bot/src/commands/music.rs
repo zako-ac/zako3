@@ -1,7 +1,8 @@
 use crate::{ui, util, Context, Error};
+use hq_core::CoreError;
 use hq_types::{
-    hq::DiscordUserId, AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName,
-    Volume,
+    hq::{DiscordUserId, TapId, TapName},
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, Volume,
 };
 use poise::serenity_prelude as serenity;
 
@@ -60,7 +61,8 @@ pub async fn play(
         }
     };
 
-    let tap_name = TapName::from(source.unwrap_or_else(|| "youtube".to_string()));
+    let source_name = source.unwrap_or_else(|| "youtube".to_string());
+    let tap_id = resolve_tap_id(ctx, &source_name).await?;
     let queue_name = QueueName::from(MUSIC_QUEUE.to_string());
     let audio_request = AudioRequestString::from(query.clone());
     let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
@@ -77,7 +79,7 @@ pub async fn play(
         guild_id,
         channel_id,
         queue_name,
-        tap_name,
+        tap_id,
         audio_request,
         discord_user_id,
         &query,
@@ -100,13 +102,22 @@ pub async fn play(
     Ok(())
 }
 
+async fn resolve_tap_id(ctx: Context<'_>, name: &str) -> Result<TapId, Error> {
+    let service = &ctx.data().service;
+    if let Some(tap) = service.tap.get_tap_by_name(&TapName::from(name.to_string())).await? {
+        Ok(tap.id)
+    } else {
+        Err(CoreError::NotFound(format!("Tap '{}' not found.", name)).into())
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn do_play<'a>(
     ctx: Context<'a>,
     guild_id: GuildId,
     channel_id: ChannelId,
     queue_name: QueueName,
-    tap_name: TapName,
+    tap_id: TapId,
     audio_request: AudioRequestString,
     discord_user_id: hq_types::hq::DiscordUserId,
     query: &str,
@@ -117,7 +128,7 @@ async fn do_play<'a>(
         guild_id,
         channel_id,
         queue_name.clone(),
-        tap_name,
+        tap_id,
         audio_request,
         Volume::from(1.0f32),
         discord_user_id,

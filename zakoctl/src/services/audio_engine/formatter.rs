@@ -66,7 +66,7 @@ pub fn print_session_state_native(state: SessionState) {
         for track in tracks {
             table.add_row(vec![
                 Cell::new(track.track_id),
-                Cell::new(&track.request.tap_name),
+                Cell::new(&track.request.tap_id.0),
                 Cell::new(format!("{:.1}", track.volume)),
                 Cell::new(&track.request.audio_request),
             ]);

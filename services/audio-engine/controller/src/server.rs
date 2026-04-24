@@ -104,7 +104,7 @@ impl AeTransportHandler {
                         match session
                             .play(
                                 play_req.queue_name,
-                                play_req.tap_name,
+                                play_req.tap_id,
                                 play_req.ars,
                                 play_req.volume,
                                 play_req.initiator,

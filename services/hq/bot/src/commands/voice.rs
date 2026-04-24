@@ -22,16 +22,29 @@ pub(crate) async fn bot_join_and_announce(
 
     let queue_name: QueueName = format!("temp-alert-{}", uuid::Uuid::new_v4()).into();
 
+    // Resolve tap ID for the announcement before spawning the task.
+    let announcement_tap_id = service
+        .tap
+        .get_tap_by_name(&TapName::from("papago".to_string()))
+        .await
+        .ok()
+        .flatten()
+        .map(|t| t.id);
+
     let service_clone = service.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(2)).await;
+        let Some(tap_id) = announcement_tap_id else {
+            tracing::warn!("Announcement tap 'papago' not found, skipping join announcement");
+            return;
+        };
         if let Err(e) = service_clone
             .audio_engine
             .play(
                 guild_id,
                 channel_id,
                 queue_name,
-                TapName::from("papago".to_string()),
+                tap_id,
                 AudioRequestString::from(format!("자코 등장")),
                 1.0.into(),
                 DiscordUserId::from(bot_user_id.get().to_string()),

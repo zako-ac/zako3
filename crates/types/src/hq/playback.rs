@@ -16,7 +16,7 @@ pub struct TrackDto {
     pub track_id: String,
     pub queue_name: String,
     pub metadata: Vec<AudioMetadataDto>,
-    pub tap_name: String,
+    pub tap_id: String,
     pub audio_request_string: String,
     pub requested_by: String,
     pub volume: f32,

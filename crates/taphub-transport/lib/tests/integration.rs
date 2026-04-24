@@ -124,7 +124,7 @@ async fn test_transport_integration() {
     .expect("Failed to connect client");
 
     let req = CachedAudioRequest {
-        tap_name: "test_tap".to_string().into(),
+        tap_id: zako3_types::hq::TapId("test_tap_id".to_string()),
         audio_request: "yt:preload".to_string().into(),
         cache_key: AudioCachePolicy {
             cache_type: AudioCacheType::CacheKey("preload_key".to_string()),
@@ -155,7 +155,7 @@ async fn test_transport_integration() {
     assert!(found_title);
 
     let meta_req = AudioRequest {
-        tap_name: "test_tap".to_string().into(),
+        tap_id: zako3_types::hq::TapId("test_tap_id".to_string()),
         request: "yt:meta".to_string().into(),
         discord_user_id: "123".to_string().into(),
         headers: HashMap::new(),

@@ -9,7 +9,7 @@ export const trackSchema = z.object({
     trackId: z.string(),
     queueName: z.string(),
     metadata: z.array(audioMetadataSchema),
-    tapName: z.string(),
+    tapId: z.string(),
     audioRequestString: z.string(),
     requestedBy: z.string(),
     volume: z.number(),

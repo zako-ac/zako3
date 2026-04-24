@@ -10,8 +10,8 @@ use tl_protocol::{
 };
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_types::{
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
-    TrackId, Volume, hq::DiscordUserId,
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TrackId,
+    Volume, hq::{DiscordUserId, TapId},
 };
 
 #[derive(Debug, Error)]
@@ -104,7 +104,7 @@ impl TlClient {
         guild_id: GuildId,
         channel_id: ChannelId,
         queue_name: QueueName,
-        tap_name: TapName,
+        tap_id: TapId,
         ars: AudioRequestString,
         volume: Volume,
         initiator: DiscordUserId,
@@ -115,7 +115,7 @@ impl TlClient {
             AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Play(
                 AudioPlayRequest {
                     queue_name,
-                    tap_name,
+                    tap_id,
                     ars,
                     volume,
                     initiator,

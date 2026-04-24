@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use hq_types::{
-    hq::{playback::PlaybackEvent, DiscordUserId},
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TapName,
-    TrackId, Volume,
+    hq::{playback::PlaybackEvent, DiscordUserId, TapId},
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, SessionState, TrackId,
+    Volume,
 };
 use tokio::sync::broadcast;
 use tracing::instrument;
@@ -49,13 +49,13 @@ impl AudioEngineService {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, audio_request_string), fields(guild_id = ?guild_id, channel_id = ?channel_id, tap_name = %tap_name))]
+    #[instrument(skip(self, audio_request_string), fields(guild_id = ?guild_id, channel_id = ?channel_id, tap_id = %tap_id.0))]
     pub async fn play(
         &self,
         guild_id: GuildId,
         channel_id: ChannelId,
         queue_name: QueueName,
-        tap_name: TapName,
+        tap_id: TapId,
         audio_request_string: AudioRequestString,
         volume: Volume,
         discord_user_id: DiscordUserId,
@@ -66,7 +66,7 @@ impl AudioEngineService {
                 guild_id,
                 channel_id,
                 queue_name,
-                tap_name,
+                tap_id,
                 audio_request_string,
                 volume,
                 discord_user_id,

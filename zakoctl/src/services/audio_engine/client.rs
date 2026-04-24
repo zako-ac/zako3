@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use zako3_tl_client::TlClient;
 use zako3_types::{
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, TrackId, UserId,
-    Volume, hq::DiscordUserId,
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TrackId, UserId,
+    Volume, hq::{DiscordUserId, TapId},
 };
 
 use crate::config::Config;
@@ -74,7 +74,7 @@ pub async fn handle_command(ae_addr: String, cmd: AudioEngineCommands) -> Result
                     gid,
                     cid,
                     QueueName::from(queue),
-                    TapName::from(tap),
+                    TapId(tap),
                     AudioRequestString::from(config.resolve_alias(&request)),
                     Volume::from(volume),
                     DiscordUserId::from(String::new()),

@@ -60,7 +60,7 @@ pub trait AudioEngineRpc {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AudioPlayRequest {
     pub queue_name: QueueName,
-    pub tap_name: TapName,
+    pub tap_id: TapId,
     pub ars: AudioRequestString,
     pub volume: Volume,
     pub initiator: DiscordUserId,

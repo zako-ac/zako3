@@ -4,8 +4,8 @@ use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
 use chrono::{DateTime, Utc};
 use hq_types::hq::{
-    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapRole, TapStatsDto,
-    TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
+    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapName, TapRole,
+    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
 use serde::Deserialize;
 use sqlx::{PgPool, Row};
@@ -548,6 +548,10 @@ impl TapService {
     #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0), err)]
     pub async fn get_tap(&self, tap_id: TapId) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
+    }
+
+    pub async fn get_tap_by_name(&self, name: &TapName) -> CoreResult<Option<Tap>> {
+        self.tap_repo.find_by_name(name).await
     }
 
     pub async fn list_all_taps(&self) -> CoreResult<Vec<Tap>> {

@@ -16,17 +16,11 @@ pub(crate) async fn handle_preload_audio_inner(
     req: CachedAudioRequest,
 ) -> Result<AudioMetaResponse, String> {
     let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
-    let span = tracing::info_span!("audio.preload_request", tap_name = %req.tap_name);
+    let span = tracing::info_span!("audio.preload_request", tap_id = %req.tap_id.0);
     let _ = span.set_parent(parent_cx);
     let _enter = span.enter();
 
-    // Get tap ID from name
-    let tap_id = tap_hub
-        .state_service
-        .get_tap_id_by_name(&req.tap_name)
-        .await
-        .map_err(|e| format!("Failed to get tap id: {}", e))?
-        .ok_or_else(|| "Tap disconnected or not found".to_string())?;
+    let tap_id = req.tap_id.clone();
 
     let tap_id_str = tap_id.0.to_string();
     let (tap_opt, conn_result) = tokio::join!(

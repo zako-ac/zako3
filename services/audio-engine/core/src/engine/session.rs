@@ -11,10 +11,11 @@ use crate::{
     service::{ArcStateService, ArcTapHubService, modify_state_session},
     types::{
         AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, ChannelId, GuildId,
-        QueueName, TapName, Track, TrackId, Volume,
+        QueueName, Track, TrackId, Volume,
     },
     util::id_gen,
 };
+use zako3_types::hq::TapId;
 
 pub struct SessionControl {
     pub guild_id: GuildId,
@@ -54,14 +55,14 @@ impl SessionControl {
     pub async fn play(
         &self,
         queue_name: QueueName,
-        tap_name: TapName,
+        tap_id: TapId,
         request: AudioRequestString,
         volume: Volume,
         discord_user_id: zako3_types::hq::DiscordUserId,
     ) -> ZakoResult<TrackId> {
         tracing::info!(
             queue_name = %queue_name,
-            tap_name = %tap_name,
+            tap_id = %tap_id.0,
             volume = %volume,
             discord_user_id = %discord_user_id,
             "Playing audio"
@@ -70,7 +71,7 @@ impl SessionControl {
         let track_id: TrackId = id_gen::generate_id();
 
         let ar = AudioRequest {
-            tap_name: tap_name.clone(),
+            tap_id: tap_id.clone(),
             request: request.clone(),
             discord_user_id: discord_user_id.clone(),
             headers: Default::default(),
@@ -96,7 +97,7 @@ impl SessionControl {
                     track_id,
                     metadatas: meta.metadatas,
                     request: CachedAudioRequest {
-                        tap_name,
+                        tap_id,
                         audio_request: request,
                         cache_key: meta.cache_key,
                         discord_user_id,

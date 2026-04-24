@@ -2,8 +2,8 @@ use crate::{ui, util, util::VoiceStateExt, Context, Error};
 use hq_core::{service::UserVoiceInfo, CoreError};
 use hq_types::{
     hq::settings::{PartialUserSettings, UserSettingsField},
-    hq::{DiscordUserId, TapId},
-    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, TapName, UserId, Volume,
+    hq::{DiscordUserId, TapId, TapName},
+    AudioRequestString, AudioStopFilter, ChannelId, GuildId, QueueName, UserId, Volume,
 };
 use poise::serenity_prelude as serenity;
 
@@ -96,8 +96,8 @@ pub async fn speak(
         return Ok(());
     }
 
-    // Resolve tap name: prefer the `voice` argument, then user settings, then fallback.
-    let tap_name = resolve_tap_name(service, voice.as_deref(), &settings.tts_voice).await?;
+    // Resolve tap ID: prefer the `voice` argument, then user settings, then fallback.
+    let tap_id = resolve_tap_id(service, voice.as_deref(), &settings.tts_voice).await?;
 
     let audio_request = AudioRequestString::from(message.clone());
     let discord_user_id = DiscordUserId::from(discord_id.clone());
@@ -110,7 +110,7 @@ pub async fn speak(
                 guild_id,
                 channel_id,
                 queue_name.clone(),
-                tap_name.clone(),
+                tap_id.clone(),
                 audio_request.clone(),
                 Volume::from(1.0f32),
                 discord_user_id.clone(),
@@ -127,24 +127,30 @@ pub async fn speak(
     Ok(())
 }
 
-async fn resolve_tap_name(
+async fn resolve_tap_id(
     service: &hq_core::Service,
     voice_arg: Option<&str>,
     settings_voice: &Option<TapId>,
-) -> Result<TapName, Error> {
+) -> Result<TapId, Error> {
     const FALLBACK: &str = "google";
 
     if let Some(name) = voice_arg {
-        return Ok(TapName::from(name.to_string()));
+        if let Some(tap) = service.tap.get_tap_by_name(&TapName::from(name.to_string())).await? {
+            return Ok(tap.id);
+        }
+        return Err(hq_core::CoreError::NotFound(format!("Voice '{}' not found.", name)).into());
     }
 
     if let Some(tap_id) = settings_voice {
-        if let Some(tap) = service.tap.get_tap(tap_id.clone()).await? {
-            return Ok(tap.name);
-        }
+        return Ok(tap_id.clone());
     }
 
-    Ok(TapName::from(FALLBACK.to_string()))
+    // Fallback: resolve default tap by name
+    if let Some(tap) = service.tap.get_tap_by_name(&TapName::from(FALLBACK.to_string())).await? {
+        return Ok(tap.id);
+    }
+
+    Err(hq_core::CoreError::NotFound(format!("Default tap '{}' not found.", FALLBACK)).into())
 }
 
 /// Stop TTS playback.

@@ -4,7 +4,7 @@ use dashmap::DashSet;
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     AudioRequestString, ChannelId, GuildId, QueueName,
-    hq::{DiscordUserId, Tap, TapName, UserJoinLeaveAlert, UserSettings},
+    hq::{DiscordUserId, TapId, TapName, UserJoinLeaveAlert, UserSettings},
 };
 use poise::serenity_prelude as serenity;
 use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
@@ -396,7 +396,7 @@ async fn announce_join_leave(
         .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
         .await?;
 
-    let tap_name = resolve_tap_name(service, &settings).await?;
+    let tap_id = resolve_tap_id(service, &settings).await?;
     let sessions = service.audio_engine.get_sessions_in_guild(guild_id).await?;
 
     for (serenity_ch, is_join) in events {
@@ -418,7 +418,7 @@ async fn announce_join_leave(
                 guild_id,
                 channel_id,
                 queue_name,
-                tap_name.clone(),
+                tap_id.clone(),
                 AudioRequestString::from(message),
                 1.0.into(),
                 discord_user_id.clone(),
@@ -451,14 +451,12 @@ fn build_message(alert: &UserJoinLeaveAlert, display_name: &str, is_join: bool) 
     }
 }
 
-async fn resolve_tap_name(service: &Service, settings: &UserSettings) -> CoreResult<TapName> {
-    match &settings.tts_voice {
-        Some(tap_id) => {
-            let tap: Option<Tap> = service.tap.get_tap(tap_id.clone()).await?;
-            Ok(tap
-                .map(|t| t.name)
-                .unwrap_or_else(|| TapName::from("google".to_string())))
-        }
-        None => Ok(TapName::from("google".to_string())),
+async fn resolve_tap_id(service: &Service, settings: &UserSettings) -> CoreResult<TapId> {
+    if let Some(tap_id) = &settings.tts_voice {
+        return Ok(tap_id.clone());
     }
+    if let Some(tap) = service.tap.get_tap_by_name(&TapName::from("google".to_string())).await? {
+        return Ok(tap.id);
+    }
+    Err(hq_core::CoreError::NotFound("Default tap 'google' not found.".into()))
 }

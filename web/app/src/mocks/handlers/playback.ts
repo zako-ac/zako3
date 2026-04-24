@@ -21,7 +21,7 @@ const createMockTrack = (): TrackDto => ({
     { type: 'artist', value: faker.music.artist() },
     { type: 'title', value: faker.music.songName() },
   ],
-  tapName: 'spotify',
+  tapId: 'spotify_tap_id',
   audioRequestString: 'https://example.com/audio.mp3',
   requestedBy: 'test_user',
   volume: 100,

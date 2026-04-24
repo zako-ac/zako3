@@ -40,7 +40,7 @@ impl RealTapHubService {
 
 #[async_trait]
 impl TapHubService for RealTapHubService {
-    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_id = %request.tap_id.0))]
     async fn request_audio(&self, mut request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let cx = tracing::Span::current().context();
         global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
@@ -64,7 +64,7 @@ impl TapHubService for RealTapHubService {
         result
     }
 
-    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
+    #[instrument(skip(self), fields(tap_id = %request.tap_id.0))]
     async fn preload_audio(&self, mut request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
         let cx = tracing::Span::current().context();
         global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
@@ -88,7 +88,7 @@ impl TapHubService for RealTapHubService {
         result
     }
 
-    #[instrument(skip(self), fields(tap_name = %request.tap_name))]
+    #[instrument(skip(self), fields(tap_id = %request.tap_id.0))]
     async fn request_audio_meta(&self, mut request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
         let cx = tracing::Span::current().context();
         global::get_text_map_propagator(|p| p.inject_context(&cx, &mut request.headers));
@@ -117,7 +117,7 @@ pub struct StubTapHubService;
 
 #[async_trait]
 impl TapHubService for StubTapHubService {
-    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_id = %request.tap_id.0))]
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let start = std::time::Instant::now();
 
@@ -190,7 +190,7 @@ impl TapHubService for StubTapHubService {
         })
     }
 
-    #[instrument(skip(self), fields(tap_name = %_request.tap_name))]
+    #[instrument(skip(self, _request))]
     async fn request_audio_meta(&self, _request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
         let start = std::time::Instant::now();
 
@@ -224,7 +224,7 @@ impl<T: TapHubService> InstrumentedTapHubService<T> {
 
 #[async_trait]
 impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
-    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_id = %request.tap_id.0))]
     async fn request_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioResponse> {
         let start = std::time::Instant::now();
 
@@ -246,7 +246,7 @@ impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
         result
     }
 
-    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_id = %request.tap_id.0))]
     async fn preload_audio(&self, request: CachedAudioRequest) -> ZakoResult<AudioMetaResponse> {
         let start = std::time::Instant::now();
 
@@ -268,7 +268,7 @@ impl<T: TapHubService> TapHubService for InstrumentedTapHubService<T> {
         result
     }
 
-    #[instrument(skip_all, fields(tap_name = %request.tap_name))]
+    #[instrument(skip_all, fields(tap_id = %request.tap_id.0))]
     async fn request_audio_meta(&self, request: AudioRequest) -> ZakoResult<AudioMetaResponse> {
         let start = std::time::Instant::now();
 

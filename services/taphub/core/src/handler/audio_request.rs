@@ -26,11 +26,10 @@ pub(crate) async fn handle_request_audio_inner(
 
     let span = tracing::info_span!(
         "audio.request",
-        tap_name = %request.tap_name.0,
+        tap_id = %request.tap_id.0,
         discord_user_id = %request.discord_user_id.0,
         cache_key = ?request.cache_key,
         ars = %ars,
-        tap_id = tracing::field::Empty,
         cache_hit = tracing::field::Empty,
         connection_id = tracing::field::Empty,
     );
@@ -39,15 +38,7 @@ pub(crate) async fn handle_request_audio_inner(
 
     let start = Instant::now();
 
-    // Get tap ID from name
-    let tap_id = tap_hub
-        .state_service
-        .get_tap_id_by_name(&request.tap_name)
-        .await
-        .map_err(|e| format!("Failed to get tap id: {}", e))?
-        .ok_or_else(|| "Tap disconnected or not found".to_string())?;
-
-    tracing::Span::current().record("tap_id", tracing::field::display(&tap_id.0));
+    let tap_id = request.tap_id.clone();
 
     // Record metrics
     if let Err(e) = tap_hub.metrics_service.inc_total_uses(tap_id.clone()).await {
