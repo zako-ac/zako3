@@ -31,6 +31,10 @@ pub async fn play(
     #[description = "Tap name to use as audio source (default: youtube)"]
     #[description_localized("ko", "음악 소스로 사용할 Tap 이름 (기본값: youtube)")]
     source: Option<String>,
+    #[description = "Voice channel to play in (default: your current channel)"]
+    #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     // Extract all non-Send guild data before the first await.
     let (guild_id, user_serenity_cid) = {
@@ -44,21 +48,23 @@ pub async fn play(
         (GuildId::from(guild.id.get()), user_cid)
     };
 
-    // Use the bot's current channel, or fall back to the user's voice channel.
-    let channel_id = {
+    let channel_id = if let Some(ch) = channel {
+        ChannelId::from(ch.id.get())
+    } else {
+        let user_cid = user_serenity_cid
+            .map(|cid| ChannelId::from(cid.get()))
+            .ok_or(Error::NotInVoiceChannel)?;
         let sessions = ctx
             .data()
             .service
             .audio_engine
             .get_sessions_in_guild(guild_id)
             .await?;
-
-        if let Some(s) = sessions.into_iter().next() {
-            s.channel_id
-        } else {
-            let serenity_cid = user_serenity_cid.ok_or(Error::NotInVoiceChannel)?;
-            ChannelId::from(serenity_cid.get())
-        }
+        sessions
+            .into_iter()
+            .find(|s| s.channel_id == user_cid)
+            .map(|s| s.channel_id)
+            .ok_or(Error::UserNotInSession)?
     };
 
     let source_name = source.unwrap_or_else(|| "youtube".to_string());
