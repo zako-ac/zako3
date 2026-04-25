@@ -78,7 +78,7 @@ impl SessionControl {
         };
 
         let meta = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             self.taphub_service.request_audio_meta(ar.clone()),
         )
         .await
@@ -397,10 +397,7 @@ impl SessionControl {
                             },
                         )
                         .await?;
-                        metrics::record_track_lifecycle(
-                            "fail",
-                            &normalize_queue_name(&qn),
-                        );
+                        metrics::record_track_lifecycle("fail", &normalize_queue_name(&qn));
                     }
                 }
             }
@@ -418,7 +415,7 @@ impl SessionControl {
         );
 
         let response = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             self.taphub_service.request_audio(track.request.clone()),
         )
         .await
