@@ -34,6 +34,9 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
     let fmt_layer = fmt::layer().with_target(true).with_level(true).compact().with_filter(console_filter);
     let registry = Registry::default().with(fmt_layer);
 
+    #[cfg(feature = "tokio-console")]
+    let registry = registry.with(console_subscriber::spawn());
+
     if let Some(endpoint) = otlp_endpoint {
         let headers_env = std::env::var("OTEL_EXPORTER_OTLP_HEADERS").ok();
         let otel_filter = std::env::var("OTEL_FILTER")

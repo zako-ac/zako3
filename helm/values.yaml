@@ -57,6 +57,7 @@ hq:
   mapperWasmDir: "/var/hq/hq-mappers"
   mapperDbPath: "/var/hq/hq-mappers.db"
   metricsPort: "9091"
+  tokioConsolePort: "6669"
   subBotIds: ""                         # Comma-separated sub-bot client IDs
   botInvitePermissions: "4895026873161728"
   storageSize: "1Gi"
@@ -80,6 +81,7 @@ taphub:
   cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"
   metricsPort: "9092"
+  tokioConsolePort: "6669"
 
 # --- Audio Engine ---
 # Use existingSecret.name to reference a pre-existing Secret; otherwise inline values are used.
@@ -101,6 +103,7 @@ trafficLight:
     name: ""
     discordTokensKey: "discord-tokens"
   metricsPort: "9090"
+  tokioConsolePort: "6669"
 
 # --- Web frontend ---
 web:

@@ -48,6 +48,8 @@ spec:
               containerPort: {{ .Values.ports.hqRpc }}
             - name: metrics
               containerPort: {{ .Values.hq.metricsPort | int }}
+            - name: tokio-console
+              containerPort: {{ .Values.hq.tokioConsolePort | int }}
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -81,6 +83,8 @@ spec:
               value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
+            - name: TOKIO_CONSOLE_BIND
+              value: "0.0.0.0:{{ .Values.hq.tokioConsolePort }}"
             - name: SUB_BOT_IDS
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
@@ -157,3 +161,6 @@ spec:
     - name: rpc
       port: {{ .Values.ports.hqRpc }}
       targetPort: rpc
+    - name: tokio-console
+      port: {{ .Values.hq.tokioConsolePort | int }}
+      targetPort: tokio-console

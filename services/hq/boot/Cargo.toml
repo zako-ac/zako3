@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-zako3-telemetry = { workspace = true }
+zako3-telemetry = { workspace = true, features = ["tokio-console"] }
 hq-core.path = "../core"
 hq-backend.path = "../backend"
 hq-bot.path = "../bot"

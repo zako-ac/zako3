@@ -11,7 +11,7 @@ path = "src/main.rs"
 zako3-tl-core.workspace = true
 zako3-tl-infra.workspace = true
 tl-protocol.workspace = true
-zako3-telemetry.workspace = true
+zako3-telemetry = { workspace = true, features = ["tokio-console"] }
 jsonrpsee = { workspace = true }
 tokio = { workspace = true }
 tracing.workspace = true

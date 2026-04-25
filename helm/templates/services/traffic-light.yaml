@@ -24,6 +24,9 @@ spec:
     - name: ae-transport
       port: {{ .Values.ports.tlAeTransport }}
       targetPort: ae-transport
+    - name: tokio-console
+      port: {{ .Values.trafficLight.tokioConsolePort | int }}
+      targetPort: tokio-console
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,6 +61,8 @@ spec:
               containerPort: {{ .Values.ports.tlRpc }}
             - name: ae-transport
               containerPort: {{ .Values.ports.tlAeTransport }}
+            - name: tokio-console
+              containerPort: {{ .Values.trafficLight.tokioConsolePort | int }}
           env:
             - name: METRICS_PORT
               value: {{ .Values.trafficLight.metricsPort | quote }}
@@ -67,6 +72,8 @@ spec:
               value: "0.0.0.0:{{ .Values.ports.tlAeTransport }}"
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            - name: TOKIO_CONSOLE_BIND
+              value: "0.0.0.0:{{ .Values.trafficLight.tokioConsolePort }}"
             - name: DISCORD_TOKENS
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict

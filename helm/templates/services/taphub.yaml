@@ -34,6 +34,8 @@ spec:
               containerPort: {{ .Values.ports.taphubZakofish }}
             - name: metrics
               containerPort: {{ .Values.taphub.metricsPort | int }}
+            - name: tokio-console
+              containerPort: {{ .Values.taphub.tokioConsolePort | int }}
           env:
             - name: ZK_TH_NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
@@ -61,6 +63,8 @@ spec:
               value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: ZK_TH_METRICS_PORT
               value: {{ .Values.taphub.metricsPort | quote }}
+            - name: TOKIO_CONSOLE_BIND
+              value: "0.0.0.0:{{ .Values.taphub.tokioConsolePort }}"
             - name: ZK_TH_HQ_RPC_ADMIN_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
@@ -124,6 +128,9 @@ spec:
       protocol: UDP
       port: {{ .Values.ports.taphubTransport }}
       targetPort: transport
+    - name: tokio-console
+      port: {{ .Values.taphub.tokioConsolePort | int }}
+      targetPort: tokio-console
 ---
 apiVersion: v1
 kind: Service
