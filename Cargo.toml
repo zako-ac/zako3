@@ -28,7 +28,7 @@ zako3-states = { path = "crates/states" }
 
 zako3-tts-matching = { path = "crates/tts-matching" }
 
-zakofish = { path = "libs/zakofish", version = "0.1.0" }
+zakofish = { path = "libs/zakofish", version = "0.1.1" }
 zakofish-taphub = { path = "crates/zakofish-taphub" }
 
 # HQ Dependencies

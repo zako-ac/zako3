@@ -80,4 +80,5 @@ pub enum AudioMetadata {
     Artist(String),
     Album(String),
     ImageUrl(String),
+    Url(String),
 }

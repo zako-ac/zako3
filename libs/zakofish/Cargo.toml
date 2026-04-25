@@ -1,6 +1,6 @@
 [package]
 name = "zakofish"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["mincomk <mail@drchi.co.kr>"]
 description = "Implementation of the Zakofish API, which is for communication between Zako3 infra and Tap"

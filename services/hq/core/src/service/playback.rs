@@ -2,22 +2,22 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use hq_types::{
+    AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
     hq::{
+        UserSettings,
         playback::{
             AudioMetadataDto, DiscordUserInfoDto, EditQueueDto, GuildPlaybackStateDto,
             PlaybackActionDto, QueueMetaDto, TrackDto,
         },
         settings::TextReadingRule,
-        UserSettings,
     },
-    AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
 };
 use zako3_states::VoiceStateService;
 
 use crate::{
+    CoreError, CoreResult,
     repo::{CreatePlaybackAction, PlaybackAction, PlaybackActionRepo},
     service::{AudioEngineService, DiscordNameResolverSlot},
-    CoreError, CoreResult,
 };
 
 /// Minimal voice state info extracted from a Discord gateway event or cache,
@@ -36,6 +36,7 @@ fn metadata_to_dto(m: &AudioMetadata) -> AudioMetadataDto {
         AudioMetadata::Artist(v) => ("artist", v.clone()),
         AudioMetadata::Album(v) => ("album", v.clone()),
         AudioMetadata::ImageUrl(v) => ("image_url", v.clone()),
+        AudioMetadata::Url(v) => ("url", v.clone()),
     };
     AudioMetadataDto {
         r#type: type_str.to_string(),
@@ -419,7 +420,9 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine.pause(g, c, track.queue_name.clone()).await?;
+        self.audio_engine
+            .pause(g, c, track.queue_name.clone())
+            .await?;
 
         let action = self
             .repo
@@ -457,7 +460,9 @@ impl PlaybackService {
 
         let snapshot = serde_json::to_value(track)?;
 
-        self.audio_engine.resume(g, c, track.queue_name.clone()).await?;
+        self.audio_engine
+            .resume(g, c, track.queue_name.clone())
+            .await?;
 
         let action = self
             .repo
@@ -511,7 +516,9 @@ impl PlaybackService {
                         }
                     }
                 }
-                tracing::info!("User not in a bot-connected channel, falling back to sending TTS to all channels");
+                tracing::info!(
+                    "User not in a bot-connected channel, falling back to sending TTS to all channels"
+                );
                 Ok(bot_channel_ids)
             }
             TextReadingRule::InVoiceChannel | TextReadingRule::OnMicMute => {

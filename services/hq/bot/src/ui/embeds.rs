@@ -1,4 +1,4 @@
-use hq_types::{hq::dtos::TapWithAccessDto, AudioMetadata, ChannelId, Track};
+use hq_types::{AudioMetadata, ChannelId, Track, hq::dtos::TapWithAccessDto};
 use poise::serenity_prelude::{self as serenity, Colour};
 
 const THEME: Colour = Colour(0xeb3489);
@@ -33,10 +33,25 @@ pub fn tap_list_embed(taps: &[TapWithAccessDto]) -> serenity::CreateEmbed {
 pub fn track_queued_embed(track: &Track, position: usize) -> serenity::CreateEmbed {
     let title = track_title(track);
     let artist = track.metadatas.iter().find_map(|m| {
-        if let AudioMetadata::Artist(a) = m { Some(a.as_str()) } else { None }
+        if let AudioMetadata::Artist(a) = m {
+            Some(a.as_str())
+        } else {
+            None
+        }
     });
     let image_url = track.metadatas.iter().find_map(|m| {
-        if let AudioMetadata::ImageUrl(u) = m { Some(u.as_str()) } else { None }
+        if let AudioMetadata::ImageUrl(u) = m {
+            Some(u.as_str())
+        } else {
+            None
+        }
+    });
+    let url = track.metadatas.iter().find_map(|m| {
+        if let AudioMetadata::Url(u) = m {
+            Some(u.as_str())
+        } else {
+            None
+        }
     });
 
     let description = if position == 1 {
@@ -49,6 +64,10 @@ pub fn track_queued_embed(track: &Track, position: usize) -> serenity::CreateEmb
         .title(title)
         .description(description)
         .colour(THEME);
+
+    if let Some(url) = url {
+        embed = embed.url(url);
+    }
 
     if let Some(artist) = artist {
         embed = embed.field("아티스트", artist, true);

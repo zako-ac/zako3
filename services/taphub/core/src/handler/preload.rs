@@ -85,7 +85,7 @@ pub(crate) async fn handle_preload_audio_inner(
         Some(item) => PreloadReadEndAction::MoveToCache {
             item,
             metadatas: metadatas.clone(),
-            cache_key: super::wire_convert::wire_cache_policy_to_domain(succ.cache.clone()),
+            cache_key: succ.cache.clone(),
             cache: Arc::clone(&tap_hub.audio_cache) as Arc<dyn AudioCache>,
         },
         None => PreloadReadEndAction::Delete,
@@ -135,7 +135,7 @@ pub(crate) async fn handle_preload_audio_inner(
 
     Ok(AudioMetaResponse {
         metadatas,
-        cache_key: super::wire_convert::wire_cache_policy_to_domain(succ.cache),
+        cache_key: succ.cache,
         base_volume: tap.base_volume,
     })
 }

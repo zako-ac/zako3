@@ -47,7 +47,7 @@ pub(crate) async fn resolve_metadata(
     use zakofish_taphub::types::AttachedMetadata;
 
     match metadatas {
-        AttachedMetadata::Metadatas(v) => super::wire_convert::wire_metadatas_to_domain(v),
+        AttachedMetadata::Metadatas(v) => v,
         AttachedMetadata::UseCached => {
             let meta_hash = hex::encode(Sha256::digest(audio_request_str.as_bytes()));
             let meta_key = AudioCacheItemKey::ARHash(meta_hash);
