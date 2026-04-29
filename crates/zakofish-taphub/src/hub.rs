@@ -245,9 +245,10 @@ async fn handle_new_connection(
                         .or_default()
                         .insert(connection_id, conn_arc.clone());
 
-                    // Wait until the client disconnects. The ProtofishConnection's Drop impl
-                    // will cancel the keepalive task, allowing the QUIC connection to close cleanly.
-                    let _ = mani_stream.recv_payload().await;
+                    // The handshake stream is short-lived by design; wait on the QUIC connection
+                    // itself to detect true disconnection.
+                    drop(mani_stream);
+                    let _ = conn_arc.quic_conn.closed().await;
 
                     {
                         let mut sessions = sessions.lock().await;
