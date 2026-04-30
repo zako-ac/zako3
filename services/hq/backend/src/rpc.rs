@@ -206,6 +206,25 @@ impl HqRpcServer for HqRpcImpl {
             Err(e) => Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
         }
     }
+
+    async fn verify_tap_permission(
+        &self,
+        tap_id: String,
+        discord_user_id: String,
+    ) -> RpcResult<bool> {
+        let id = TapId::from_str(&tap_id)
+            .map_err(|e| ErrorObjectOwned::owned(-32602, e.to_string(), None::<()>))?;
+        let tap = match self.tap_service.get_tap(id).await {
+            Ok(Some(t)) => t,
+            Ok(None) => return Ok(false),
+            Err(e) => return Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
+        };
+        let user_id = match self.tap_service.get_user_by_discord_id(&discord_user_id).await {
+            Ok(Some(u)) => UserId::from_str(&u.id.0).ok(),
+            _ => None,
+        };
+        Ok(self.tap_service.check_access(&tap, user_id).await)
+    }
 }
 
 pub async fn start_rpc_server(

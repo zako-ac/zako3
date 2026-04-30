@@ -10,6 +10,9 @@ refer hq todo
 - [ ] "재시작 되었습니다"
 
 # Do Soon
+- [ ] Pitch, Speed etc DSP
+- [ ] Tunneling
+
 - [x] Add ctrlc tokio handler to AE
 
 - [ ] add AE controller to zakoctl

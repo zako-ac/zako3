@@ -68,4 +68,13 @@ impl HqRepository for RpcHqRepository {
             })
             .ok()?
     }
+
+    #[tracing::instrument(skip(self), name = "hq.rpc.verify_tap_permission")]
+    async fn verify_tap_permission(&self, tap_id: &str, discord_user_id: &DiscordUserId) -> bool {
+        self.http_client
+            .verify_tap_permission(tap_id.to_string(), discord_user_id.0.clone())
+            .await
+            .inspect_err(|err| tracing::warn!("Failed to verify tap permission: {}", err))
+            .unwrap_or(false)
+    }
 }

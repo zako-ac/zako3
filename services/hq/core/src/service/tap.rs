@@ -573,7 +573,7 @@ impl TapService {
         self.user_repo.find_by_discord_id(discord_id).await
     }
 
-    async fn check_access(&self, tap: &Tap, user_id: Option<UserId>) -> bool {
+    pub async fn check_access(&self, tap: &Tap, user_id: Option<UserId>) -> bool {
         use hq_types::hq::TapPermission;
 
         match &tap.permission {

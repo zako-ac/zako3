@@ -8,6 +8,7 @@ pub trait HqRepository: Send + Sync {
     async fn authenticate_tap(&self, token: &str) -> Option<Tap>;
     async fn get_tap_by_id(&self, tap_id: &str) -> Option<Tap>;
     async fn get_user_by_discord_id(&self, discord_id: &DiscordUserId) -> Option<User>;
+    async fn verify_tap_permission(&self, tap_id: &str, discord_user_id: &DiscordUserId) -> bool;
 }
 
 pub type HqRepositoryRef = Arc<dyn HqRepository>;

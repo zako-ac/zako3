@@ -36,4 +36,11 @@ pub trait HqRpc {
 
     #[method(name = "delete_tap")]
     async fn delete_tap(&self, tap_id: String) -> jsonrpsee::core::RpcResult<()>;
+
+    #[method(name = "verify_tap_permission")]
+    async fn verify_tap_permission(
+        &self,
+        tap_id: String,
+        discord_user_id: String,
+    ) -> jsonrpsee::core::RpcResult<bool>;
 }
