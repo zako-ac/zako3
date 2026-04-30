@@ -3,6 +3,8 @@
 refer hq todo
 
 # Do Now
+- [ ] Tap yt-dlp lofty version issue
+- [ ] Active Tap Tracking bad
 - [ ] Whitelist tap weird in real playing
 - [ ] Always allow tap for owner, even in whitelist/blacklist
 - [ ] Show copiable tap ID in API key page
