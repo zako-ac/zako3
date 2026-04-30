@@ -55,8 +55,7 @@ impl TransportServer {
         private_key: PrivateKeyDer<'static>,
         handler: Arc<dyn TapHubBridgeHandler>,
     ) -> std::io::Result<Self> {
-        let mut protofish_config = ProtofishConfig::default();
-        protofish_config.mani_config.backpressure_credit_batch_size = 100;
+        let protofish_config = ProtofishConfig::default();
 
         let config = ServerConfig {
             bind_address: bind_addr,
