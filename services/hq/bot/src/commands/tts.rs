@@ -311,7 +311,7 @@ pub async fn voice(
 
     if let Some(ref tap_name) = provider {
         // Validate the tap exists and is accessible
-        let taps = service.tap.list_by_user(user.id.clone()).await?;
+        let taps = service.tap.list_all_paginated(Some(user.id.clone()), None, None, None, None, Some(true), None, None).await?;
         let found = taps
             .data
             .iter()
@@ -355,7 +355,7 @@ pub async fn voice(
         ctx.say(ui::messages::voice_changed(tap_name)).await?;
     } else {
         // Show available voices
-        let taps = service.tap.list_by_user(user.id).await?;
+        let taps = service.tap.list_all_paginated(Some(user.id), None, None, None, None, Some(true), None, None).await?;
         let embed = ui::embeds::tap_list_embed(&taps.data);
         ctx.send(
             poise::CreateReply::default()

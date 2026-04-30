@@ -85,7 +85,6 @@ pub async fn run(
                 commands::queue::queue(),
                 commands::queue::clear(),
                 commands::tts::tts(),
-                commands::tts::voice(),
                 commands::help::help(),
                 commands::emoji_map::emoji_map(),
                 commands::invites::invites(),
