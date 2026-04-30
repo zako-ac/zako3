@@ -3,8 +3,14 @@
 refer hq todo
 
 # Do Now
-- [x] Fix graph
-- [x] use SSE for live update in queue and stats
+- [ ] Whitelist tap weird in real playing
+- [ ] Always allow tap for owner, even in whitelist/blacklist
+- [ ] Show copiable tap ID in API key page
+- [ ] two `voice` commands. And it only allows to set my tap
+- [ ] "재시작 되었습니다"
+
+# Do Soon
+- [x] Add ctrlc tokio handler to AE
 
 - [ ] add AE controller to zakoctl
 - [ ] AE controller -> boot
@@ -16,6 +22,8 @@ refer hq todo
 - [ ] 증발 not work in global settings
 
 # Done
+- [x] Fix graph
+- [x] use SSE for live update in queue and stats
 - [x] Implement multiple AE
 - [x] Implement settings `~/projects/zako3/docs/en/settings.md`
 - [x] add reconnection logic

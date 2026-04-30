@@ -47,7 +47,11 @@ pub async fn decode_and_stream(
     let mut ogg_reader = ogg::reading::async_api::PacketReader::new(ffmpeg_out);
     let mut frame_index = 0u64;
 
+    println!("121");
+
     while let Some(result) = ogg_reader.next().await {
+        println!("got packet");
+
         match result {
             Ok(packet) => {
                 // Skip OGG metadata packets
@@ -55,9 +59,11 @@ pub async fn decode_and_stream(
                     continue;
                 }
                 let data = bytes::Bytes::copy_from_slice(&packet.data);
+                println!("sending packet with {} bytes", data.len());
                 if !stream.send_opus_frame(frame_index, data).await {
                     break; // Hub disconnected
                 }
+                println!("sent packet with index {}", frame_index);
                 frame_index += 1;
             }
             Err(e) => {
@@ -65,6 +71,7 @@ pub async fn decode_and_stream(
                 break;
             }
         }
+        println!("sent packet");
     }
 
     //ffmpeg.wait().await.ok();

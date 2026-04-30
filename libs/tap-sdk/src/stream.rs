@@ -15,6 +15,8 @@ impl AudioStreamSender {
     /// Returns `false` if the Hub has closed the connection and frames are no
     /// longer being consumed; the caller should stop sending.
     pub async fn send_frame(&self, ts: Timestamp, data: Bytes) -> bool {
+        println!("cap: {}", self.tx.capacity()); // TODO remove
+
         self.tx.send((ts, data)).await.is_ok()
     }
 

@@ -208,8 +208,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Audio Engine is serving requests");
 
-    // Step 7: Wait for server to stop (should not happen normally)
-    server_handle.stopped().await;
-    tracing::error!("AE HTTP server stopped unexpectedly");
-    std::process::exit(1);
+    // Step 7: Wait for server to stop OR shutdown signal
+    #[cfg(unix)]
+    {
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to register SIGTERM handler");
+        tokio::select! {
+            _ = server_handle.stopped() => {
+                tracing::error!("AE HTTP server stopped unexpectedly");
+                std::process::exit(1);
+            }
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("Received SIGINT, shutting down Audio Engine");
+            }
+            _ = sigterm.recv() => {
+                tracing::info!("Received SIGTERM, shutting down Audio Engine");
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        tokio::select! {
+            _ = server_handle.stopped() => {
+                tracing::error!("AE HTTP server stopped unexpectedly");
+                std::process::exit(1);
+            }
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("Received ctrl+c, shutting down Audio Engine");
+            }
+        }
+    }
+
+    Ok(())
 }
