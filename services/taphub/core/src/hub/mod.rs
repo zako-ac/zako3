@@ -19,7 +19,7 @@ use zakofish_taphub::{
 use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 use crate::{app::App, routing::DynamicSampler};
-use zako3_states::{TapHubStateService, TapMetricsStateService};
+use zako3_states::{RedisPubSub, TapHubStateService, TapMetricsStateService};
 
 pub mod connection;
 pub use connection::TapHubConnectionHandler;
@@ -36,6 +36,7 @@ pub struct TapHub {
     pub audio_cache: Arc<FileAudioCache>,
     pub request_timeout: Duration,
     pub nats_client: Option<Arc<NatsClient>>,
+    pub history_pubsub: Arc<RedisPubSub>,
     pub(crate) connection_signals: ConnectionSignals,
 }
 
@@ -48,6 +49,7 @@ impl TapHub {
         cache_dir: PathBuf,
         request_timeout_ms: u64,
         nats_client: Option<Arc<NatsClient>>,
+        history_pubsub: Arc<RedisPubSub>,
     ) -> Result<Self, ZakofishError> {
         let server_config = create_server_config(
             bind_address.parse().map_err(|_| {
@@ -82,6 +84,7 @@ impl TapHub {
             audio_cache: Arc::new(audio_cache),
             request_timeout: Duration::from_millis(request_timeout_ms),
             nats_client,
+            history_pubsub,
             connection_signals,
         })
     }

@@ -30,3 +30,5 @@ pub mod mapper;
 pub use mapper::*;
 pub mod rpc;
 pub mod zod_impls;
+pub mod history;
+pub use history::{PlayAudioHistory, UseHistoryEntry};

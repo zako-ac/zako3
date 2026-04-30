@@ -1,7 +1,7 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::process;
 use std::sync::Arc;
-use zako3_states::{RedisCacheRepository, TapHubStateService, TapMetricsStateService};
+use zako3_states::{RedisCacheRepository, RedisPubSub, TapHubStateService, TapMetricsStateService};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
@@ -86,6 +86,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let history_pubsub = Arc::new(
+        RedisPubSub::new(&config.redis_url)
+            .await
+            .expect("Failed to connect RedisPubSub"),
+    );
+
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,
@@ -94,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.cache_dir.clone(),
         config.request_timeout_ms,
         nats_client,
+        history_pubsub,
     )
     .await?;
     let tap_hub = Arc::new(tap_hub);

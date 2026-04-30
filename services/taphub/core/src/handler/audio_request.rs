@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::{AudioCache, NextFrame};
-use zako3_types::{AudioMetaResponse, CachedAudioRequest, hq::UserId};
+use zako3_types::{AudioMetaResponse, CachedAudioRequest};
 
 use crate::hub::TapHub;
 use crate::metrics;
@@ -40,10 +40,20 @@ pub(crate) async fn handle_request_audio_inner(
 
     let tap_id = request.tap_id.clone();
 
-    // Record metrics
-    if let Err(e) = tap_hub.metrics_service.inc_total_uses(tap_id.clone()).await {
-        tracing::warn!(%e, "Failed to increment total_uses metric");
-    }
+    let trace_id = {
+        use opentelemetry::trace::TraceContextExt;
+        let id = tracing::Span::current()
+            .context()
+            .span()
+            .span_context()
+            .trace_id()
+            .to_string();
+        if id == "00000000000000000000000000000000" {
+            None
+        } else {
+            Some(id)
+        }
+    };
 
     // Fire-and-forget: notify stats subscribers via NATS
     if let Some(client) = &tap_hub.nats_client {
@@ -53,13 +63,6 @@ pub(crate) async fn handle_request_audio_inner(
             let payload = format!(r#"{{"tap_id":"{}"}}"#, id);
             let _ = client.publish("zako3.stats.tap_used", payload.into()).await;
         });
-    }
-    if let Err(e) = tap_hub
-        .metrics_service
-        .record_unique_user(tap_id.clone(), UserId(request.discord_user_id.0.clone()))
-        .await
-    {
-        tracing::warn!(%e, "Failed to record unique_user metric");
     }
 
     let tap_id_str = tap_id.0.to_string();
@@ -84,12 +87,6 @@ pub(crate) async fn handle_request_audio_inner(
             .open_reader(&item.tap_id, &item.key)
             .await
         {
-            tap_hub
-                .metrics_service
-                .inc_cache_hits(tap_id.clone())
-                .await
-                .ok();
-
             metrics::metrics().cache_hits_total.add(
                 1,
                 &[
@@ -120,6 +117,26 @@ pub(crate) async fn handle_request_audio_inner(
 
             let duration = start.elapsed().as_secs_f64();
             metrics::record_audio_request(&tap_id.0.to_string(), true, duration, true);
+
+            {
+                let entry = zako3_types::hq::history::UseHistoryEntry::PlayAudio(
+                    zako3_types::hq::history::PlayAudioHistory {
+                        user_id: None,
+                        discord_user_id: Some(request.discord_user_id.clone()),
+                        ars_length: ars.len(),
+                        trace_id: trace_id.clone(),
+                        tap_id: tap_id.clone(),
+                        cache_hit: true,
+                        success: true,
+                    },
+                );
+                let pubsub = tap_hub.history_pubsub.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = pubsub.publish_history(&entry).await {
+                        tracing::warn!(%e, "Failed to publish history (cache hit)");
+                    }
+                });
+            }
 
             return Ok((meta, rx));
         } else {
@@ -248,6 +265,26 @@ pub(crate) async fn handle_request_audio_inner(
             }
         }
     });
+
+    {
+        let entry = zako3_types::hq::history::UseHistoryEntry::PlayAudio(
+            zako3_types::hq::history::PlayAudioHistory {
+                user_id: None,
+                discord_user_id: Some(request.discord_user_id.clone()),
+                ars_length: ars.len(),
+                trace_id: trace_id.clone(),
+                tap_id: tap_id.clone(),
+                cache_hit: false,
+                success: true,
+            },
+        );
+        let pubsub = tap_hub.history_pubsub.clone();
+        tokio::spawn(async move {
+            if let Err(e) = pubsub.publish_history(&entry).await {
+                tracing::warn!(%e, "Failed to publish history (cache miss)");
+            }
+        });
+    }
 
     Ok((meta, rx))
 }

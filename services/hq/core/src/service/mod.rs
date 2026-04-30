@@ -28,8 +28,8 @@ pub use audio_engine::AudioEngineService;
 
 use crate::repo::{
     PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
-    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo, PgUserGuildSettingsRepository,
-    PgUserRepository,
+    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo, PgUseHistoryRepository,
+    PgUserGuildSettingsRepository, PgUserRepository, UseHistoryRepository,
 };
 use crate::{AppConfig, CoreError, CoreResult};
 use hq_types::hq::playback::PlaybackEvent;
@@ -77,6 +77,29 @@ impl Service {
 
         let redis_url = &config.redis_url;
         let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
+
+        // Spawn history subscriber background task
+        let history_repo: Arc<dyn UseHistoryRepository> =
+            Arc::new(PgUseHistoryRepository::new(pool.clone()));
+        let pubsub = zako3_states::RedisPubSub::new(redis_url)
+            .await
+            .map_err(|e| CoreError::Internal(format!("Redis pubsub error: {e}")))?;
+        tokio::spawn(async move {
+            match pubsub.subscribe_history().await {
+                Ok(stream) => {
+                    use futures_util::StreamExt;
+                    let mut stream = Box::pin(stream);
+                    while let Some(entry) = stream.next().await {
+                        if let hq_types::hq::history::UseHistoryEntry::PlayAudio(ref h) = entry {
+                            if let Err(e) = history_repo.insert(h).await {
+                                tracing::warn!(%e, "Failed to insert use_history entry");
+                            }
+                        }
+                    }
+                }
+                Err(e) => tracing::error!(%e, "Failed to subscribe to history channel"),
+            }
+        });
         let tap_metrics_service = TapMetricsStateService::new(redis_repo.clone());
         let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
