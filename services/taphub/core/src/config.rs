@@ -15,7 +15,6 @@ pub struct AppConfig {
     pub request_timeout_ms: u64,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
-    pub nats_url: Option<String>,
 }
 
 impl AppConfig {
@@ -52,7 +51,6 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .or(Some(9092)),
-            nats_url: env::var("ZK_TH_NATS_URL").ok(),
         })
     }
 }

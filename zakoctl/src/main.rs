@@ -49,6 +49,9 @@ async fn main() -> Result<()> {
         Commands::Config(cmd) => {
             services::config::handle_command(cmd)?;
         }
+        Commands::Debug(cmd) => {
+            services::debug::handle_command(cmd).await?;
+        }
         Commands::Completion { shell } => {
             let mut cmd = Cli::command();
             let bin_name = cmd.get_name().to_string();

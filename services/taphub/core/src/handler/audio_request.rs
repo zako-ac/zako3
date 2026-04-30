@@ -55,16 +55,6 @@ pub(crate) async fn handle_request_audio_inner(
         }
     };
 
-    // Fire-and-forget: notify stats subscribers via NATS
-    if let Some(client) = &tap_hub.nats_client {
-        let client = client.clone();
-        let id = tap_id.0.to_string();
-        tokio::spawn(async move {
-            let payload = format!(r#"{{"tap_id":"{}"}}"#, id);
-            let _ = client.publish("zako3.stats.tap_used", payload.into()).await;
-        });
-    }
-
     let tap_id_str = tap_id.0.to_string();
     let (tap_opt, conn_result) = tokio::join!(
         tap_hub.app.hq_repository.get_tap_by_id(&tap_id_str),

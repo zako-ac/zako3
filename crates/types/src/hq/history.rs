@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::hq::{DiscordUserId, TapId, UserId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum UseHistoryEntry {
     PlayAudio(PlayAudioHistory),
 }

@@ -1,5 +1,6 @@
 use crate::services::audio_engine::cli::AudioEngineCommands;
 use crate::services::config::cli::ConfigCommands;
+use crate::services::debug::cli::DebugCommands;
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
@@ -35,6 +36,10 @@ pub enum Commands {
 
     /// Configuration commands
     Config(ConfigCommands),
+
+    /// Debug utilities
+    #[command(visible_alias = "dbg")]
+    Debug(DebugCommands),
 
     /// Generate shell completion scripts
     Completion {

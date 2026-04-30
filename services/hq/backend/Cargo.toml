@@ -24,5 +24,4 @@ jsonrpsee.workspace = true
 zako3-states = { workspace = true, features = ["redis"] }
 hq-types.workspace = true
 tokio-stream = { version = "0.1.18", features = ["sync"] }
-async-nats.workspace = true
 axum-extra = { version = "0.9", features = ["typed-header"] }

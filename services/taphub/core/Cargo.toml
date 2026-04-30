@@ -36,4 +36,3 @@ sha2 = "0.10"
 hex = "0.4"
 chrono.workspace = true
 tracing-opentelemetry = "0.32"
-async-nats.workspace = true

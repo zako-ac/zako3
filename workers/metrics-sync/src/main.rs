@@ -67,8 +67,7 @@ async fn main() -> Result<()> {
     // Spawn the background delta-accumulator task: subscribes to history pubsub
     // and increments per-tap delta hashes in Redis.
     let redis_url_clone = redis_url.clone();
-    let delta_client =
-        redis::Client::open(redis_url.clone()).expect("Redis client for delta");
+    let delta_client = redis::Client::open(redis_url.clone()).expect("Redis client for delta");
     let _pubsub_handle = {
         let delta_client = delta_client.clone();
         tokio::spawn(async move {
@@ -87,8 +86,7 @@ async fn main() -> Result<()> {
                         if let zako3_types::hq::history::UseHistoryEntry::PlayAudio(ref h) = entry {
                             let key = format!("delta_metrics:{}", h.tap_id.0);
                             use redis::AsyncCommands;
-                            let _: Result<i64, _> =
-                                conn_mgr.hincr(&key, "total_uses", 1i64).await;
+                            let _: Result<i64, _> = conn_mgr.hincr(&key, "total_uses", 1i64).await;
                             if h.cache_hit {
                                 let _: Result<i64, _> =
                                     conn_mgr.hincr(&key, "cache_hits", 1i64).await;
@@ -107,6 +105,7 @@ async fn main() -> Result<()> {
         match metrics_service.get_known_taps().await {
             Ok(taps) => {
                 let now = Utc::now();
+                info!("Updating {} histories", taps.len());
                 for tap_id in &taps {
                     // a. Read and zero out delta hash
                     let delta_key = format!("delta_metrics:{}", tap_id.0);

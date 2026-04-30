@@ -1,4 +1,3 @@
-use futures_util::StreamExt;
 use hq_backend::rpc::start_rpc_server;
 use hq_core::{AppConfig, PlaybackEvent, Service, get_pool, run_migrations};
 use std::sync::Arc;
@@ -34,20 +33,27 @@ async fn main() -> anyhow::Result<()> {
     // Broadcast channel for stats events — fired whenever a tap processes an audio request.
     let (stats_tx, _) = broadcast::channel::<()>(128);
 
-    // Subscribe to NATS tap_used events and bridge to stats_tx.
-    if let Some(ref url) = config.nats_url {
-        let stats_tx2 = stats_tx.clone();
-        let nats = async_nats::connect(url.as_str()).await?;
-        let mut sub = nats.subscribe("zako3.stats.tap_used").await?;
-        tokio::spawn(async move {
-            while sub.next().await.is_some() {
-                let _ = stats_tx2.send(());
-            }
-        });
-        info!("Subscribed to NATS zako3.stats.tap_used at {}", url);
-    } else {
-        info!("NATS_URL not set; stats SSE will not receive live updates");
-    }
+    // Bridge Redis history channel to stats_tx for SSE.
+    let stats_tx2 = stats_tx.clone();
+    let redis_url2 = config.redis_url.clone();
+    tokio::spawn(async move {
+        match zako3_states::RedisPubSub::new(&redis_url2).await {
+            Ok(pubsub) => match pubsub.subscribe_history().await {
+                Ok(stream) => {
+                    use futures_util::StreamExt;
+                    let mut stream = Box::pin(stream);
+                    while stream.next().await.is_some() {
+                        let _ = stats_tx2.send(());
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(%e, "Failed to subscribe to Redis history channel for stats")
+                }
+            },
+            Err(e) => tracing::error!(%e, "Failed to connect Redis PubSub for stats bridge"),
+        }
+    });
+    info!("Stats SSE bridged from Redis history channel");
 
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();

@@ -74,18 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Cleared online state for {} known taps", known_taps.len());
 
-    let nats_client = match &config.nats_url {
-        Some(url) => {
-            tracing::info!("Connecting to NATS at {}", url);
-            let client = async_nats::connect(url).await?;
-            Some(Arc::new(client))
-        }
-        None => {
-            tracing::info!("ZK_TH_NATS_URL not set; tap_used events will not be published");
-            None
-        }
-    };
-
     let history_pubsub = Arc::new(
         RedisPubSub::new(&config.redis_url)
             .await
@@ -99,7 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &config.zakofish_key_file,
         config.cache_dir.clone(),
         config.request_timeout_ms,
-        nats_client,
         history_pubsub,
     )
     .await?;

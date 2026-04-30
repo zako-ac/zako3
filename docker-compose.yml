@@ -74,7 +74,6 @@ services:
       JWT_SECRET: ${HQ_JWT_SECRET:?HQ_JWT_SECRET is required}
       MAPPER_WASM_DIR: /tmp/hq-mappers
       MAPPER_DB_PATH: /tmp/hq-mappers.db
-      NATS_URL: nats://nats:4222
       OTLP_ENDPOINT: http://otel-lgtm:4317
       METRICS_PORT: "9091"
     ports:
@@ -82,7 +81,6 @@ services:
       - "50052:50052"
     depends_on:
       - postgres
-      - nats
       - otel-lgtm
 
   taphub:
@@ -99,7 +97,6 @@ services:
       ZK_TH_KEY_FILE: ${ZK_TH_KEY_FILE:-key.pem}
       ZK_TH_CACHE_DIR: /cache
       ZK_TH_REQUEST_TIMEOUT_MS: "13000"
-      ZK_TH_NATS_URL: nats://nats:4222
       ZK_TH_OTLP_ENDPOINT: http://otel-lgtm:4317
       ZK_TH_METRICS_PORT: "9092"
     ports:

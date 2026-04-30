@@ -37,8 +37,6 @@ spec:
             - name: tokio-console
               containerPort: {{ .Values.taphub.tokioConsolePort | int }}
           env:
-            - name: ZK_TH_NATS_URL
-              value: "nats://{{ $fullname }}-nats:4222"
             - name: ZK_TH_REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
             - name: ZK_TH_HQ_RPC_URL
