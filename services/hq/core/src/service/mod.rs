@@ -28,18 +28,18 @@ pub use audio_engine::AudioEngineService;
 
 use crate::repo::{
     PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
-    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo, PgUseHistoryRepository,
-    PgUserGuildSettingsRepository, PgUserRepository, UseHistoryRepository,
+    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo,
+    PgUserGuildSettingsRepository, PgUserRepository,
 };
 use crate::{AppConfig, CoreError, CoreResult};
 use hq_types::hq::playback::PlaybackEvent;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use zako3_metrics::TapMetricsService;
 use zako3_tl_client::TlClient;
 use zako3_states::{
-    IntendedVoiceChannelService, TapHubStateService, TapMetricsStateService,
-    UserSettingsStateService, VoiceStateService,
+    IntendedVoiceChannelService, TapHubStateService, UserSettingsStateService, VoiceStateService,
 };
 
 #[derive(Clone)]
@@ -50,7 +50,7 @@ pub struct Service {
     pub notification: NotificationService,
     pub api_key: ApiKeyService,
     pub audit_log: AuditLogService,
-    pub tap_metrics: TapMetricsStateService,
+    pub tap_metrics: TapMetricsService,
     pub verification: VerificationService,
     pub user_settings: UserSettingsService,
     pub voice_state: VoiceStateService,
@@ -78,12 +78,13 @@ impl Service {
         let redis_url = &config.redis_url;
         let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
 
+        let tap_metrics_service = TapMetricsService::new(redis_repo.clone(), timescale_pool.clone());
+
         // Spawn history subscriber background task
-        let history_repo: Arc<dyn UseHistoryRepository> =
-            Arc::new(PgUseHistoryRepository::new(pool.clone()));
         let pubsub = zako3_states::RedisPubSub::new(redis_url)
             .await
             .map_err(|e| CoreError::Internal(format!("Redis pubsub error: {e}")))?;
+        let history_metrics = tap_metrics_service.clone();
         tokio::spawn(async move {
             match pubsub.subscribe_history().await {
                 Ok(stream) => {
@@ -91,7 +92,7 @@ impl Service {
                     let mut stream = Box::pin(stream);
                     while let Some(entry) = stream.next().await {
                         if let hq_types::hq::history::UseHistoryEntry::PlayAudio(ref h) = entry {
-                            if let Err(e) = history_repo.insert(h).await {
+                            if let Err(e) = history_metrics.insert_history(h).await {
                                 tracing::warn!(%e, "Failed to insert use_history entry");
                             }
                         }
@@ -100,12 +101,10 @@ impl Service {
                 Err(e) => tracing::error!(%e, "Failed to subscribe to history channel"),
             }
         });
-        let tap_metrics_service = TapMetricsStateService::new(redis_repo.clone());
         let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
-            timescale_pool,
             tap_repo.clone(),
             user_repo.clone(),
             audit_log_service.clone(),

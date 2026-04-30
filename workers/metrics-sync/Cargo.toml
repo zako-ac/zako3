@@ -24,5 +24,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 zako3-states = { workspace = true, features = ["redis"] }
 zako3-types = { workspace = true }
+zako3-metrics = { workspace = true }
 futures-util = "0.3.32"
-redis = { version = "1.2.0", features = ["tokio-comp", "connection-manager"] }

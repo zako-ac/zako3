@@ -30,6 +30,8 @@ pub enum CoreError {
     Internal(String),
     #[error("State service error: {0}")]
     StateError(#[from] zako3_states::StateServiceError),
+    #[error("Metrics error: {0}")]
+    MetricsError(#[from] zako3_metrics::MetricsError),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

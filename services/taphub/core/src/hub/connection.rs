@@ -9,14 +9,15 @@ use zako3_types::{OnlineTapState, hq::TapId};
 
 use crate::app::App;
 use crate::metrics;
-use zako3_states::{TapHubStateService, TapMetricsStateService};
+use zako3_metrics::TapRedisMetrics;
+use zako3_states::TapHubStateService;
 
 use super::ConnectionSignals;
 
 pub struct TapHubConnectionHandler {
     pub(super) app: App,
     pub(super) state_service: TapHubStateService,
-    pub(super) metrics_service: TapMetricsStateService,
+    pub(super) metrics_service: TapRedisMetrics,
     pub(super) connection_signals: ConnectionSignals,
 }
 

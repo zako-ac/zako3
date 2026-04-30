@@ -17,7 +17,8 @@ use zakofish_taphub::{
 use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 use crate::{app::App, routing::DynamicSampler};
-use zako3_states::{RedisPubSub, TapHubStateService, TapMetricsStateService};
+use zako3_metrics::TapRedisMetrics;
+use zako3_states::{RedisPubSub, TapHubStateService};
 
 pub mod connection;
 pub use connection::TapHubConnectionHandler;
@@ -28,7 +29,7 @@ pub struct TapHub {
     pub zf_hub: ZakofishHub,
     pub sampler: Arc<Mutex<DynamicSampler>>,
     pub state_service: TapHubStateService,
-    pub metrics_service: TapMetricsStateService,
+    pub metrics_service: TapRedisMetrics,
     pub app: App,
     pub audio_preload: Arc<AudioPreload>,
     pub audio_cache: Arc<FileAudioCache>,

@@ -1,7 +1,8 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::process;
 use std::sync::Arc;
-use zako3_states::{RedisCacheRepository, RedisPubSub, TapHubStateService, TapMetricsStateService};
+use zako3_metrics::TapRedisMetrics;
+use zako3_states::{RedisCacheRepository, RedisPubSub, TapHubStateService};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
 use zako3_taphub_core::hub::TapHub;
@@ -53,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         hq_repository: Arc::new(hq_repository),
         cache_repository: cache_repo.clone(),
         tap_state_service: TapHubStateService::new(cache_repo.clone()),
-        tap_metrics_service: TapMetricsStateService::new(cache_repo.clone()),
+        tap_metrics_service: TapRedisMetrics::new(cache_repo.clone()),
     };
 
     // Clear stale tap connection states left over from the previous run.

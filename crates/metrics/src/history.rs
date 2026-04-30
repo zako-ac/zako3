@@ -1,14 +1,14 @@
-use crate::CoreResult;
 use async_trait::async_trait;
-use hq_types::hq::history::PlayAudioHistory;
-use hq_types::hq::next_id;
 use sqlx::PgPool;
+use zako3_types::hq::{history::PlayAudioHistory, next_id};
+use crate::error::Result;
 
 #[async_trait]
 pub trait UseHistoryRepository: Send + Sync {
-    async fn insert(&self, entry: &PlayAudioHistory) -> CoreResult<()>;
+    async fn insert(&self, entry: &PlayAudioHistory) -> Result<()>;
 }
 
+#[derive(Clone)]
 pub struct PgUseHistoryRepository {
     pool: PgPool,
 }
@@ -21,7 +21,7 @@ impl PgUseHistoryRepository {
 
 #[async_trait]
 impl UseHistoryRepository for PgUseHistoryRepository {
-    async fn insert(&self, entry: &PlayAudioHistory) -> CoreResult<()> {
+    async fn insert(&self, entry: &PlayAudioHistory) -> Result<()> {
         let id = next_id() as i64;
         let user_id = entry.user_id.as_ref().map(|u| u.0.clone());
         let discord_user_id = entry.discord_user_id.as_ref().map(|u| u.0.clone());
@@ -29,13 +29,9 @@ impl UseHistoryRepository for PgUseHistoryRepository {
         let ars_length = entry.ars_length as i32;
 
         sqlx::query(
-            r#"
-            INSERT INTO use_history (
-                id, tap_id, user_id, discord_user_id, ars_length, trace_id, cache_hit, success
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (trace_id) DO NOTHING
-            "#,
+            r#"INSERT INTO use_history (id, tap_id, user_id, discord_user_id, ars_length, trace_id, cache_hit, success)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               ON CONFLICT (trace_id) DO NOTHING"#,
         )
         .bind(id)
         .bind(&tap_id)

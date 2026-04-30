@@ -1,0 +1,14 @@
+[package]
+name = "zako3-metrics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zako3-states = { workspace = true, features = ["redis"] }
+zako3-types = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }

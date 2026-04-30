@@ -2,15 +2,15 @@ use crate::repo::{TapRepository, UserRepository};
 use crate::service::audit_log::AuditLogService;
 use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use hq_types::hq::{
     CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapName, TapRole,
     TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, UserId, UserSummaryDto,
 };
 use serde::Deserialize;
-use sqlx::{PgPool, Row};
 use std::sync::Arc;
-use zako3_states::{TapHubStateService, TapMetricKey, TapMetricsStateService};
+use zako3_metrics::TapMetricsService;
+use zako3_states::TapHubStateService;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -29,29 +29,26 @@ pub enum SortDirection {
 
 #[derive(Clone)]
 pub struct TapService {
-    timescale_pool: PgPool,
     tap_repo: Arc<dyn TapRepository>,
     user_repo: Arc<dyn UserRepository>,
     audit_log: AuditLogService,
-    tap_metrics_state: TapMetricsStateService,
+    tap_metrics: TapMetricsService,
     tap_hub_state: TapHubStateService,
 }
 
 impl TapService {
     pub fn new(
-        timescale_pool: PgPool,
         tap_repo: Arc<dyn TapRepository>,
         user_repo: Arc<dyn UserRepository>,
         audit_log: AuditLogService,
-        tap_metrics_state: TapMetricsStateService,
+        tap_metrics: TapMetricsService,
         tap_hub_state: TapHubStateService,
     ) -> Self {
         Self {
-            timescale_pool,
             tap_repo,
             user_repo,
             audit_log,
-            tap_metrics_state,
+            tap_metrics,
             tap_hub_state,
         }
     }
@@ -286,8 +283,8 @@ impl TapService {
 
         // Fetch real data from tap_metric service (Redis for real-time)
         let total_uses = self
-            .tap_metrics_state
-            .get_metric(tap_id.clone(), TapMetricKey::TotalUses)
+            .tap_metrics
+            .get_latest_total_uses(&tap_id)
             .await
             .unwrap_or(0);
         let active_now = self
@@ -296,36 +293,30 @@ impl TapService {
             .await
             .unwrap_or(0) as u64;
         let unique_users = self
-            .tap_metrics_state
+            .tap_metrics
             .get_unique_users_count(tap_id.clone())
             .await
             .unwrap_or(0);
         let cache_hits = self
-            .tap_metrics_state
-            .get_metric(tap_id.clone(), TapMetricKey::CacheHits)
+            .tap_metrics
+            .get_latest_cache_hits(&tap_id)
             .await
             .unwrap_or(0);
 
         let now = Utc::now();
         let since = now - chrono::Duration::hours(24);
-        let rows = sqlx::query(
-            "SELECT time, total_uses, cache_hits \
-             FROM tap_metrics \
-             WHERE tap_id = $1 AND time >= $2 \
-             ORDER BY time ASC",
-        )
-        .bind(&tap_id.0)
-        .bind(since)
-        .fetch_all(&self.timescale_pool)
-        .await
-        .unwrap_or_default();
+        let rows = self
+            .tap_metrics
+            .get_time_series(&tap_id, since)
+            .await
+            .unwrap_or_default();
 
         let use_rate_history: Vec<TimeSeriesPointDto> = rows
             .windows(2)
             .map(|w| {
-                let prev: i64 = w[0].get("total_uses");
-                let curr: i64 = w[1].get("total_uses");
-                let ts: DateTime<Utc> = w[1].get("time");
+                let prev = w[0].total_uses;
+                let curr = w[1].total_uses;
+                let ts = w[1].time;
                 TimeSeriesPointDto {
                     timestamp: ts.to_rfc3339(),
                     value: (curr - prev).max(0) as f64,
@@ -336,11 +327,10 @@ impl TapService {
         let cache_hit_rate_history: Vec<TimeSeriesPointDto> = rows
             .iter()
             .map(|row| {
-                let total: i64 = row.get("total_uses");
-                let hits: i64 = row.get("cache_hits");
-                let ts: DateTime<Utc> = row.get("time");
+                let total = row.total_uses;
+                let hits = row.cache_hits;
                 TimeSeriesPointDto {
-                    timestamp: ts.to_rfc3339(),
+                    timestamp: row.time.to_rfc3339(),
                     value: if total > 0 {
                         hits as f64 / total as f64 * 100.0
                     } else {
@@ -351,8 +341,8 @@ impl TapService {
             .collect();
 
         let accumulated_uptime = self
-            .tap_metrics_state
-            .get_metric(tap_id.clone(), TapMetricKey::UptimeSecs)
+            .tap_metrics
+            .get_uptime_secs(tap_id.clone())
             .await
             .unwrap_or(0);
         let online_states = self
@@ -606,23 +596,23 @@ impl TapService {
 
     async fn map_to_tap_dto(&self, tap: Tap) -> TapDto {
         let total_uses = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::TotalUses)
+            .tap_metrics
+            .get_latest_total_uses(&tap.id)
             .await
             .unwrap_or(0);
         let cache_hits = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::CacheHits)
+            .tap_metrics
+            .get_latest_cache_hits(&tap.id)
             .await
             .unwrap_or(0);
         let unique_users = self
-            .tap_metrics_state
+            .tap_metrics
             .get_unique_users_count(tap.id.clone())
             .await
             .unwrap_or(0);
         let accumulated_uptime = self
-            .tap_metrics_state
-            .get_metric(tap.id.clone(), TapMetricKey::UptimeSecs)
+            .tap_metrics
+            .get_uptime_secs(tap.id.clone())
             .await
             .unwrap_or(0);
         let online_states = self

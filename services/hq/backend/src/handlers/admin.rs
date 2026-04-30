@@ -493,9 +493,6 @@ pub async fn get_platform_stats(
         .tap_metrics
         .get_global_unique_users()
         .await
-        .map_err(|e| {
-            let core_error = CoreError::StateError(e);
-            map_error(core_error)
-        })?;
+        .map_err(|e| map_error(CoreError::MetricsError(e)))?;
     Ok(Json(PlatformStatsDto { global_unique_users }))
 }

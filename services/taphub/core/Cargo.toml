@@ -31,6 +31,7 @@ dashmap = "6.1.0"
 jsonrpsee.workspace = true
 http = "1.0"
 zako3-states = { workspace = true, features = ["redis"] }
+zako3-metrics = { workspace = true }
 zako3-preload-cache.workspace = true
 sha2 = "0.10"
 hex = "0.4"

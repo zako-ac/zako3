@@ -14,6 +14,7 @@ members = [
     "services/*/*",
     "workers/*",
     "zakoctl", "crates/tl-protocol", "crates/tl-client",
+    "crates/metrics",
 ]
 
 [workspace.dependencies]
@@ -25,6 +26,7 @@ zako3-audio-engine-client = { path = "services/audio-engine/client" }
 zako3-preload-cache = { path = "crates/preload-cache" }
 zako3-types = { path = "crates/types" }
 zako3-states = { path = "crates/states" }
+zako3-metrics = { path = "crates/metrics" }
 
 zako3-tts-matching = { path = "crates/tts-matching" }
 
