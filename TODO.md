@@ -3,12 +3,13 @@
 refer hq todo
 
 # Do Now
-- [ ] Tap yt-dlp lofty version issue
+- [ ] auto-Scroll sidebar
+- [x] Tap yt-dlp lofty version issue
 - [ ] Active Tap Tracking bad
 - [ ] Whitelist tap weird in real playing
 - [ ] Always allow tap for owner, even in whitelist/blacklist
-- [ ] Show copiable tap ID in API key page
-- [ ] two `voice` commands. And it only allows to set my tap
+- [x] Show copiable tap ID in API key page
+- [x] two `voice` commands. And it only allows to set my tap
 - [ ] "재시작 되었습니다"
 
 # Do Soon

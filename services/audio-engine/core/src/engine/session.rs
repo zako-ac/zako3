@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, mpsc::Sender};
 use tracing::instrument;
 use zako3_audio_engine_audio::metrics;
 use zako3_types::SessionState;
@@ -28,6 +28,10 @@ pub struct SessionControl {
 
     pub(crate) state_service: ArcStateService,
     pub(crate) taphub_service: ArcTapHubService,
+
+    // Serializes reconcile() to prevent concurrent check-then-act races where
+    // two callers both see a track as "not in mixer" and both call play_now().
+    reconcile_guard: Mutex<()>,
 }
 
 impl SessionControl {
@@ -48,6 +52,7 @@ impl SessionControl {
             end_tx,
             state_service,
             taphub_service,
+            reconcile_guard: Mutex::new(()),
         }
     }
 
@@ -361,6 +366,8 @@ impl SessionControl {
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn reconcile(&self) -> ZakoResult<()> {
+        let _guard = self.reconcile_guard.lock().await;
+
         let session = self
             .state_service
             .get_session(self.guild_id, self.channel_id)
