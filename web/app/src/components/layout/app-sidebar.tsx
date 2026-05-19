@@ -1,5 +1,5 @@
 import zakoLogo from '@/assets/zakopsa.png'
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { Link, useLocation, matchPath } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -193,33 +193,35 @@ export const AppSidebar = () => {
             </SidebarHeader>
 
             <SidebarContent>
-                {user && <VoiceSidebarSection />}
                 {navSections.map((section) => (
-                    <SidebarGroup key={section.title}>
-                        <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                {section.items.map((item) => (
-                                    <SidebarMenuItem key={item.title}>
-                                        <SidebarMenuButton
-                                            asChild
-                                            tooltip={item.title}
-                                            isActive={isActive(item.url) || (item.isSubItem && location.pathname.startsWith(`/taps/${activeTapId}`))}
-                                            className={clsx(
-                                                item.isPrimary && 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground',
-                                                item.isSubItem && 'pl-8'
-                                            )}
-                                        >
-                                            <Link to={item.url}>
-                                                <item.icon className="h-4 w-4" />
-                                                <span>{item.title}</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                ))}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
+                    <Fragment key={section.title}>
+                        <SidebarGroup>
+                            <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {section.items.map((item) => (
+                                        <SidebarMenuItem key={item.title}>
+                                            <SidebarMenuButton
+                                                asChild
+                                                tooltip={item.title}
+                                                isActive={isActive(item.url) || (item.isSubItem && location.pathname.startsWith(`/taps/${activeTapId}`))}
+                                                className={clsx(
+                                                    item.isPrimary && 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground',
+                                                    item.isSubItem && 'pl-8'
+                                                )}
+                                            >
+                                                <Link to={item.url}>
+                                                    <item.icon className="h-4 w-4" />
+                                                    <span>{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                        {user && section.title === t('nav.taps') && <VoiceSidebarSection />}
+                    </Fragment>
                 ))}
             </SidebarContent>
 

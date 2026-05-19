@@ -3,7 +3,11 @@
 refer hq todo
 
 # Do Now
-- [ ] auto-Scroll sidebar
+- [ ] TapRef + Parameter System
+- [ ] Allow tap explore page to public
+- [ ] move tap settings in the top of guilds
+- [ ] OpenGraph for tap page
+
 - [x] Tap yt-dlp lofty version issue
 - [ ] Active Tap Tracking bad
 - [ ] Whitelist tap weird in real playing

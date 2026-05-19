@@ -22,6 +22,7 @@ import { CopyableId } from './copyable-id'
 import { TapRolesBadge } from './tap-roles-badge'
 import { SetAsMyVoice } from './set-as-my-voice'
 import { OnlineIndicator } from './online-indicator'
+import { useAuthStore } from '@/features/auth'
 
 interface TapCardProps {
     tap: TapWithAccess
@@ -39,6 +40,7 @@ export const TapCard = ({
     showSetAsMyVoice = true,
 }: TapCardProps) => {
     const { t, i18n } = useTranslation()
+    const { isAuthenticated } = useAuthStore()
 
     const handleReport = (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -73,7 +75,7 @@ export const TapCard = ({
                             </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                            {showSetAsMyVoice &&
+                            {showSetAsMyVoice && isAuthenticated &&
                                 <SetAsMyVoice
                                     tapId={tap.id}
                                     hasTtsRole={tap.roles.includes('tts')}
