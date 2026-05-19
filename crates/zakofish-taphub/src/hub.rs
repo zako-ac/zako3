@@ -74,17 +74,23 @@ impl ZakofishHub {
                         return;
                     }
                 };
+
+                let ip = conn.quic_conn.remote_address().to_string();
+
                 let span = tracing::info_span!(
                     "tap.connection",
                     tap_id = tracing::field::Empty,
                     connection_id = tracing::field::Empty,
                     friendly_name = tracing::field::Empty,
                     disconnect_reason = tracing::field::Empty,
+                    remote_ip = %ip
                 );
-                if let Err(e) =
-                    handle_new_connection(conn, handler, sessions, next_connection_id)
-                        .instrument(span)
-                        .await
+
+                tracing::info!("New connection from {}", ip);
+
+                if let Err(e) = handle_new_connection(conn, handler, sessions, next_connection_id)
+                    .instrument(span)
+                    .await
                 {
                     tracing::error!("Error handling new connection: {:?}", e);
                 }
@@ -179,8 +185,7 @@ impl ZakofishHub {
             ars: wire_ars,
             headers,
         };
-        let payload =
-            zakofish::types::message::HubToTapMessage::AudioMetadataRequest(request);
+        let payload = zakofish::types::message::HubToTapMessage::AudioMetadataRequest(request);
         let encoded = zakofish::protocol::codec::encode_msgpack(&payload)?;
         stream.send_payload(encoded).await?;
 
@@ -189,9 +194,7 @@ impl ZakofishHub {
             zakofish::protocol::codec::decode_msgpack(&response_bytes)?;
 
         match response {
-            zakofish::types::message::TapToHubMessage::AudioMetadataSuccess(success) => {
-                Ok(success)
-            }
+            zakofish::types::message::TapToHubMessage::AudioMetadataSuccess(success) => Ok(success),
             zakofish::types::message::TapToHubMessage::AudioRequestFailure(failure) => {
                 Err(ZakofishError::ProtocolError(format!(
                     "Audio metadata request failed: {:?}",
@@ -205,15 +208,24 @@ impl ZakofishHub {
     }
 }
 
+// Bounded wait for the application-level ClientHello after the protofish handshake
+// completes. Without this, a client that opens a mani stream but never sends Hello
+// keeps the spawned task, span, and ProtofishConnection alive until the QUIC idle
+// timeout (which is much longer).
+const CLIENT_HELLO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 async fn handle_new_connection(
     conn: protofish2::connection::ProtofishConnection,
     handler: Arc<dyn HubHandler>,
     sessions: SessionMap,
     next_connection_id: Arc<AtomicU64>,
 ) -> Result<()> {
-
     let mut mani_stream = conn.accept_mani().await?;
-    let payload_bytes = mani_stream.recv_payload().await?;
+    let payload_bytes = tokio::time::timeout(CLIENT_HELLO_TIMEOUT, mani_stream.recv_payload())
+        .await
+        .map_err(|_| {
+            ZakofishError::ProtocolError("Timed out waiting for ClientHello".to_string())
+        })??;
 
     let hello_msg: zakofish::types::message::TapToHubMessage =
         zakofish::protocol::codec::decode_msgpack(&payload_bytes)?;
@@ -225,54 +237,49 @@ async fn handle_new_connection(
 
             tracing::Span::current().record("tap_id", tracing::field::display(&tap_id_wire.0));
             tracing::Span::current().record("connection_id", connection_id);
-            tracing::Span::current()
-                .record("friendly_name", tracing::field::display(&hello.friendly_name));
+            tracing::Span::current().record(
+                "friendly_name",
+                tracing::field::display(&hello.friendly_name),
+            );
 
             match handler.on_tap_authenticate(connection_id, hello).await {
                 Ok(_) => {
-                    let accept_msg = zakofish::types::message::HubToTapMessage::Accept;
-                    mani_stream
-                        .send_payload(
-                            zakofish::protocol::codec::encode_msgpack(&accept_msg)?,
-                        )
-                        .await?;
+                    // From this point on, on_tap_authenticate has already mutated external
+                    // state (Redis tap state, in-memory connection_signals map, connected_taps
+                    // counter). The contract is that on_tap_disconnected MUST be called to
+                    // undo that — so route any error from the lifecycle below through cleanup
+                    // before returning.
+                    let tap_id_public = TapId(tap_id_wire.0.clone());
+                    let result = run_authenticated_lifecycle(
+                        conn,
+                        mani_stream,
+                        sessions,
+                        tap_id_wire,
+                        connection_id,
+                    )
+                    .await;
 
-                    let conn_arc = Arc::new(conn);
-                    sessions
-                        .lock()
-                        .await
-                        .entry(tap_id_wire.clone())
-                        .or_default()
-                        .insert(connection_id, conn_arc.clone());
-
-                    // The handshake stream is short-lived by design; wait on the QUIC connection
-                    // itself to detect true disconnection.
-                    drop(mani_stream);
-                    let _ = conn_arc.quic_conn.closed().await;
-
-                    {
-                        let mut sessions = sessions.lock().await;
-                        if let Some(conns) = sessions.get_mut(&tap_id_wire) {
-                            conns.remove(&connection_id);
-                            if conns.is_empty() {
-                                sessions.remove(&tap_id_wire);
-                            }
+                    match &result {
+                        Ok(()) => {
+                            tracing::Span::current().record("disconnect_reason", "clean");
+                        }
+                        Err(e) => {
+                            tracing::Span::current()
+                                .record("disconnect_reason", "post_auth_error");
+                            tracing::warn!(%e, "post-auth lifecycle errored; cleaning up");
                         }
                     }
 
-                    tracing::Span::current().record("disconnect_reason", "clean");
-                    // Convert wire TapId to zako3-types TapId for the public handler callback
-                    let tap_id_public = TapId(tap_id_wire.0.clone());
-                    handler.on_tap_disconnected(tap_id_public, connection_id).await;
-                    Ok(())
+                    handler
+                        .on_tap_disconnected(tap_id_public, connection_id)
+                        .await;
+                    result
                 }
                 Err(reject) => {
                     tracing::Span::current().record("disconnect_reason", "rejected");
                     let reject_msg = zakofish::types::message::HubToTapMessage::Reject(reject);
                     mani_stream
-                        .send_payload(
-                            zakofish::protocol::codec::encode_msgpack(&reject_msg)?,
-                        )
+                        .send_payload(zakofish::protocol::codec::encode_msgpack(&reject_msg)?)
                         .await?;
                     Ok(())
                 }
@@ -282,4 +289,39 @@ async fn handle_new_connection(
             "Expected ClientHello".to_string(),
         )),
     }
+}
+
+async fn run_authenticated_lifecycle(
+    conn: protofish2::connection::ProtofishConnection,
+    mut mani_stream: protofish2::mani::stream::ManiStream,
+    sessions: SessionMap,
+    tap_id_wire: zakofish::types::TapId,
+    connection_id: u64,
+) -> Result<()> {
+    let accept_msg = zakofish::types::message::HubToTapMessage::Accept;
+    mani_stream
+        .send_payload(zakofish::protocol::codec::encode_msgpack(&accept_msg)?)
+        .await?;
+
+    let conn_arc = Arc::new(conn);
+    sessions
+        .lock()
+        .await
+        .entry(tap_id_wire.clone())
+        .or_default()
+        .insert(connection_id, conn_arc.clone());
+
+    // The handshake stream is short-lived by design; wait on the QUIC connection
+    // itself to detect true disconnection.
+    drop(mani_stream);
+    let _ = conn_arc.quic_conn.closed().await;
+
+    let mut sessions = sessions.lock().await;
+    if let Some(conns) = sessions.get_mut(&tap_id_wire) {
+        conns.remove(&connection_id);
+        if conns.is_empty() {
+            sessions.remove(&tap_id_wire);
+        }
+    }
+    Ok(())
 }

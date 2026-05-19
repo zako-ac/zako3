@@ -106,7 +106,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Listening on {}", server.local_addr()?);
     telemetry.healthy();
-    server.run().await;
 
+    tokio::select! {
+        _ = server.run() => {
+            tracing::warn!("Transport server exited");
+        }
+        res = tokio::signal::ctrl_c() => {
+            if let Err(e) = res {
+                tracing::warn!(%e, "Failed to listen for Ctrl-C");
+            }
+            tracing::info!("Ctrl-C received, shutting down; dhat will dump dhat-heap.json on drop");
+        }
+    }
+
+    // Drops `_profiler` here, which writes dhat-heap.json to the CWD.
     Ok(())
 }

@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use opentelemetry::KeyValue;
 use tokio::sync::watch;
+use zako3_types::{OnlineTapState, hq::TapId};
 use zakofish_taphub::{
     hub::HubHandler,
     types::{HubRejectReasonType, TapClientHello, TapServerReject},
 };
-use zako3_types::{OnlineTapState, hq::TapId};
 
 use crate::app::App;
 use crate::metrics;
@@ -30,6 +30,14 @@ impl HubHandler for TapHubConnectionHandler {
         hello: TapClientHello,
     ) -> Result<(), TapServerReject> {
         tracing::Span::current().record("connection_id", connection_id);
+        tracing::Span::current().record("tap_id", &hello.tap_id.0);
+
+        tracing::info!(
+            connection_id,
+            tap_id = %hello.tap_id.0,
+            friendly_name = %hello.friendly_name,
+            "Received tap authentication request"
+        );
 
         let tap = self
             .app
@@ -40,8 +48,10 @@ impl HubHandler for TapHubConnectionHandler {
         if let Some(tap) = tap {
             if hello.tap_id.0 == tap.id.0 {
                 tracing::Span::current().record("tap_id", tracing::field::display(&tap.id.0));
-                tracing::Span::current()
-                    .record("friendly_name", tracing::field::display(&hello.friendly_name));
+                tracing::Span::current().record(
+                    "friendly_name",
+                    tracing::field::display(&hello.friendly_name),
+                );
 
                 tracing::info!(
                     tap_id = %tap.id.0,
@@ -75,29 +85,35 @@ impl HubHandler for TapHubConnectionHandler {
                     })?;
 
                 let (disconnect_tx, _) = watch::channel(false);
-                self.connection_signals.lock().insert(connection_id, disconnect_tx);
+                self.connection_signals
+                    .lock()
+                    .insert(connection_id, disconnect_tx);
 
                 metrics::metrics().connected_taps.add(1, &[]);
-                metrics::metrics().tap_auth_total.add(
-                    1,
-                    &[KeyValue::new("result", "ok")],
-                );
+                metrics::metrics()
+                    .tap_auth_total
+                    .add(1, &[KeyValue::new("result", "ok")]);
 
                 Ok(())
             } else {
-                metrics::metrics().tap_auth_total.add(
-                    1,
-                    &[KeyValue::new("result", "rejected")],
-                );
+                metrics::metrics()
+                    .tap_auth_total
+                    .add(1, &[KeyValue::new("result", "rejected")]);
                 Err(TapServerReject {
                     reason_type: HubRejectReasonType::Unauthorized,
                     reason: "Tap ID mismatch".into(),
                 })
             }
         } else {
-            metrics::metrics().tap_auth_total.add(
-                1,
-                &[KeyValue::new("result", "rejected")],
+            let span = tracing::warn_span!("Failed tap authentication", connection_id, friendly_name = %hello.friendly_name);
+            let _enter = span.enter();
+
+            metrics::metrics()
+                .tap_auth_total
+                .add(1, &[KeyValue::new("result", "rejected")]);
+            tracing::warn!(
+                connection_id,
+                "Failed to authenticate tap with provided API token"
             );
             Err(TapServerReject {
                 reason_type: HubRejectReasonType::Unauthorized,
@@ -125,17 +141,18 @@ impl HubHandler for TapHubConnectionHandler {
             }
         };
 
-        let uptime_secs = if let Some(conn) = states.iter().find(|s| s.connection_id == connection_id) {
-            let secs = (chrono::Utc::now() - conn.connected_at)
-                .num_seconds()
-                .max(0);
-            if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), secs).await {
-                tracing::warn!(%e, "Failed to accumulate uptime metric");
-            }
-            secs
-        } else {
-            0
-        };
+        let uptime_secs =
+            if let Some(conn) = states.iter().find(|s| s.connection_id == connection_id) {
+                let secs = (chrono::Utc::now() - conn.connected_at)
+                    .num_seconds()
+                    .max(0);
+                if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), secs).await {
+                    tracing::warn!(%e, "Failed to accumulate uptime metric");
+                }
+                secs
+            } else {
+                0
+            };
 
         tracing::info!(
             tap_id = %tap_id.0,
