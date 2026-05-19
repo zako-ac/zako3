@@ -13,6 +13,7 @@ pub(crate) mod healthcheck;
 pub use builder::{tap, TapBuilder};
 pub use error::{SdkError, TapError};
 pub use handler::TapHandler;
+pub use protofish2::TransferMode;
 pub use source::AudioSource;
 pub use stream::AudioStreamSender;
 

@@ -18,7 +18,10 @@ use crate::types::model::AudioRequestString;
 #[async_trait::async_trait]
 pub trait TapHandler: Send + Sync {
     /// Handle an incoming audio request.
-    /// If successful, returns the success message and a receiver channel to push (Timestamp, Bytes) chunks into.
+    /// If successful, returns the success message, a receiver channel for
+    /// `(Timestamp, Bytes)` chunks, and the `TransferMode` the tap wants to use
+    /// (`Dual` for reliable+unreliable, `UnreliableOnly` to skip the reliable
+    /// path and its backpressure/caching on the hub side).
     /// If failed, returns the failure message.
     async fn handle_audio_request(
         &self,
@@ -28,6 +31,7 @@ pub trait TapHandler: Send + Sync {
         (
             AudioRequestSuccessMessage,
             mpsc::Receiver<(Timestamp, Bytes)>,
+            TransferMode,
         ),
         AudioRequestFailureMessage,
     >;
@@ -155,7 +159,7 @@ async fn handle_incoming_stream(
                 .handle_audio_request(request.ars, request.headers)
                 .await
             {
-                Ok((success_msg, mut chunk_receiver)) => {
+                Ok((success_msg, mut chunk_receiver, transfer_mode)) => {
                     // Send success payload
                     let response_msg = TapToHubMessage::AudioRequestSuccess(success_msg);
                     mani_stream
@@ -165,7 +169,7 @@ async fn handle_incoming_stream(
                     // Start transfer
                     let mut send_stream = mani_stream
                         .start_transfer(
-                            TransferMode::Dual,
+                            transfer_mode,
                             CompressionType::None,
                             protofish2::SequenceNumber(0),
                             None,

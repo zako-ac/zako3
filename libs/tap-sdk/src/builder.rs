@@ -187,17 +187,28 @@ impl zakofish::tap::TapHandler for HandlerBridge {
         (
             zakofish::types::message::AudioRequestSuccessMessage,
             mpsc::Receiver<(protofish2::Timestamp, bytes::Bytes)>,
+            protofish2::TransferMode,
         ),
         zakofish::types::message::AudioRequestFailureMessage,
     > {
         let (tx, rx) = mpsc::channel(32);
-        let sender = AudioStreamSender { tx };
+        let transfer_mode = Arc::new(std::sync::OnceLock::new());
+        let sender = AudioStreamSender {
+            tx,
+            transfer_mode: transfer_mode.clone(),
+        };
         let source = AudioSource::from(ars);
 
         self.0
             .handle_audio_request(source, sender)
             .await
-            .map(|success| (success, rx))
+            .map(|success| {
+                let mode = transfer_mode
+                    .get()
+                    .copied()
+                    .unwrap_or(protofish2::TransferMode::Dual);
+                (success, rx, mode)
+            })
             .map_err(|e| e.into_wire())
     }
 }

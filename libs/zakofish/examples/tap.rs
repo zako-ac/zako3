@@ -5,6 +5,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use protofish2::Timestamp;
+use protofish2::TransferMode;
 use protofish2::compression::CompressionType;
 use protofish2::connection::ClientConfig;
 use rustls::pki_types::CertificateDer;
@@ -29,6 +30,7 @@ impl TapHandler for SimpleTapHandler {
         (
             AudioRequestSuccessMessage,
             mpsc::Receiver<(Timestamp, Bytes)>,
+            TransferMode,
         ),
         AudioRequestFailureMessage,
     > {
@@ -59,6 +61,7 @@ impl TapHandler for SimpleTapHandler {
                 metadatas: AttachedMetadata::Metadatas(vec![]),
             },
             rx,
+            TransferMode::Dual,
         ))
     }
 

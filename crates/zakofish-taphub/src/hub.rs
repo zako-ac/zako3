@@ -106,7 +106,7 @@ impl ZakofishHub {
         headers: HashMap<String, String>,
     ) -> Result<(
         AudioRequestSuccessMessage,
-        TransferReliableRecvStream,
+        Option<TransferReliableRecvStream>,
         TransferUnreliableRecvStream,
     )> {
         let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
@@ -143,10 +143,10 @@ impl ZakofishHub {
                     ManiTransferRecvStreams::Dual {
                         reliable,
                         unreliable,
-                    } => Ok((success, reliable, unreliable)),
-                    _ => Err(ZakofishError::ProtocolError(
-                        "Expected Dual transfer stream".to_string(),
-                    )),
+                    } => Ok((success, Some(reliable), unreliable)),
+                    ManiTransferRecvStreams::UnreliableOnly { unreliable } => {
+                        Ok((success, None, unreliable))
+                    }
                 }
             }
             zakofish::types::message::TapToHubMessage::AudioRequestFailure(failure) => Err(

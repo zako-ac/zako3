@@ -1,5 +1,6 @@
 use bytes::Bytes;
-use protofish2::Timestamp;
+use protofish2::{Timestamp, TransferMode};
+use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 
 /// Opaque handle for pushing encoded Opus frames to the Hub.
@@ -7,6 +8,7 @@ use tokio::sync::mpsc;
 /// Dropping this sender signals end-of-stream to the Hub.
 pub struct AudioStreamSender {
     pub(crate) tx: mpsc::Sender<(Timestamp, Bytes)>,
+    pub(crate) transfer_mode: Arc<OnceLock<TransferMode>>,
 }
 
 impl AudioStreamSender {
@@ -24,5 +26,16 @@ impl AudioStreamSender {
     /// giving 20 ms per frame.
     pub async fn send_opus_frame(&self, frame_index: u64, data: Bytes) -> bool {
         self.send_frame(Timestamp(frame_index * 20), data).await
+    }
+
+    /// Switch this stream to UnreliableOnly transfer mode.
+    ///
+    /// The hub will receive frames over the unreliable path only — no reliable
+    /// retransmission, no caching, no end-to-end backpressure. Suitable for
+    /// live/ephemeral audio where dropped frames are preferable to latency.
+    ///
+    /// Must be called before the handler returns; later calls are ignored.
+    pub fn unreliable_only(&self) {
+        let _ = self.transfer_mode.set(TransferMode::UnreliableOnly);
     }
 }

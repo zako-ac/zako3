@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use protofish2::Timestamp;
+use protofish2::TransferMode;
 use protofish2::compression::CompressionType;
 use protofish2::connection::{ClientConfig, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -57,6 +58,7 @@ impl TapHandler for TestTapHandler {
         (
             AudioRequestSuccessMessage,
             mpsc::Receiver<(Timestamp, Bytes)>,
+            TransferMode,
         ),
         AudioRequestFailureMessage,
     > {
@@ -81,7 +83,7 @@ impl TapHandler for TestTapHandler {
             }
         });
 
-        Ok((success_msg, rx))
+        Ok((success_msg, rx, TransferMode::Dual))
     }
 
     async fn handle_audio_metadata_request(
@@ -179,12 +181,14 @@ async fn test_zakofish_flow() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let ars = AudioRequestString::from("test:audio".to_string());
-    let (success_msg, mut rx, _) = hub
+    let (success_msg, rx, _) = hub
         .request_audio(tap_id, connection_id, ars, HashMap::new())
         .await
         .expect("Failed to request audio");
 
     assert_eq!(success_msg.duration_secs, Some(10.0));
+
+    let mut rx = rx.expect("integration test expects Dual transfer mode");
 
     let mut received_chunks = 0;
     while let Some(chunks) = rx.recv().await {

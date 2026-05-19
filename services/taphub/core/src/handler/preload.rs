@@ -83,7 +83,11 @@ pub(crate) async fn handle_preload_audio_inner(
     )
     .await;
 
-    // Preload reliable stream to disk
+    // Preload reliable stream to disk. Tap must use Dual transfer mode for
+    // preload — UnreliableOnly has no persistable copy.
+    let rel = rel.ok_or_else(|| {
+        "Tap returned UnreliableOnly transfer for preload request".to_string()
+    })?;
     let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
     let (rel_rx, _done_rx) = bridge_rel(rel, disconnect_rx);
     let signal = tap_hub.audio_preload.preload(preload_id, rel_rx);

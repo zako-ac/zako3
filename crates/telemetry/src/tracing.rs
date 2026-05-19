@@ -2,13 +2,11 @@ use opentelemetry::{global, trace::TracerProvider as _};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::logs::SdkLoggerProvider;
+use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator, trace::SdkTracerProvider};
 use tonic::metadata::{Ascii, MetadataKey, MetadataMap, MetadataValue};
-use opentelemetry_sdk::{
-    Resource,
-    propagation::TraceContextPropagator,
-    trace::SdkTracerProvider,
+use tracing_subscriber::{
+    EnvFilter, Layer, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt,
 };
-use tracing_subscriber::{EnvFilter, Layer, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn build_metadata(headers_env: Option<String>) -> MetadataMap {
     let mut metadata = MetadataMap::new();
@@ -30,12 +28,14 @@ fn build_metadata(headers_env: Option<String>) -> MetadataMap {
 pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let console_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let fmt_layer = fmt::layer().with_target(true).with_level(true).compact().with_filter(console_filter);
+    let console_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let fmt_layer = fmt::layer()
+        .with_target(true)
+        .with_level(true)
+        .compact()
+        .with_filter(console_filter);
     let registry = Registry::default().with(fmt_layer);
-
-    #[cfg(feature = "tokio-console")]
-    let registry = registry.with(console_subscriber::spawn());
 
     if let Some(endpoint) = otlp_endpoint {
         let headers_env = std::env::var("OTEL_EXPORTER_OTLP_HEADERS").ok();

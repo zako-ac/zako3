@@ -174,8 +174,9 @@ pub(crate) async fn handle_request_audio_inner(
 
     tracing::info!(tap_id = %tap_id.0, connection_id, "Received audio from Tap");
 
-    // Bridge reliable stream
-    let (rel_rx, done_rx) = bridge_rel(rel, disconnect_rx);
+    // Bridge reliable stream (only present in Dual transfer mode; UnreliableOnly
+    // skips caching since there is no authoritative copy to persist).
+    let rel_bridge = rel.map(|r| bridge_rel(r, disconnect_rx));
 
     // Resolve metadata
     let metadatas = resolve_metadata(
@@ -186,7 +187,7 @@ pub(crate) async fn handle_request_audio_inner(
     )
     .await;
 
-    if let Some(item) = cache_item {
+    if let (Some(item), Some((rel_rx, done_rx))) = (cache_item, rel_bridge) {
         let cache = Arc::clone(&tap_hub.audio_cache);
         let metadatas_clone = metadatas.clone();
         let cache_key = succ.cache.clone();
