@@ -63,7 +63,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new(pool: PgPool, timescale_pool: PgPool, config: Arc<AppConfig>, event_tx: broadcast::Sender<PlaybackEvent>) -> CoreResult<Self> {
+    pub async fn new(pool: PgPool, timescale_pool: Option<PgPool>, config: Arc<AppConfig>, event_tx: broadcast::Sender<PlaybackEvent>) -> CoreResult<Self> {
         let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
         let tap_repo = Arc::new(PgTapRepository::new(pool.clone()));
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
@@ -78,7 +78,7 @@ impl Service {
         let redis_url = &config.redis_url;
         let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
 
-        let tap_metrics_service = TapMetricsService::new(redis_repo.clone(), timescale_pool.clone());
+        let tap_metrics_service = TapMetricsService::new(redis_repo.clone(), timescale_pool, Some(pool.clone()));
 
         // Spawn history subscriber background task
         let pubsub = zako3_states::RedisPubSub::new(redis_url)

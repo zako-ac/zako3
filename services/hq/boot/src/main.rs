@@ -23,7 +23,24 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting hq-boot...");
 
     let pool = get_pool(&config.database_url).await?;
-    let timescale_pool = get_pool(&config.timescale_database_url).await?;
+    let timescale_pool = match &config.timescale_database_url {
+        Some(url) => match get_pool(url).await {
+            Ok(pool) => Some(pool),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "TimescaleDB unavailable — metrics history features will be disabled"
+                );
+                None
+            }
+        },
+        None => {
+            tracing::warn!(
+                "TIMESCALE_DATABASE_URL not set — metrics history features will be disabled"
+            );
+            None
+        }
+    };
 
     run_migrations(&pool).await?;
 

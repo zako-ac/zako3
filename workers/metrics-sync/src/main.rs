@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     info!("Connecting to Redis...");
     let cache_repo: std::sync::Arc<dyn zako3_states::CacheRepository> =
         std::sync::Arc::new(RedisCacheRepository::new(&redis_url).await?);
-    let metrics_svc = TapMetricsService::new(std::sync::Arc::clone(&cache_repo), pool.clone());
+    let metrics_svc = TapMetricsService::new(std::sync::Arc::clone(&cache_repo), Some(pool.clone()), None);
     let hub_state_service = TapHubStateService::new(std::sync::Arc::clone(&cache_repo));
 
     let redis_url_clone = redis_url.clone();

@@ -104,7 +104,14 @@ async fn handle_message_create(
 
             let queue_name = queue_name(&author_id, settings.enable_tts_queue);
 
-            if !mapped.to_string().is_empty() {
+            let mapped = mapped.to_string();
+
+            let attach_count = msg.attachments.len();
+            let with_attach = if attach_count > 0 {
+                format!("첨부파일 {attach_count}개와 함께, {mapped}")
+            } else { mapped };
+
+            if !with_attach.is_empty() {
                 for channel_id in channel_ids {
                     service
                         .audio_engine
@@ -113,7 +120,7 @@ async fn handle_message_create(
                             channel_id,
                             queue_name.clone(),
                             tap_id.clone(),
-                            mapped.clone(),
+                            with_attach.clone().into(),
                             1.0.into(),
                             author_id.clone(),
                         )

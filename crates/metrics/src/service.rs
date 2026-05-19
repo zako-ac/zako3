@@ -19,16 +19,16 @@ pub struct TapMetricsRow {
 #[derive(Clone)]
 pub struct TapMetricsService {
     pub redis: TapRedisMetrics,
-    pool: PgPool,
-    history_repo: PgUseHistoryRepository,
+    timescale_pool: Option<PgPool>,
+    history_repo: Option<PgUseHistoryRepository>,
 }
 
 impl TapMetricsService {
-    pub fn new(redis: CacheRepositoryRef, pool: PgPool) -> Self {
-        let history_repo = PgUseHistoryRepository::new(pool.clone());
+    pub fn new(redis: CacheRepositoryRef, timescale_pool: Option<PgPool>, main_pool: Option<PgPool>) -> Self {
+        let history_repo = main_pool.as_ref().map(|p| PgUseHistoryRepository::new(p.clone()));
         Self {
             redis: TapRedisMetrics::new(redis),
-            pool,
+            timescale_pool,
             history_repo,
         }
     }
@@ -62,12 +62,15 @@ impl TapMetricsService {
     }
 
     pub async fn get_latest_row(&self, tap_id: &TapId) -> Result<Option<TapMetricsRow>> {
+        let Some(pool) = self.timescale_pool.as_ref() else {
+            return Ok(None);
+        };
         let row = sqlx::query(
             "SELECT time, total_uses, cache_hits, active_now, unique_users \
              FROM tap_metrics WHERE tap_id = $1 ORDER BY time DESC LIMIT 1",
         )
         .bind(&tap_id.0)
-        .fetch_optional(&self.pool)
+        .fetch_optional(pool)
         .await?;
 
         Ok(row.map(|r| TapMetricsRow {
@@ -100,13 +103,16 @@ impl TapMetricsService {
         tap_id: &TapId,
         since: DateTime<Utc>,
     ) -> Result<Vec<TapMetricsRow>> {
+        let Some(pool) = self.timescale_pool.as_ref() else {
+            return Ok(Vec::new());
+        };
         let rows = sqlx::query(
             "SELECT time, total_uses, cache_hits, active_now, unique_users \
              FROM tap_metrics WHERE tap_id = $1 AND time >= $2 ORDER BY time ASC",
         )
         .bind(&tap_id.0)
         .bind(since)
-        .fetch_all(&self.pool)
+        .fetch_all(pool)
         .await?;
 
         Ok(rows
@@ -130,6 +136,9 @@ impl TapMetricsService {
         active_now: i64,
         unique_users: i64,
     ) -> Result<()> {
+        let Some(pool) = self.timescale_pool.as_ref() else {
+            return Ok(());
+        };
         sqlx::query(
             "INSERT INTO tap_metrics (time, tap_id, total_uses, active_now, cache_hits, unique_users) \
              VALUES ($1, $2, $3, $4, $5, $6)",
@@ -140,7 +149,7 @@ impl TapMetricsService {
         .bind(active_now)
         .bind(cache_hits)
         .bind(unique_users)
-        .execute(&self.pool)
+        .execute(pool)
         .await?;
         Ok(())
     }
@@ -153,6 +162,9 @@ impl TapMetricsService {
         active_now: i64,
         unique_users: i64,
     ) -> Result<()> {
+        if self.timescale_pool.is_none() {
+            return Ok(());
+        }
         let (delta_total, delta_cache) = self.drain_delta(tap_id).await?;
         let last = self.get_latest_row(tap_id).await?;
         let last_total = last.as_ref().map(|r| r.total_uses).unwrap_or(0);
@@ -169,6 +181,9 @@ impl TapMetricsService {
     }
 
     pub async fn insert_history(&self, entry: &PlayAudioHistory) -> Result<()> {
-        self.history_repo.insert(entry).await
+        let Some(repo) = self.history_repo.as_ref() else {
+            return Ok(());
+        };
+        repo.insert(entry).await
     }
 }
