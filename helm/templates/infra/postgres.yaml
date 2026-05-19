@@ -31,6 +31,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "postgres" "Release" .Release) | nindent 8 }}
     spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.postgres.nodeAffinity) | nindent 6 }}
       containers:
         - name: postgres
           image: postgres:16-alpine
