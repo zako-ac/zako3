@@ -5,6 +5,8 @@ refer hq todo
 # Do Now
 - [x] URGENT: TapHub Memopry Leak, Steaming support
 
+- [ ] Dedicated cache server
+
 - [x] Make unreliable-only mode for TH
 - [ ] Add fancy logging and error code for failed requests in frontend/HQ.
 - [ ] TapRef + Parameter System

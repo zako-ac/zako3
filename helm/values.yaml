@@ -78,6 +78,7 @@ taphub:
   transportTlsSecret: ""
   transportTlsCertFilename: "transport-cert.pem"
   transportTlsKeyFilename: "transport-key.pem"
+  transportTlsCaFilename: "ca-cert.pem"
   cacheDir: "/cache"
   cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"

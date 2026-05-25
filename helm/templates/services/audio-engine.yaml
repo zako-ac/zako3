@@ -77,7 +77,7 @@ spec:
             - name: TAPHUB_SNI
               value: "{{ $fullname }}-taphub"
             - name: TAPHUB_TRANSPORT_CERT_FILE
-              value: "/certs/transport/{{ .Values.taphub.transportTlsCertFilename }}"
+              value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: METRICS_PORT
@@ -115,5 +115,5 @@ spec:
           secret:
             secretName: {{ required "taphub.transportTlsSecret is required" .Values.taphub.transportTlsSecret }}
             items:
-              - key: {{ .Values.taphub.transportTlsCertFilename }}
-                path: {{ .Values.taphub.transportTlsCertFilename }}
+              - key: {{ .Values.taphub.transportTlsCaFilename }}
+                path: {{ .Values.taphub.transportTlsCaFilename }}
