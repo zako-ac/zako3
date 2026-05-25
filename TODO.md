@@ -3,12 +3,12 @@
 refer hq todo
 
 # Do Now
-- [ ] URGENT: TapHub Memopry Leak, Steaming support
+- [x] URGENT: TapHub Memopry Leak, Steaming support
 
-- [ ] Make unreliable-only mode for TH
+- [x] Make unreliable-only mode for TH
 - [ ] Add fancy logging and error code for failed requests in frontend/HQ.
 - [ ] TapRef + Parameter System
-- [ ] Allow tap explore page to public
+- [x] Allow tap explore page to be public
 - [ ] move tap settings in the top of guilds
 - [ ] OpenGraph for tap page
 
