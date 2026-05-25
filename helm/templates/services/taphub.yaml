@@ -142,7 +142,7 @@ metadata:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
   type: LoadBalancer
-  externalTrafficPolicy: Local
+  externalTrafficPolicy: Cluster
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "taphub" "Release" .Release) | nindent 4 }}
   ports:
