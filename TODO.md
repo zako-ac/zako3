@@ -6,6 +6,7 @@ refer hq todo
 - [x] URGENT: TapHub Memopry Leak, Steaming support
 
 - [ ] Dedicated cache server
+- [ ] Timescale Persistence
 
 - [x] Make unreliable-only mode for TH
 - [ ] Add fancy logging and error code for failed requests in frontend/HQ.
