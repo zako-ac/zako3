@@ -106,7 +106,13 @@ impl TapBuilder {
     /// Connect to the Hub and block until the connection is permanently lost.
     /// Reconnection with exponential backoff is handled internally by zakofish.
     pub async fn run(self, handler: Arc<dyn TapHandler>) -> Result<(), SdkError> {
-        let hub_addr = self.hub_addr.as_deref().unwrap_or("api.zako.ac:7060");
+        let hub_addr = self.hub_addr.as_deref().unwrap_or_else(|| {
+            if self.transport == Transport::Protofish3 {
+                "api.zako.ac:1028"
+            } else {
+                "api.zako.ac:7060"
+            }
+        });
 
         // Append default port 7060 if no port is present
         let hub_addr = if hub_addr
