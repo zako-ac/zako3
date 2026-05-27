@@ -116,7 +116,12 @@ impl TapBuilder {
         {
             hub_addr.to_string()
         } else {
-            format!("{}:7060", hub_addr)
+            let default_port = if self.transport == Transport::Protofish3 {
+                1028
+            } else {
+                7060
+            };
+            format!("{}:{}", hub_addr, default_port)
         };
 
         // Extract host as TLS server_name (SNI); resolve domain to SocketAddr
