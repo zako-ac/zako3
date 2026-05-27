@@ -12,6 +12,7 @@ pub mod utils;
 use std::sync::{Arc, atomic::Ordering};
 
 use sqlx::postgres::PgPoolOptions;
+use zako3_states::{RedisCacheRepository, UserSettingsStateService};
 
 use crate::config::AppConfig;
 use crate::handlers::scope_match::ScopeMatchContext;
@@ -39,10 +40,15 @@ pub async fn run() -> anyhow::Result<()> {
     let hash_cache = Arc::new(PgHashCache::new(pool.clone()).await?);
     let settings_store = Arc::new(PgSettingsStore::new(pool));
 
+    tracing::info!("Connecting to Redis at {}", config.redis_url);
+    let redis_repo = Arc::new(RedisCacheRepository::new(&config.redis_url).await?);
+    let cache_invalidator = UserSettingsStateService::new(redis_repo);
+
     let ctx = Arc::new(ScopeMatchContext {
         config: config.clone(),
         hash_cache,
         settings: settings_store,
+        cache_invalidator,
     });
 
     let queue = TaskQueue::spawn(ctx, config.worker_concurrency, config.queue_capacity);

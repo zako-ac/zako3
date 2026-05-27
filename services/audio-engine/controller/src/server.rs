@@ -195,6 +195,7 @@ fn err(msg: &str) -> AudioEngineCommandResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::{Arc, OnceLock};
     use tl_protocol::SessionInfo;
     use zako3_audio_engine_core::engine::session_manager::SessionManager;

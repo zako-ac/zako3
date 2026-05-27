@@ -29,6 +29,8 @@ spec:
               value: "0.0.0.0:{{ .Values.emojiMatcher.httpPort }}"
             - name: NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
+            - name: REDIS_URL
+              value: "redis://{{ $fullname }}-redis:6379"
             - name: DATABASE_URL
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict

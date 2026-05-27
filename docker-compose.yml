@@ -162,11 +162,13 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-zako3}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-zako3}
       NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
       HTTP_ADDR: "0.0.0.0:9093"
       OTLP_ENDPOINT: http://otel-lgtm:4317
     depends_on:
       - postgres
       - nats
+      - redis
       - otel-lgtm
 
 volumes:

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use hq_types::hq::settings::{EmojiMappingRule, PartialUserSettings, UserSettingsField};
+use hq_types::hq::UserId;
 use zako3_emoji_matcher_proto::EmojiScopeMatchRequest;
+use zako3_states::UserSettingsStateService;
 
 use crate::config::AppConfig;
 use crate::metrics;
@@ -13,6 +15,20 @@ pub struct ScopeMatchContext {
     pub config: Arc<AppConfig>,
     pub hash_cache: ArcHashCache,
     pub settings: ArcSettingsStore,
+    pub cache_invalidator: UserSettingsStateService,
+}
+
+async fn invalidate_scope(invalidator: &UserSettingsStateService, scope: &Scope) {
+    match scope {
+        Scope::Global => invalidator.invalidate_global().await,
+        Scope::Guild(gid) => invalidator.invalidate_guild(gid).await,
+        Scope::User(uid) => invalidator.invalidate_user(&UserId(uid.clone())).await,
+        Scope::GuildUser { user_id, guild_id } => {
+            invalidator
+                .invalidate_guild_user(&UserId(user_id.clone()), guild_id)
+                .await
+        }
+    }
 }
 
 pub fn cdn_url(emoji_id: &str, animated: bool) -> String {
@@ -137,6 +153,7 @@ pub async fn handle_scope_match(
     };
 
     ctx.settings.append_emoji_rule(&scope, new_rule).await?;
+    invalidate_scope(&ctx.cache_invalidator, &scope).await;
     metrics::EMOJI_SCOPE_MATCH_HITS.inc();
 
     Ok(())

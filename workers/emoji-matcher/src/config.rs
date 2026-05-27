@@ -6,6 +6,7 @@ pub struct AppConfig {
     pub http_addr: String,
     pub otlp_endpoint: Option<String>,
     pub database_url: String,
+    pub redis_url: String,
     #[serde(default = "default_concurrency")]
     pub worker_concurrency: usize,
     #[serde(default = "default_hamming_threshold")]

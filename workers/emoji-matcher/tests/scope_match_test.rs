@@ -9,6 +9,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::{Router, routing::get};
 use hq_types::hq::settings::{EmojiMappingRule, PartialUserSettings, UserSettingsField};
 use image::{ImageBuffer, Rgb};
@@ -23,6 +24,30 @@ use zako3_emoji_matcher::config::AppConfig;
 use zako3_emoji_matcher::handlers::scope_match::{ScopeMatchContext, handle_scope_match};
 use zako3_emoji_matcher::store::{PgHashCache, PgSettingsStore};
 use zako3_emoji_matcher_proto::EmojiScopeMatchRequest;
+use zako3_states::{CacheRepository, UserSettingsStateService};
+
+/// No-op cache repository for tests — we're only verifying the DB writes,
+/// not the Redis invalidation path.
+struct NoopCache;
+
+#[async_trait]
+impl CacheRepository for NoopCache {
+    async fn get(&self, _key: &str) -> Option<String> { None }
+    async fn set(&self, _key: &str, _value: &str) {}
+    async fn set_ex(&self, _key: &str, _value: &str, _ttl_secs: u64) {}
+    async fn del(&self, _key: &str) {}
+    async fn incr(&self, _key: &str) -> zako3_states::Result<i64> { Ok(0) }
+    async fn decr(&self, _key: &str) -> zako3_states::Result<i64> { Ok(0) }
+    async fn incrby(&self, _key: &str, _amount: i64) -> zako3_states::Result<i64> { Ok(0) }
+    async fn pfadd(&self, _key: &str, _element: &str) -> zako3_states::Result<()> { Ok(()) }
+    async fn pfcount(&self, _key: &str) -> zako3_states::Result<u64> { Ok(0) }
+    async fn pfcount_multi(&self, _keys: &[String]) -> zako3_states::Result<u64> { Ok(0) }
+    async fn sadd(&self, _key: &str, _member: &str) -> zako3_states::Result<()> { Ok(()) }
+    async fn smembers(&self, _key: &str) -> zako3_states::Result<Vec<String>> { Ok(vec![]) }
+    async fn hgetall(&self, _key: &str) -> zako3_states::Result<Vec<(String, String)>> { Ok(vec![]) }
+    async fn hincrby(&self, _key: &str, _field: &str, _amount: i64) -> zako3_states::Result<i64> { Ok(0) }
+    async fn hdel_key(&self, _key: &str) -> zako3_states::Result<()> { Ok(()) }
+}
 
 /// Build a deterministic 32x32 image with a horizontal-gradient pattern.
 /// `shift` shifts the pattern by N pixels — small shifts produce nearly the
@@ -161,16 +186,19 @@ async fn scope_match_writes_new_rule_for_near_duplicate() {
         http_addr: String::new(),
         otlp_endpoint: None,
         database_url: database_url.clone(),
+        redis_url: String::new(),
         worker_concurrency: 1,
         match_hamming_threshold: 4,
         queue_capacity: 16,
     });
     let hash_cache = Arc::new(PgHashCache::new(pool.clone()).await.unwrap());
     let settings_store = Arc::new(PgSettingsStore::new(pool.clone()));
+    let cache_invalidator = UserSettingsStateService::new(Arc::new(NoopCache));
     let ctx = Arc::new(ScopeMatchContext {
         config: cfg,
         hash_cache,
         settings: settings_store,
+        cache_invalidator,
     });
 
     // Override the image URL for the seeded rule's emoji_id so the worker
