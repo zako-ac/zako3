@@ -190,11 +190,12 @@ const CONGRATS: &[&str] = &[
     description_localized("en-US", "Play the wedding song"),
     description_localized("ko", "결혼 축하 음악 재생")
 )]
-pub async fn wedding(ctx: Context<'_>,
+pub async fn wedding(
+    ctx: Context<'_>,
     #[description = "Voice channel to play in (default: your current channel)"]
     #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
     #[channel_types("Voice")]
-    channel: Option<serenity::GuildChannel>
+    channel: Option<serenity::GuildChannel>,
 ) -> Result<(), Error> {
     let (guild_id, channel_id) = resolve_play_channel(ctx, channel).await?;
     let tap_id = resolve_tap_id(ctx, "wedding").await?;
