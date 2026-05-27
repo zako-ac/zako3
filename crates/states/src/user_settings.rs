@@ -2,6 +2,12 @@ use zako3_types::hq::{UserId, settings::PartialUserSettings};
 
 use crate::cache_repo::CacheRepositoryRef;
 
+/// Safety-net TTL for cached scope settings. Writes that go through
+/// `UserSettingsService` call the matching `invalidate_*` so this rarely
+/// triggers, but the TTL bounds stale-cache exposure when a write path
+/// forgets to invalidate (e.g. out-of-band schema migrations, manual SQL).
+const SETTINGS_TTL_SECS: u64 = 600;
+
 #[derive(Clone)]
 pub struct UserSettingsStateService {
     cache_repository: CacheRepositoryRef,
@@ -37,7 +43,9 @@ impl UserSettingsStateService {
 
     pub async fn set_user_cached(&self, user_id: &UserId, settings: &PartialUserSettings) {
         if let Ok(raw) = serde_json::to_string(settings) {
-            self.cache_repository.set(&Self::user_key(user_id), &raw).await;
+            self.cache_repository
+                .set_ex(&Self::user_key(user_id), &raw, SETTINGS_TTL_SECS)
+                .await;
         }
     }
 
@@ -54,7 +62,9 @@ impl UserSettingsStateService {
 
     pub async fn set_guild_user_cached(&self, user_id: &UserId, guild_id: &str, settings: &PartialUserSettings) {
         if let Ok(raw) = serde_json::to_string(settings) {
-            self.cache_repository.set(&Self::guild_user_key(user_id, guild_id), &raw).await;
+            self.cache_repository
+                .set_ex(&Self::guild_user_key(user_id, guild_id), &raw, SETTINGS_TTL_SECS)
+                .await;
         }
     }
 
@@ -71,7 +81,9 @@ impl UserSettingsStateService {
 
     pub async fn set_guild_cached(&self, guild_id: &str, settings: &PartialUserSettings) {
         if let Ok(raw) = serde_json::to_string(settings) {
-            self.cache_repository.set(&Self::guild_key(guild_id), &raw).await;
+            self.cache_repository
+                .set_ex(&Self::guild_key(guild_id), &raw, SETTINGS_TTL_SECS)
+                .await;
         }
     }
 
@@ -88,7 +100,9 @@ impl UserSettingsStateService {
 
     pub async fn set_global_cached(&self, settings: &PartialUserSettings) {
         if let Ok(raw) = serde_json::to_string(settings) {
-            self.cache_repository.set(Self::global_key(), &raw).await;
+            self.cache_repository
+                .set_ex(Self::global_key(), &raw, SETTINGS_TTL_SECS)
+                .await;
         }
     }
 
