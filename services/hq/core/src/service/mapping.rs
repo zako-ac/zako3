@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -12,13 +11,18 @@ use hq_types::{
     hq::user::DiscordUserId,
 };
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use zako3_tts_matching::{
     ChannelInfo, MapperInputData as TtsMapperInputData, MapperStepResult, TtsMatchingService,
     UserInfo, WasmMapper,
     service::{DiscordInfoProvider, ProcessContext},
 };
 
-use crate::{CoreError, CoreResult, service::DiscordNameResolverSlot};
+use crate::{
+    CoreError, CoreResult,
+    repo::{PgMapperRepository, PgPipelineRepository},
+    service::DiscordNameResolverSlot,
+};
 
 struct HqDiscordInfoProvider {
     resolver: DiscordNameResolverSlot,
@@ -75,10 +79,11 @@ fn step_to_dto(s: MapperStepResult) -> MapperStepResultDto {
 }
 
 fn mapper_to_dto(m: WasmMapper) -> WasmMapperDto {
+    let wasm_filename = format!("{}.wasm", m.id);
     WasmMapperDto {
         id: m.id,
         name: m.name,
-        wasm_filename: m.wasm_filename,
+        wasm_filename,
         sha256_hash: m.sha256_hash,
         input_data: m.input_data.iter().map(from_tts_input).collect(),
     }
@@ -94,33 +99,17 @@ fn tts_error(e: zako3_tts_matching::Error) -> CoreError {
 #[derive(Clone)]
 pub struct MappingService {
     inner: Arc<TtsMatchingService>,
-    wasm_dir: PathBuf,
     resolver: DiscordNameResolverSlot,
 }
 
 impl MappingService {
-    pub async fn new(
-        wasm_dir: PathBuf,
-        db_path: PathBuf,
-        resolver: DiscordNameResolverSlot,
-    ) -> CoreResult<Self> {
-        tokio::fs::create_dir_all(&wasm_dir)
-            .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
-
-        if let Some(parent) = db_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| CoreError::Internal(e.to_string()))?;
-        }
-
-        let inner = TtsMatchingService::new(wasm_dir.clone(), db_path)
-            .await
-            .map_err(tts_error)?;
+    pub fn new(pool: PgPool, resolver: DiscordNameResolverSlot) -> CoreResult<Self> {
+        let mapper_repo = Arc::new(PgMapperRepository::new(pool.clone()));
+        let pipeline_repo = Arc::new(PgPipelineRepository::new(pool));
+        let inner = TtsMatchingService::new(mapper_repo, pipeline_repo).map_err(tts_error)?;
 
         Ok(Self {
             inner: Arc::new(inner),
-            wasm_dir,
             resolver,
         })
     }
@@ -151,18 +140,12 @@ impl MappingService {
         input_data: Vec<MapperInputData>,
         wasm_bytes: Vec<u8>,
     ) -> CoreResult<WasmMapperDto> {
-        let filename = format!("{}.wasm", id);
-        let path = self.wasm_dir.join(&filename);
         let hash = hex::encode(Sha256::digest(&wasm_bytes));
-
-        tokio::fs::write(&path, &wasm_bytes)
-            .await
-            .map_err(|e| CoreError::Internal(e.to_string()))?;
 
         let mapper = WasmMapper {
             id: id.clone(),
             name,
-            wasm_filename: filename,
+            wasm_bytes,
             sha256_hash: hash,
             input_data: input_data.iter().map(to_tts_input).collect(),
         };
@@ -180,29 +163,23 @@ impl MappingService {
             .await;
         match validation {
             Ok(result) if result.steps.first().map(|s| s.success).unwrap_or(false) => {
-                // Validation passed — return the DTO
                 Ok(mapper_to_dto(created))
             }
             Ok(result) => {
-                // Mapper ran but reported an error
                 let err_msg = result
                     .steps
                     .first()
                     .and_then(|s| s.error.as_deref())
                     .unwrap_or("mapper produced no output")
                     .to_string();
-                // Roll back
                 let _ = self.inner.mapper_repo().delete(&id).await;
-                let _ = tokio::fs::remove_file(&path).await;
                 Err(CoreError::InvalidInput(format!(
                     "Mapper validation failed: {}",
                     err_msg
                 )))
             }
             Err(e) => {
-                // evaluate_mapper itself failed (e.g. WASM is not a valid module)
                 let _ = self.inner.mapper_repo().delete(&id).await;
-                let _ = tokio::fs::remove_file(&path).await;
                 Err(CoreError::InvalidInput(format!(
                     "Mapper validation failed: {}",
                     e
@@ -226,22 +203,17 @@ impl MappingService {
             .map_err(tts_error)?
             .ok_or_else(|| CoreError::NotFound(format!("Mapper '{}' not found", id)))?;
 
-        let (wasm_filename, sha256_hash) = if let Some(bytes) = wasm_bytes {
-            let filename = format!("{}.wasm", id);
-            let path = self.wasm_dir.join(&filename);
+        let (wasm_bytes, sha256_hash) = if let Some(bytes) = wasm_bytes {
             let hash = hex::encode(Sha256::digest(&bytes));
-            tokio::fs::write(&path, &bytes)
-                .await
-                .map_err(|e| CoreError::Internal(e.to_string()))?;
-            (filename, hash)
+            (bytes, hash)
         } else {
-            (existing.wasm_filename, existing.sha256_hash)
+            (existing.wasm_bytes, existing.sha256_hash)
         };
 
         let mapper = WasmMapper {
             id,
             name,
-            wasm_filename,
+            wasm_bytes,
             sha256_hash,
             input_data: input_data.iter().map(to_tts_input).collect(),
         };
@@ -255,11 +227,6 @@ impl MappingService {
     }
 
     pub async fn delete_mapper(&self, id: &str) -> CoreResult<()> {
-        if let Ok(Some(mapper)) = self.inner.mapper_repo().find_by_id(id).await {
-            let path = self.wasm_dir.join(&mapper.wasm_filename);
-            let _ = tokio::fs::remove_file(&path).await;
-        }
-
         self.inner.mapper_repo().delete(id).await.map_err(tts_error)
     }
 

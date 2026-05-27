@@ -9,11 +9,12 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN apt-get update && apt-get install -y cmake libopus-dev pkg-config && rm -rf /var/lib/apt/lists/*
-RUN cargo chef cook --release --bin hq-boot --recipe-path recipe.json
+RUN cargo chef cook --release --bin hq-boot --bin import_mappers --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin hq-boot
+RUN cargo build --release --bin hq-boot --bin import_mappers
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 libopus0 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/hq-boot /usr/local/bin/hq-boot
+COPY --from=builder /app/target/release/import_mappers /usr/local/bin/import_mappers
 CMD ["hq-boot"]

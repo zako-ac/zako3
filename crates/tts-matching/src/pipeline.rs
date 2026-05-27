@@ -1,25 +1,24 @@
 use std::collections::VecDeque;
-use std::path::Path;
 use std::sync::Arc;
 
 use sha2::Digest;
-use tracing::{warn, error};
+use tracing::{error, warn};
 
 use crate::{
+    Result,
     model::{MapperStepResult, MapperSummary},
     repo::MapperRepository,
     service::ProcessContext,
     wasm::{
+        EngineState,
         input::{CallerInfo, MappingList, MapperListPayload, WasmInput},
-        runner, EngineState,
+        runner,
     },
-    Result,
 };
 
 pub(crate) async fn execute_pipeline(
     ordered_ids: Vec<String>,
     ctx: ProcessContext,
-    wasm_dir: &Path,
     mapper_repo: &dyn MapperRepository,
     engine_state: Arc<EngineState>,
 ) -> Result<String> {
@@ -28,7 +27,6 @@ pub(crate) async fn execute_pipeline(
     let mut completed = Vec::new();
 
     while let Some(mapper_id) = remaining.pop_front() {
-        // Load mapper from repo
         let mapper = match mapper_repo.find_by_id(&mapper_id).await {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -41,23 +39,7 @@ pub(crate) async fn execute_pipeline(
             }
         };
 
-        // Load WASM file
-        let wasm_path = wasm_dir.join(&mapper.wasm_filename);
-        let wasm_bytes = match tokio::fs::read(&wasm_path).await {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                warn!(
-                    mapper_id = %mapper_id,
-                    path = ?wasm_path,
-                    error = %e,
-                    "failed to read wasm file, skipping"
-                );
-                continue;
-            }
-        };
-
-        // Verify SHA256
-        let actual_hash = hex::encode(sha2::Sha256::digest(&wasm_bytes));
+        let actual_hash = hex::encode(sha2::Sha256::digest(&mapper.wasm_bytes));
         if actual_hash != mapper.sha256_hash {
             error!(
                 mapper_id = %mapper_id,
@@ -68,8 +50,7 @@ pub(crate) async fn execute_pipeline(
             continue;
         }
 
-        // Get or compile WASM module (cached by hash)
-        let module = match engine_state.get_or_compile(&actual_hash, &wasm_bytes) {
+        let module = match engine_state.get_or_compile(&actual_hash, &mapper.wasm_bytes) {
             Ok(m) => m,
             Err(e) => {
                 error!(
@@ -81,7 +62,6 @@ pub(crate) async fn execute_pipeline(
             }
         };
 
-        // Build WASM input
         let needs_mapping_list = mapper
             .input_data
             .contains(&crate::model::MapperInputData::MappingList);
@@ -136,7 +116,6 @@ pub(crate) async fn execute_pipeline(
 
         let stdin_json = serde_json::to_vec(&wasm_input)?;
 
-        // Run WASM in spawn_blocking
         let rt_handle = tokio::runtime::Handle::current();
         let discord_info = ctx.discord_info.clone();
         let guild_id = ctx.guild_id;
@@ -164,12 +143,10 @@ pub(crate) async fn execute_pipeline(
                     );
                 }
 
-                // Update text if output is non-empty
                 if !out.text.is_empty() {
                     text = out.text;
                 }
 
-                // Handle override
                 if let Some(override_ids) = out.override_future_mappers {
                     remaining = VecDeque::from(override_ids);
                 }
@@ -212,11 +189,10 @@ pub(crate) async fn execute_pipeline(
 
 /// Like [`execute_pipeline`] but returns per-step text transformation results.
 ///
-/// Skipped mappers (not found, hash mismatch, I/O error) are excluded from the returned steps.
+/// Skipped mappers (not found, hash mismatch, compile error) are excluded from the returned steps.
 pub(crate) async fn execute_pipeline_traced(
     ordered_ids: Vec<String>,
     ctx: ProcessContext,
-    wasm_dir: &Path,
     mapper_repo: &dyn MapperRepository,
     engine_state: Arc<EngineState>,
 ) -> Result<(String, Vec<MapperStepResult>)> {
@@ -238,23 +214,13 @@ pub(crate) async fn execute_pipeline_traced(
             }
         };
 
-        let wasm_path = wasm_dir.join(&mapper.wasm_filename);
-        let wasm_bytes = match tokio::fs::read(&wasm_path).await {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                warn!(mapper_id = %mapper_id, path = ?wasm_path, error = %e, "failed to read wasm file, skipping");
-                continue;
-            }
-        };
-
-        let actual_hash = hex::encode(sha2::Sha256::digest(&wasm_bytes));
+        let actual_hash = hex::encode(sha2::Sha256::digest(&mapper.wasm_bytes));
         if actual_hash != mapper.sha256_hash {
             error!(mapper_id = %mapper_id, expected = %mapper.sha256_hash, actual = %actual_hash, "sha256 mismatch, skipping mapper");
             continue;
         }
 
-        // Get or compile WASM module (cached by hash)
-        let module = match engine_state.get_or_compile(&actual_hash, &wasm_bytes) {
+        let module = match engine_state.get_or_compile(&actual_hash, &mapper.wasm_bytes) {
             Ok(m) => m,
             Err(e) => {
                 error!(mapper_id = %mapper_id, error = %e, "failed to compile wasm module, skipping");
@@ -262,32 +228,56 @@ pub(crate) async fn execute_pipeline_traced(
             }
         };
 
-        let needs_mapping_list = mapper.input_data.contains(&crate::model::MapperInputData::MappingList);
-        let needs_caller_info = mapper.input_data.contains(&crate::model::MapperInputData::CallerInfo);
-        let needs_mapper_list = mapper.input_data.contains(&crate::model::MapperInputData::MapperList);
-        let needs_discord_info = mapper.input_data.contains(&crate::model::MapperInputData::DiscordInfo);
+        let needs_mapping_list = mapper
+            .input_data
+            .contains(&crate::model::MapperInputData::MappingList);
+        let needs_caller_info = mapper
+            .input_data
+            .contains(&crate::model::MapperInputData::CallerInfo);
+        let needs_mapper_list = mapper
+            .input_data
+            .contains(&crate::model::MapperInputData::MapperList);
+        let needs_discord_info = mapper
+            .input_data
+            .contains(&crate::model::MapperInputData::DiscordInfo);
 
         let future_ids: Vec<String> = remaining.iter().cloned().collect();
 
         let wasm_input = WasmInput {
             text: &text,
             mapping_list: if needs_mapping_list {
-                Some(MappingList { text_rules: &ctx.text_mappings, emoji_rules: &ctx.emoji_mappings })
+                Some(MappingList {
+                    text_rules: &ctx.text_mappings,
+                    emoji_rules: &ctx.emoji_mappings,
+                })
             } else {
                 None
             },
             caller_info: if needs_caller_info {
-                Some(CallerInfo { user_id: ctx.caller.0.clone() })
+                Some(CallerInfo {
+                    user_id: ctx.caller.0.clone(),
+                })
             } else {
                 None
             },
             mapper_list: if needs_mapper_list {
-                Some(MapperListPayload { previous: &completed, future: &future_ids })
+                Some(MapperListPayload {
+                    previous: &completed,
+                    future: &future_ids,
+                })
             } else {
                 None
             },
-            guild_id: if needs_discord_info { Some(ctx.guild_id.into()) } else { None },
-            channel_id: if needs_discord_info { Some(ctx.channel_id.into()) } else { None },
+            guild_id: if needs_discord_info {
+                Some(ctx.guild_id.into())
+            } else {
+                None
+            },
+            channel_id: if needs_discord_info {
+                Some(ctx.channel_id.into())
+            } else {
+                None
+            },
         };
 
         let stdin_json = serde_json::to_vec(&wasm_input)?;
@@ -299,7 +289,14 @@ pub(crate) async fn execute_pipeline_traced(
         let mapper_name = mapper.name.clone();
 
         let output = tokio::task::spawn_blocking(move || {
-            runner::run_mapper_sync(&module, stdin_json, needs_discord_info, rt_handle, discord_info, guild_id)
+            runner::run_mapper_sync(
+                &module,
+                stdin_json,
+                needs_discord_info,
+                rt_handle,
+                discord_info,
+                guild_id,
+            )
         })
         .await;
 
@@ -318,7 +315,11 @@ pub(crate) async fn execute_pipeline_traced(
                 }
 
                 let success = error.is_none();
-                completed.push(MapperSummary { id: mapper_id.clone(), name: mapper_name.clone(), success });
+                completed.push(MapperSummary {
+                    id: mapper_id.clone(),
+                    name: mapper_name.clone(),
+                    success,
+                });
                 steps.push(MapperStepResult {
                     mapper_id,
                     mapper_name,
@@ -330,7 +331,11 @@ pub(crate) async fn execute_pipeline_traced(
             }
             Ok(Err(e)) => {
                 warn!(mapper_id = %mapper_id, error = %e, "mapper execution failed");
-                completed.push(MapperSummary { id: mapper_id.clone(), name: mapper_name.clone(), success: false });
+                completed.push(MapperSummary {
+                    id: mapper_id.clone(),
+                    name: mapper_name.clone(),
+                    success: false,
+                });
                 steps.push(MapperStepResult {
                     mapper_id,
                     mapper_name,
@@ -342,7 +347,11 @@ pub(crate) async fn execute_pipeline_traced(
             }
             Err(e) => {
                 warn!(mapper_id = %mapper_id, error = %e, "spawn_blocking join error");
-                completed.push(MapperSummary { id: mapper_id.clone(), name: mapper_name.clone(), success: false });
+                completed.push(MapperSummary {
+                    id: mapper_id.clone(),
+                    name: mapper_name.clone(),
+                    success: false,
+                });
                 steps.push(MapperStepResult {
                     mapper_id,
                     mapper_name,

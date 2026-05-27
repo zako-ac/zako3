@@ -1,22 +1,6 @@
 {{- $fullname := include "zako3.fullname" . }}
 {{- $hqSecretName := printf "%s-hq-secret" $fullname }}
 {{- $existingSecret := .Values.hq.existingSecret.name }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ $fullname }}-hq-data
-  labels:
-    {{- include "zako3.labels" . | nindent 4 }}
-spec:
-  {{- if .Values.storageClass }}
-  storageClassName: {{ .Values.storageClass | quote }}
-  {{- end }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.hq.storageSize }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,10 +53,6 @@ spec:
               value: "0.0.0.0:{{ .Values.ports.hqRpc }}"
             - name: DISCORD_REDIRECT_URI
               value: {{ .Values.hq.discordRedirectUri | quote }}
-            - name: MAPPER_WASM_DIR
-              value: {{ .Values.hq.mapperWasmDir | quote }}
-            - name: MAPPER_DB_PATH
-              value: {{ .Values.hq.mapperDbPath | quote }}
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
             - name: REDIS_URL
@@ -135,13 +115,6 @@ spec:
               port: metrics
             initialDelaySeconds: 30
             periodSeconds: 15
-          volumeMounts:
-            - name: data
-              mountPath: /var/hq
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: {{ $fullname }}-hq-data
 ---
 apiVersion: v1
 kind: Service

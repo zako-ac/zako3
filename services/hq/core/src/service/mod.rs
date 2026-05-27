@@ -143,12 +143,7 @@ impl Service {
             name_resolver_slot.clone(),
         );
 
-        let mapping = MappingService::new(
-            config.mapper_wasm_dir.clone(),
-            config.mapper_db_path.clone(),
-            name_resolver_slot.clone(),
-        )
-        .await?;
+        let mapping = MappingService::new(pool.clone(), name_resolver_slot.clone())?;
 
         let guild_settings_repo = Arc::new(PgGuildSettingsRepository::new(pool.clone()));
         let user_guild_settings_repo = Arc::new(PgUserGuildSettingsRepository::new(pool.clone()));

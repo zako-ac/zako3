@@ -41,6 +41,7 @@ jobs:
           mkdir -p dist
           cp target/release/zako3-audio-engine-controller \
              target/release/hq-boot \
+             target/release/import_mappers \
              target/release/zako3-taphub-core \
              target/release/cache-gc \
              target/release/metrics-sync \

@@ -1,22 +1,15 @@
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("database error: {0}")]
-    Db(#[from] rusqlite::Error),
-
-    #[error("i/o error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("repository error: {0}")]
+    Repository(String),
 
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
 
     #[error("wasm error: {0}")]
     Wasm(#[from] wasmtime::Error),
-
-    #[error("wasm file not found: {path}")]
-    WasmNotFound { path: PathBuf },
 
     #[error("sha256 mismatch for {mapper_id}: expected {expected}, got {actual}")]
     HashMismatch {

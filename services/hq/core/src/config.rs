@@ -2,7 +2,6 @@ use crate::CoreResult;
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -19,8 +18,6 @@ pub struct AppConfig {
     pub rpc_admin_token: String,
     pub zako_website_url: String,
     pub traffic_light_url: String,
-    pub mapper_wasm_dir: PathBuf,
-    pub mapper_db_path: PathBuf,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
     pub sub_bot_ids: Vec<String>,
@@ -49,8 +46,6 @@ impl AppConfig {
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             traffic_light_url: env::var("TRAFFIC_LIGHT_URL")
                 .unwrap_or_else(|_| "127.0.0.1:7070".to_string()),
-            mapper_wasm_dir: env::var("MAPPER_WASM_DIR").map(PathBuf::from)?,
-            mapper_db_path: env::var("MAPPER_DB_PATH").map(PathBuf::from)?,
             otlp_endpoint: env::var("OTLP_ENDPOINT").ok(),
             metrics_port: env::var("METRICS_PORT")
                 .ok()

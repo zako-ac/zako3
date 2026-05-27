@@ -72,8 +72,6 @@ services:
       DISCORD_REDIRECT_URI: ${HQ_DISCORD_REDIRECT_URI:-http://localhost:8080/auth/callback}
       DISCORD_BOT_TOKEN: ${HQ_DISCORD_BOT_TOKEN:?HQ_DISCORD_BOT_TOKEN is required}
       JWT_SECRET: ${HQ_JWT_SECRET:?HQ_JWT_SECRET is required}
-      MAPPER_WASM_DIR: /tmp/hq-mappers
-      MAPPER_DB_PATH: /tmp/hq-mappers.db
       OTLP_ENDPOINT: http://otel-lgtm:4317
       METRICS_PORT: "9091"
     ports:

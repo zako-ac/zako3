@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 /// Metadata for a registered WASM text transformation mapper.
 ///
 /// A mapper is a WASM module that processes TTS text through a transformation pipeline.
-/// It is identified by a unique `id`, stored on disk as a `.wasm` file, and verified
-/// by SHA-256 hash to ensure integrity.
+/// It is identified by a unique `id`, stores its compiled WASM bytes inline, and
+/// is verified by SHA-256 hash to ensure integrity.
 ///
 /// # Fields
 /// - `id`: Unique identifier, used to reference the mapper in the pipeline
 /// - `name`: Human-readable name for display purposes
-/// - `wasm_filename`: Name of the `.wasm` file in the mapper directory (e.g., `"lowercase.wasm"`)
-/// - `sha256_hash`: SHA-256 hash of the WASM file (hex-encoded), used for integrity verification
+/// - `wasm_bytes`: The compiled WASM module bytes
+/// - `sha256_hash`: SHA-256 hash of `wasm_bytes` (hex-encoded), used for integrity verification
 /// - `input_data`: List of input data types the mapper requires from the host
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmMapper {
@@ -18,9 +18,9 @@ pub struct WasmMapper {
     pub id: String,
     /// Human-readable name
     pub name: String,
-    /// WASM filename in the mapper storage directory
-    pub wasm_filename: String,
-    /// SHA-256 hash (hex-encoded) of the WASM file for integrity checks
+    /// Compiled WASM module bytes
+    pub wasm_bytes: Vec<u8>,
+    /// SHA-256 hash (hex-encoded) of `wasm_bytes` for integrity checks
     pub sha256_hash: String,
     /// List of input data types this mapper requires (if any)
     pub input_data: Vec<MapperInputData>,
