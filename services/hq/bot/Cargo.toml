@@ -16,4 +16,5 @@ dotenvy = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 zako3-states = { workspace = true, features = ["redis"] }
+zako3-emoji-matcher-proto = { workspace = true }
 dashmap.workspace = true

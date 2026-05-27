@@ -14,6 +14,8 @@ use axum::{
 };
 use dashmap::DashMap;
 use tokio::net::TcpListener;
+use tower_http::trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 pub use state::AppState;
@@ -41,6 +43,11 @@ pub fn build(
         .route("/metadata", post(entry::store_metadata))
         .route("/healthz", get(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(state.clone(), auth::admin_token))
+        .layer(
+            TraceLayer::new_for_http()
+                .on_request(DefaultOnRequest::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .with_state(state)
 }
 

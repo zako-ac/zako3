@@ -10,8 +10,9 @@ use serenity::{
     async_trait,
 };
 use tracing::instrument;
+use zako3_emoji_matcher_proto::EmojiScopeMatchRequest;
 
-use crate::util::VoiceStateExt;
+use crate::util::{VoiceStateExt, extract_custom_emojis};
 
 pub struct MessageCreateHandler {
     pub service: Arc<Service>,
@@ -63,6 +64,27 @@ async fn handle_message_create(
 
     let message_channel_id = ChannelId::from(msg.channel_id.get());
     let author_id = DiscordUserId::from(msg.author.id.get().to_string());
+
+    // Fire-and-forget: ask the emoji-matcher worker to scan this user's scopes
+    // for any near-identical existing emoji rule and auto-add a mapping.
+    if let Some(publisher) = service.emoji_match_publisher.as_ref() {
+        let author_hq_id = service
+            .tap
+            .get_user_by_discord_id(&author_id.to_string())
+            .await
+            .ok()
+            .flatten()
+            .map(|u| u.id.0);
+        for emoji in extract_custom_emojis(&msg.content) {
+            publisher.notify(EmojiScopeMatchRequest {
+                emoji_id: emoji.id,
+                emoji_name: emoji.name,
+                emoji_animated: emoji.animated,
+                guild_id: guild_id.to_string(),
+                user_id: author_hq_id.clone(),
+            });
+        }
+    }
 
     if service.tts_channel.is_enabled(&message_channel_id).await? {
         let content = msg.content.trim();

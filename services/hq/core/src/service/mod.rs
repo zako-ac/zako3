@@ -25,6 +25,8 @@ pub use mapping::MappingService;
 pub use playback::{PlaybackService, UserVoiceInfo};
 pub mod audio_engine;
 pub use audio_engine::AudioEngineService;
+pub mod emoji_match_publisher;
+pub use emoji_match_publisher::EmojiMatchPublisher;
 
 use crate::repo::{
     PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
@@ -60,6 +62,7 @@ pub struct Service {
     pub name_resolver_slot: DiscordNameResolverSlot,
     pub tts_channel: TTSChannelService,
     pub audio_engine: AudioEngineService,
+    pub emoji_match_publisher: Option<EmojiMatchPublisher>,
 }
 
 impl Service {
@@ -149,6 +152,20 @@ impl Service {
         let user_guild_settings_repo = Arc::new(PgUserGuildSettingsRepository::new(pool.clone()));
         let global_settings_repo = Arc::new(PgGlobalSettingsRepository::new(pool.clone()));
 
+        let emoji_match_publisher = match config.nats_url.as_deref() {
+            Some(url) => match EmojiMatchPublisher::connect(url).await {
+                Ok(p) => Some(p),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to connect emoji-match publisher; continuing without it");
+                    None
+                }
+            },
+            None => {
+                tracing::info!("NATS_URL not set; emoji-match publisher disabled");
+                None
+            }
+        };
+
         Ok(Self {
             config: config.clone(),
             auth: AuthService::new(config.clone(), user_repo.clone(), redis_repo.clone()),
@@ -173,6 +190,7 @@ impl Service {
             name_resolver_slot,
             tts_channel: TTSChannelService::new(tts_channel_repo),
             audio_engine: audio_engine_service,
+            emoji_match_publisher,
         })
     }
 }

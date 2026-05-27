@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
@@ -31,12 +30,9 @@ pub struct RemoteAudioCache {
 
 impl RemoteAudioCache {
     pub fn new(base_url: impl Into<String>, admin_token: Option<String>) -> reqwest::Result<Self> {
-        let http = reqwest::Client::builder()
-            // Audio uploads can run as long as the upstream Tap streams.
-            // Disable the request timeout; rely on TCP keepalive and the caller's
-            // own timeout (taphub uses `request_timeout`).
-            .timeout(Duration::from_secs(0))
-            .build()?;
+        // No total-request timeout: audio uploads stream as long as the upstream
+        // Tap keeps sending. taphub enforces its own per-request timeout.
+        let http = reqwest::Client::builder().build()?;
         Ok(Self {
             http,
             base_url: base_url.into().trim_end_matches('/').to_string(),

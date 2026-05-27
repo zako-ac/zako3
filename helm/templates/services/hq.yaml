@@ -59,6 +59,8 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: TRAFFIC_LIGHT_URL
               value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
+            - name: NATS_URL
+              value: "nats://{{ $fullname }}-nats:4222"
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
             - name: TOKIO_CONSOLE_BIND

@@ -10,6 +10,7 @@ members = [
     "crates/taphub-transport/lib",
     "crates/taphub-transport/server",
     "crates/tts-matching",
+    "crates/emoji-matcher-proto",
 
     "libs/*",
     "services/*/*",
@@ -31,6 +32,7 @@ zako3-states = { path = "crates/states" }
 zako3-metrics = { path = "crates/metrics" }
 
 zako3-tts-matching = { path = "crates/tts-matching" }
+zako3-emoji-matcher-proto = { path = "crates/emoji-matcher-proto" }
 
 zakofish = { path = "libs/zakofish", version = "0.1.1" }
 zakofish-taphub = { path = "crates/zakofish-taphub" }

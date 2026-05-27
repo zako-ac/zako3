@@ -1,0 +1,55 @@
+{{- $fullname := include "zako3.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-emoji-matcher
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: emoji-matcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "emoji-matcher" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "emoji-matcher" "Release" .Release) | nindent 8 }}
+    spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.emojiMatcher.nodeAffinity) | nindent 6 }}
+      containers:
+        - name: emoji-matcher
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "emoji-matcher" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.emojiMatcher.httpPort | int }}
+          env:
+            - name: HTTP_ADDR
+              value: "0.0.0.0:{{ .Values.emojiMatcher.httpPort }}"
+            - name: NATS_URL
+              value: "nats://{{ $fullname }}-nats:4222"
+            - name: DATABASE_URL
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-postgres-secret" $fullname)
+                    "existingName" .Values.postgres.existingSecret.name
+                    "key" .Values.postgres.existingSecret.databaseUrlKey) | nindent 16 }}
+            - name: OTLP_ENDPOINT
+              value: {{ include "zako3.otlpEndpoint" . | quote }}
+            - name: WORKER_CONCURRENCY
+              value: {{ .Values.emojiMatcher.workerConcurrency | quote }}
+            - name: MATCH_HAMMING_THRESHOLD
+              value: {{ .Values.emojiMatcher.matchHammingThreshold | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15

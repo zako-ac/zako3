@@ -126,6 +126,13 @@ metricsSync:
   nodeAffinity: {}
   syncIntervalSeconds: 60
 
+# --- Emoji matcher worker ---
+emojiMatcher:
+  nodeAffinity: {}
+  httpPort: 9093
+  workerConcurrency: 8
+  matchHammingThreshold: 4
+
 # --- Ports ---
 ports:
   hqBackend: 8080

@@ -74,12 +74,14 @@ services:
       JWT_SECRET: ${HQ_JWT_SECRET:?HQ_JWT_SECRET is required}
       OTLP_ENDPOINT: http://otel-lgtm:4317
       METRICS_PORT: "9091"
+      NATS_URL: nats://nats:4222
     ports:
       - "8080:8080"
       - "50052:50052"
     depends_on:
       - postgres
       - otel-lgtm
+      - nats
 
   taphub:
     build:
@@ -152,6 +154,20 @@ services:
     depends_on:
       - timescale
       - redis
+
+  emoji-matcher:
+    build:
+      context: .
+      dockerfile: workers/emoji-matcher/Dockerfile.dev
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-zako3}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-zako3}
+      NATS_URL: nats://nats:4222
+      HTTP_ADDR: "0.0.0.0:9093"
+      OTLP_ENDPOINT: http://otel-lgtm:4317
+    depends_on:
+      - postgres
+      - nats
+      - otel-lgtm
 
 volumes:
   pg-data:

@@ -5,18 +5,23 @@ pub mod http;
 pub mod logging;
 pub mod metrics;
 pub mod store;
+pub mod task_queue;
 pub mod types;
 pub mod utils;
 
-use crate::config::AppConfig;
-use crate::handlers::match_nats::start_match_handler;
-use crate::handlers::register_nats::start_register_handler;
-use crate::http::{IS_HEALTHY, spawn_http_server};
-use crate::store::PgEmojiStore;
 use std::sync::{Arc, atomic::Ordering};
 
+use sqlx::postgres::PgPoolOptions;
+
+use crate::config::AppConfig;
+use crate::handlers::scope_match::ScopeMatchContext;
+use crate::handlers::scope_match_nats::start_scope_match_handler;
+use crate::http::{IS_HEALTHY, spawn_http_server};
+use crate::store::{PgHashCache, PgSettingsStore};
+use crate::task_queue::TaskQueue;
+
 pub async fn run() -> anyhow::Result<()> {
-    let config = AppConfig::load();
+    let config = Arc::new(AppConfig::load());
     logging::init_logging(config.otlp_endpoint.clone());
 
     spawn_http_server(&config.http_addr).await;
@@ -25,17 +30,28 @@ pub async fn run() -> anyhow::Result<()> {
     let client = Arc::new(async_nats::connect(&config.nats_url).await?);
     tracing::info!("Connected to NATS.");
 
-    tracing::info!("Initializing emoji store.");
-    let emoji_store = Arc::new(PgEmojiStore::new(&config.database_url).await?);
-    tracing::info!("Emoji store initialized.");
+    tracing::info!("Connecting to Postgres.");
+    let pool = PgPoolOptions::new()
+        .max_connections(16)
+        .connect(&config.database_url)
+        .await?;
 
-    start_register_handler(client.clone(), emoji_store.clone()).await?;
-    start_match_handler(client.clone(), emoji_store.clone()).await?;
+    let hash_cache = Arc::new(PgHashCache::new(pool.clone()).await?);
+    let settings_store = Arc::new(PgSettingsStore::new(pool));
+
+    let ctx = Arc::new(ScopeMatchContext {
+        config: config.clone(),
+        hash_cache,
+        settings: settings_store,
+    });
+
+    let queue = TaskQueue::spawn(ctx, config.worker_concurrency, config.queue_capacity);
+
+    start_scope_match_handler(client, queue).await?;
 
     IS_HEALTHY.store(true, Ordering::Relaxed);
     tracing::info!("App started.");
 
-    // Keep the main thread alive
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down.");
 

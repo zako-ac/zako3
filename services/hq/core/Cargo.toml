@@ -30,3 +30,5 @@ zako3-tl-client = { workspace = true }
 zako3-tts-matching.workspace = true
 futures-util = "0.3.32"
 zako3-metrics.workspace = true
+async-nats = { workspace = true }
+zako3-emoji-matcher-proto = { workspace = true }

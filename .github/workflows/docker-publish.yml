@@ -32,7 +32,7 @@ jobs:
         run: df -h
 
       - name: Build all binaries
-        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl --exclude zako3-tap-sdk --exclude zako3-emoji-matcher
+        run: cargo build --release --workspace --exclude zako3-tts-matching-sdk --exclude zakoctl --exclude zako3-tap-sdk
         env:
           CARGO_INCREMENTAL: 1
 
@@ -46,6 +46,7 @@ jobs:
              target/release/cache \
              target/release/metrics-sync \
              target/release/traffic-light \
+             target/release/zako3-emoji-matcher \
              dist/
 
       - name: Upload binaries
@@ -82,6 +83,9 @@ jobs:
             artifact: rust-binaries
           - name: traffic-light
             dockerfile: services/traffic-light/Dockerfile
+            artifact: rust-binaries
+          - name: emoji-matcher
+            dockerfile: workers/emoji-matcher/Dockerfile
             artifact: rust-binaries
 
     steps:

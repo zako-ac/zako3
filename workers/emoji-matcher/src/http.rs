@@ -2,9 +2,7 @@ use crate::metrics;
 use axum::response::IntoResponse;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-lazy_static::lazy_static! {
-    pub static ref IS_HEALTHY: AtomicBool = AtomicBool::new(false);
-}
+pub static IS_HEALTHY: AtomicBool = AtomicBool::new(false);
 
 pub async fn get_healthy() -> impl IntoResponse {
     if IS_HEALTHY.load(Ordering::Relaxed) {

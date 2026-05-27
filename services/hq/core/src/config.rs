@@ -22,6 +22,7 @@ pub struct AppConfig {
     pub metrics_port: Option<u16>,
     pub sub_bot_ids: Vec<String>,
     pub bot_invite_permissions: String,
+    pub nats_url: Option<String>,
 }
 
 impl AppConfig {
@@ -60,6 +61,7 @@ impl AppConfig {
                 .collect(),
             bot_invite_permissions: env::var("BOT_INVITE_PERMISSIONS")
                 .unwrap_or_else(|_| "4895026873161728".to_string()),
+            nats_url: env::var("NATS_URL").ok().filter(|s| !s.is_empty()),
         })
     }
 }
