@@ -30,7 +30,7 @@ async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
             if error.is_internal() {
                 tracing::error!("Internal bot error in command '{}': {:?}", ctx.command().name, error);
             }
-            let embed = ui::embeds::error_embed(error.to_user_message());
+            let embed = ui::embeds::error_embed(error.to_user_message().as_ref());
             let reply = poise::CreateReply::default().embed(embed).ephemeral(true);
             if let Err(e) = ctx.send(reply).await {
                 tracing::error!("Failed to send error reply: {e:?}");

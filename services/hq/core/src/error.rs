@@ -32,6 +32,8 @@ pub enum CoreError {
     StateError(#[from] zako3_states::StateServiceError),
     #[error("Metrics error: {0}")]
     MetricsError(#[from] zako3_metrics::MetricsError),
+    #[error(transparent)]
+    TapHub(#[from] hq_types::TapHubError),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

@@ -12,7 +12,7 @@ use zako3_taphub_transport_client::TransportClient;
 use zako3_taphub_transport_server::{TapHubBridgeHandler, TransportServer};
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
-    CachedAudioRequest,
+    CachedAudioRequest, TapHubError,
 };
 
 struct MockHandler;
@@ -23,7 +23,7 @@ impl TapHubBridgeHandler for MockHandler {
         &self,
         req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), String> {
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError> {
         let (tx, rx) = mpsc::channel(10);
 
         let meta = AudioMetaResponse {
@@ -46,7 +46,7 @@ impl TapHubBridgeHandler for MockHandler {
         &self,
         req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         Ok(AudioMetaResponse {
             cache_key: req.cache_key.clone(),
             metadatas: vec![
@@ -61,7 +61,7 @@ impl TapHubBridgeHandler for MockHandler {
         &self,
         _req: AudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         Ok(AudioMetaResponse {
             cache_key: AudioCachePolicy {
                 cache_type: AudioCacheType::CacheKey("meta_key".to_string()),
@@ -79,7 +79,7 @@ impl TapHubBridgeHandler for MockHandler {
         &self,
         _req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), TapHubError> {
         Ok(())
     }
 }

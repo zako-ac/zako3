@@ -4,8 +4,9 @@ use chrono::Utc;
 use opentelemetry::global;
 use sha2::Digest;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use zakofish_taphub::ZakofishError;
 use zako3_types::{
-    AudioMetaResponse, AudioRequest,
+    AudioMetaResponse, AudioRequest, TapHubError,
     cache::{AudioCacheItem, AudioCacheItemKey},
 };
 
@@ -14,7 +15,7 @@ use crate::hub::TapHub;
 pub(crate) async fn handle_request_audio_meta_inner(
     tap_hub: &TapHub,
     req: AudioRequest,
-) -> Result<AudioMetaResponse, String> {
+) -> Result<AudioMetaResponse, TapHubError> {
     let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
     let span = tracing::info_span!("audio.meta_request", tap_id = %req.tap_id.0);
     let _ = span.set_parent(parent_cx);
@@ -39,13 +40,20 @@ pub(crate) async fn handle_request_audio_meta_inner(
         });
     }
 
-    // Request metadata from connection, with fallback to cache if unavailable
-    let meta = 'fetch: {
+    // Request metadata from connection. A connection-level miss falls back to
+    // cache; a tap-script-authored failure is propagated unchanged so the user
+    // sees the tap's own reason instead of the generic "unavailable" message.
+    enum FetchOutcome<M> {
+        Ok(M),
+        ConnectionUnavailable,
+        TapFailure { reason: String, try_others: bool },
+    }
+
+    let outcome = 'fetch: {
         let Ok((connection_id, _disconnect_rx)) = tap_hub.select_connection(&tap_id).await else {
-            // Connection unavailable — break and try cache fallback
-            break 'fetch None;
+            break 'fetch FetchOutcome::ConnectionUnavailable;
         };
-        tap_hub
+        match tap_hub
             .zf_hub
             .request_audio_metadata(
                 tap_id.clone(),
@@ -54,12 +62,24 @@ pub(crate) async fn handle_request_audio_meta_inner(
                 req.headers.clone(),
             )
             .await
-            .ok()
+        {
+            Ok(m) => FetchOutcome::Ok(m),
+            Err(ZakofishError::TapRequestFailure { reason, try_others }) => {
+                FetchOutcome::TapFailure { reason, try_others }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "request_audio_metadata transport error; falling back");
+                FetchOutcome::ConnectionUnavailable
+            }
+        }
     };
 
-    let meta = match meta {
-        Some(m) => m,
-        None => {
+    let meta = match outcome {
+        FetchOutcome::Ok(m) => m,
+        FetchOutcome::TapFailure { reason, try_others } => {
+            return Err(TapHubError::TapScript { reason, try_others });
+        }
+        FetchOutcome::ConnectionUnavailable => {
             // Final cache fallback: metadata may have been populated concurrently
             // or may exist from prior audio request.
             if let Some(entry) = tap_hub.audio_cache.get_entry(&tap_id, &meta_key).await {
@@ -70,7 +90,7 @@ pub(crate) async fn handle_request_audio_meta_inner(
                     base_volume: tap.base_volume,
                 });
             }
-            return Err("Tap unavailable and no cached metadata found".to_string());
+            return Err(TapHubError::TapUnavailable);
         }
     };
 

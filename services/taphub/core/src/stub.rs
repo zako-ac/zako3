@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use zako3_taphub_transport_server::TapHubBridgeHandler;
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
-    CachedAudioRequest,
+    CachedAudioRequest, TapHubError,
 };
 
 use crate::app::App;
@@ -17,7 +17,7 @@ impl TapHubBridgeHandler for App {
         &self,
         request: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), TapHubError> {
         let (tx, rx) = mpsc::channel(1000);
         let is_sine = request.audio_request.to_string().contains("sine");
 
@@ -93,7 +93,7 @@ impl TapHubBridgeHandler for App {
         &self,
         _req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         Ok(AudioMetaResponse {
             metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
             cache_key: AudioCachePolicy {
@@ -108,7 +108,7 @@ impl TapHubBridgeHandler for App {
         &self,
         _req: AudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         Ok(AudioMetaResponse {
             metadatas: vec![AudioMetadata::Title("Dummy Title".to_string())],
             cache_key: AudioCachePolicy {
@@ -123,7 +123,7 @@ impl TapHubBridgeHandler for App {
         &self,
         _req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), TapHubError> {
         Ok(())
     }
 }

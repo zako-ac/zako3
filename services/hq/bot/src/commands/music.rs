@@ -113,7 +113,7 @@ pub async fn play(
             if e.is_internal() {
                 tracing::error!("play command error: {e:?}");
             }
-            let embed = ui::embeds::error_embed(e.to_user_message());
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
             reply_handle
                 .edit(ctx, poise::CreateReply::default().content("").embed(embed))
                 .await?;

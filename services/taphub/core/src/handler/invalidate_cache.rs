@@ -1,4 +1,4 @@
-use zako3_types::CachedAudioRequest;
+use zako3_types::{CachedAudioRequest, TapHubError};
 
 use crate::hub::TapHub;
 
@@ -7,7 +7,7 @@ use super::cache::build_cache_item;
 pub(crate) async fn handle_invalidate_cache_inner(
     tap_hub: &TapHub,
     request: CachedAudioRequest,
-) -> Result<(), String> {
+) -> Result<(), TapHubError> {
     let tap_id = request.tap_id.clone();
 
     let Some(item) =
@@ -20,7 +20,7 @@ pub(crate) async fn handle_invalidate_cache_inner(
         .audio_cache
         .delete(&item.tap_id, &item.key)
         .await
-        .map_err(|e| format!("Failed to delete cache: {}", e))?;
+        .map_err(|e| TapHubError::Internal(format!("Failed to delete cache: {}", e)))?;
 
     tracing::warn!(
         tap_id = %tap_id.0,

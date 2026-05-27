@@ -13,6 +13,7 @@ use zako3_types::{AudioCachePolicy, AudioCacheType, AudioMetadata};
 use std::sync::Arc;
 use zako3_audio_engine_core::error::ZakoError;
 use zako3_taphub_transport_client::TransportClient;
+use zako3_types::TapHubError;
 
 pub struct RealTapHubService {
     client: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>>,
@@ -34,7 +35,11 @@ impl RealTapHubService {
             .lock()
             .await
             .clone()
-            .ok_or_else(|| ZakoError::TapHub("taphub not yet connected".to_string()))
+            .ok_or_else(|| {
+                ZakoError::TapHub(TapHubError::Internal(
+                    "taphub not yet connected".to_string(),
+                ))
+            })
     }
 }
 

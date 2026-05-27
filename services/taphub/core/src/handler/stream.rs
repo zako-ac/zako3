@@ -1,17 +1,17 @@
 use bytes::Bytes;
-use protofish2::mani::transfer::recv::TransferReliableRecvStream;
 use tokio::sync::{mpsc, oneshot, watch};
+use zakofish_taphub::RelChunkStream;
 
 use crate::metrics;
 
 /// Bridge a reliable stream to an `mpsc::Receiver<Bytes>`.
 /// Also returns a oneshot that fires `()` only when the stream ends naturally
-/// via TransferEnd/TransferEndAck AND the Tap has not disconnected.
-/// If the Tap disconnects mid-stream (disconnect_rx becomes `true`) the task
-/// exits without firing done_tx, so `done_rx.await` returns `Err` — preventing
-/// partial audio from being committed to cache.
+/// AND the Tap has not disconnected. If the Tap disconnects mid-stream
+/// (`disconnect_rx` becomes `true`) the task exits without firing `done_tx`,
+/// so `done_rx.await` returns `Err` — preventing partial audio from being
+/// committed to cache.
 pub(crate) fn bridge_rel(
-    mut rel: TransferReliableRecvStream,
+    mut rel: RelChunkStream,
     mut disconnect_rx: watch::Receiver<bool>,
 ) -> (mpsc::Receiver<Bytes>, oneshot::Receiver<()>) {
     let (tx, rx) = mpsc::channel(100);
@@ -19,7 +19,6 @@ pub(crate) fn bridge_rel(
     tokio::spawn(async move {
         metrics::metrics().active_streams.add(1, &[]);
 
-        // Already disconnected before the stream even started.
         if *disconnect_rx.borrow() {
             tracing::warn!(
                 "Tap already disconnected before stream started; stream will not be cached"
@@ -31,23 +30,18 @@ pub(crate) fn bridge_rel(
         'outer: loop {
             tokio::select! {
                 biased;
-                // Disconnect takes priority — checked first each iteration.
                 _ = disconnect_rx.changed() => {
                     tracing::warn!("Tap disconnected mid-stream; aborting and discarding stream");
-                    break 'outer; // done_tx dropped → cache discards partial data
+                    break 'outer;
                 }
-                chunks_opt = rel.recv() => {
-                    match chunks_opt {
-                        Some(chunks) => {
-                            for chunk in chunks {
-                                if tx.send(chunk.content).await.is_err() {
-                                    break 'outer;
-                                }
+                chunk_opt = rel.recv() => {
+                    match chunk_opt {
+                        Some(chunk) => {
+                            if tx.send(chunk).await.is_err() {
+                                break 'outer;
                             }
                         }
                         None => {
-                            // Stream ended. Only consider it a clean TransferEnd
-                            // if the Tap is still connected at this point.
                             if !*disconnect_rx.borrow() {
                                 let _ = done_tx.send(());
                             } else {

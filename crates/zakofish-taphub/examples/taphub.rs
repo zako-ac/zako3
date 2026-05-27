@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handler = Arc::new(SimpleHubHandler { tap_connected_tx });
 
     // Instantiate the Hub
-    let hub = Arc::new(ZakofishHub::new(server_config, handler)?);
+    let hub = Arc::new(ZakofishHub::new(Some(server_config), None, handler)?);
     println!("Hub: Listening on {}", hub.local_addr()?);
 
     // Run the hub in the background
@@ -98,17 +98,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut recv_stream = recv_stream.expect("example expects Dual transfer mode");
                 // 2. Receive the audio data stream
-                while let Some(chunks) = recv_stream.recv().await {
-                    for chunk in chunks {
-                        let ts = chunk.timestamp;
-                        let payload = chunk.content;
-                        println!(
-                            "Hub: Received chunk from Tap! Timestamp: {:?}, Size: {} bytes, Data: {:?}",
-                            ts,
-                            payload.len(),
-                            String::from_utf8_lossy(&payload)
-                        );
-                    }
+                while let Some(payload) = recv_stream.recv().await {
+                    println!(
+                        "Hub: Received chunk from Tap! Size: {} bytes, Data: {:?}",
+                        payload.len(),
+                        String::from_utf8_lossy(&payload)
+                    );
                 }
 
                 println!("Hub: Stream ended.");

@@ -22,6 +22,8 @@ pub enum TlClientError {
     NotJoined,
     #[error("Permission denied")]
     PermissionDenied,
+    #[error(transparent)]
+    Tap(zako3_types::TapHubError),
     #[error("{0}")]
     Transport(anyhow::Error),
 }
@@ -54,6 +56,9 @@ impl TlClient {
             }
             AudioEngineCommandResponse::Error(AudioEngineError::PermissionDenied) => {
                 Err(TlClientError::PermissionDenied)
+            }
+            AudioEngineCommandResponse::Error(AudioEngineError::Tap(t)) => {
+                Err(TlClientError::Tap(t))
             }
             AudioEngineCommandResponse::Error(AudioEngineError::InternalError(msg)) => {
                 Err(TlClientError::Transport(anyhow::anyhow!("{msg}")))
@@ -281,6 +286,9 @@ impl TlClient {
             }
             AudioEngineCommandResponse::Error(AudioEngineError::PermissionDenied) => {
                 Err(TlClientError::PermissionDenied)
+            }
+            AudioEngineCommandResponse::Error(AudioEngineError::Tap(t)) => {
+                Err(TlClientError::Tap(t))
             }
             AudioEngineCommandResponse::Error(AudioEngineError::InternalError(msg)) => {
                 Err(TlClientError::Transport(anyhow::anyhow!("{msg}")))

@@ -4,7 +4,7 @@ use protofish2::Timestamp;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use zako3_taphub_transport_server::TapHubBridgeHandler;
-use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest};
+use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest, TapHubError};
 
 use crate::hub::TapHub;
 
@@ -15,7 +15,7 @@ mod meta;
 mod permission;
 mod preload;
 mod stream;
-mod tap_lookup;
+pub(crate) mod tap_lookup;
 
 #[async_trait]
 impl TapHubBridgeHandler for TapHub {
@@ -23,7 +23,7 @@ impl TapHubBridgeHandler for TapHub {
         &self,
         request: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), TapHubError> {
         audio_request::handle_request_audio_inner(self, request).await
     }
 
@@ -31,7 +31,7 @@ impl TapHubBridgeHandler for TapHub {
         &self,
         req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         preload::handle_preload_audio_inner(self, req).await
     }
 
@@ -39,7 +39,7 @@ impl TapHubBridgeHandler for TapHub {
         &self,
         req: AudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         meta::handle_request_audio_meta_inner(self, req).await
     }
 
@@ -47,7 +47,7 @@ impl TapHubBridgeHandler for TapHub {
         &self,
         req: CachedAudioRequest,
         _headers: HashMap<String, String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), TapHubError> {
         invalidate_cache::handle_invalidate_cache_inner(self, req).await
     }
 }

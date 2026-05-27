@@ -9,6 +9,10 @@ pub enum AudioEngineError {
     AlreadyJoined,
     NotJoined,
     InternalError(String),
+    /// Structured TapHub failure surfaced verbatim to the bot so it can map
+    /// to a localized user message instead of falling into the generic
+    /// "internal error" bucket.
+    Tap(zako3_types::TapHubError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

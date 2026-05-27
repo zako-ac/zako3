@@ -46,11 +46,15 @@ pub trait TapHandler: Send + Sync {
     ) -> std::result::Result<AudioMetadataSuccessMessage, AudioRequestFailureMessage>;
 }
 
-pub struct ZakofishTap {
+pub struct ZakofishTapPf2 {
     client: Arc<ProtofishClient>,
 }
 
-impl ZakofishTap {
+/// Deprecated alias of [`ZakofishTapPf2`]. Kept for source compatibility with
+/// callers that haven't migrated yet.
+pub type ZakofishTap = ZakofishTapPf2;
+
+impl ZakofishTapPf2 {
     pub fn new(client_config: ClientConfig) -> Result<Self> {
         let client = ProtofishClient::bind(client_config)?;
         Ok(Self {

@@ -54,3 +54,30 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
         protofish_config,
     })
 }
+
+/// Default protofish3 `ProtofishConfig` for zakofish — mirrors pf2's keepalive
+/// (3s) so that both transports behave similarly. Other pf3-specific knobs
+/// (max_datagram_size, retransmission buffer, credit batching, ack interval)
+/// keep their pf3 library defaults.
+pub fn default_protofish3_config() -> protofish3::ProtofishConfig {
+    let mut cfg = protofish3::ProtofishConfig::default();
+    cfg.keepalive_interval = Some(Duration::from_secs(3));
+    cfg.keepalive_timeout = Some(Duration::from_secs(9));
+    cfg
+}
+
+/// Creates a pf3 `ServerConfig` mirroring the pf2 builder. Loads the cert chain
+/// and private key from disk, applies [`default_protofish3_config`], and keeps
+/// pf3's library default `handshake_timeout` (5s).
+pub fn create_server_config_pf3<P1: AsRef<Path>, P2: AsRef<Path>>(
+    bind_address: SocketAddr,
+    cert_file_path: P1,
+    key_file_path: P2,
+) -> Result<protofish3::ServerConfig> {
+    let cert_chain = load_certs(cert_file_path)?;
+    let private_key = load_private_key(key_file_path)?;
+
+    let mut cfg = protofish3::ServerConfig::new(bind_address, cert_chain, private_key);
+    cfg.protofish = default_protofish3_config();
+    Ok(cfg)
+}

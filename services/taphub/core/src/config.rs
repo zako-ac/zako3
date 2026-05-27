@@ -4,6 +4,9 @@ use std::env;
 pub struct AppConfig {
     pub transport_bind_addr: String,
     pub zakofish_bind_addr: String,
+    /// Optional pf3 bind address. When set, the Hub also accepts pf3 (protofish3)
+    /// tap connections on this port (using the same cert/key as the pf2 port).
+    pub zakofish_bind_addr_pf3: Option<String>,
     pub hq_rpc_url: String,
     pub hq_rpc_admin_token: String,
     pub zakofish_cert_file: String,
@@ -39,6 +42,9 @@ impl AppConfig {
                 .unwrap_or_else(|_| "0.0.0.0:4000".to_string()),
             zakofish_bind_addr: env::var("ZK_TH_ZAKOFISH_BIND_ADDR")
                 .unwrap_or_else(|_| "0.0.0.0:4001".to_string()),
+            zakofish_bind_addr_pf3: env::var("ZK_TH_ZAKOFISH_BIND_ADDR_PF3")
+                .ok()
+                .filter(|s| !s.is_empty()),
             hq_rpc_url: env::var("ZK_TH_HQ_RPC_URL")
                 .unwrap_or_else(|_| "http://localhost:4002".to_string()),
             hq_rpc_admin_token,

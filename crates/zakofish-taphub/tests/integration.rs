@@ -132,7 +132,7 @@ async fn test_zakofish_flow() {
         tap_connected: tap_connected_tx,
     });
 
-    let hub = Arc::new(ZakofishHub::new(server_config, hub_handler).unwrap());
+    let hub = Arc::new(ZakofishHub::new(Some(server_config), None, hub_handler).unwrap());
     let hub_clone = hub.clone();
 
     tokio::spawn(async move {
@@ -191,14 +191,9 @@ async fn test_zakofish_flow() {
     let mut rx = rx.expect("integration test expects Dual transfer mode");
 
     let mut received_chunks = 0;
-    while let Some(chunks) = rx.recv().await {
-        for chunk in chunks {
-            assert_eq!(
-                chunk.content,
-                Bytes::from(format!("chunk {}", received_chunks))
-            );
-            received_chunks += 1;
-        }
+    while let Some(chunk) = rx.recv().await {
+        assert_eq!(chunk, Bytes::from(format!("chunk {}", received_chunks)));
+        received_chunks += 1;
     }
 
     assert_eq!(received_chunks, 5);

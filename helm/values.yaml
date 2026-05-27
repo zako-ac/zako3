@@ -83,6 +83,10 @@ taphub:
   # DEBUG ONLY: accept all tap auth and audio requests without HQ. Do NOT
   # enable in production.
   bypassHq: false
+  # When true, the Hub also binds a pf3 (protofish3) port (see ports.taphubZakofishPf3),
+  # sharing the same TLS cert/key as the pf2 port. Existing pf2 taps continue to
+  # work unchanged.
+  enablePf3: true
   # Annotations for the zakofish LoadBalancer Service (e.g. cloud-provider LB tuning)
   zakofishServiceAnnotations: {}
 
@@ -142,6 +146,8 @@ ports:
   hqRpc: 50052
   taphubTransport: 4000
   taphubZakofish: 7060
+  # Optional pf3 (protofish3) port. Set `taphub.enablePf3: true` to bind.
+  taphubZakofishPf3: 1028
   tlRpc: 7070
   tlAeTransport: 7071
   cache: 4100

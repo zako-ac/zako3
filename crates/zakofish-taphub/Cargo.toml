@@ -8,6 +8,7 @@ zakofish = { path = "../../libs/zakofish" }
 zako3-types = { path = "../types" }
 async-trait.workspace = true
 protofish2.workspace = true
+protofish3.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
 tracing.workspace = true

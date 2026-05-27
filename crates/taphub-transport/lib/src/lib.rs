@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest};
+use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest, TapHubError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TapHubRequest {
@@ -13,6 +13,6 @@ pub enum TapHubRequest {
 pub enum TapHubResponse {
     AudioReady(AudioMetaResponse),
     MetaReady(AudioMetaResponse),
-    Error(String),
+    Error(TapHubError),
     InvalidateCacheOk,
 }

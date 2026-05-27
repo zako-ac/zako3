@@ -14,7 +14,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
-use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest};
+use zako3_types::{AudioMetaResponse, AudioRequest, CachedAudioRequest, TapHubError};
 
 #[async_trait::async_trait]
 pub trait TapHubBridgeHandler: Send + Sync + 'static {
@@ -22,25 +22,25 @@ pub trait TapHubBridgeHandler: Send + Sync + 'static {
         &self,
         req: CachedAudioRequest,
         headers: HashMap<String, String>,
-    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), String>;
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError>;
 
     async fn handle_preload_audio(
         &self,
         req: CachedAudioRequest,
         headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String>;
+    ) -> Result<AudioMetaResponse, TapHubError>;
 
     async fn handle_request_audio_meta(
         &self,
         req: AudioRequest,
         headers: HashMap<String, String>,
-    ) -> Result<AudioMetaResponse, String>;
+    ) -> Result<AudioMetaResponse, TapHubError>;
 
     async fn handle_invalidate_cache(
         &self,
         req: CachedAudioRequest,
         headers: HashMap<String, String>,
-    ) -> Result<(), String>;
+    ) -> Result<(), TapHubError>;
 }
 
 pub struct TransportServer {

@@ -15,6 +15,7 @@ fn map_tl_err(e: TlClientError) -> CoreError {
     match e {
         TlClientError::AlreadyJoined => CoreError::Conflict("Already in VC".into()),
         TlClientError::NotJoined => CoreError::InvalidInput("Not in VC".into()),
+        TlClientError::Tap(t) => CoreError::TapHub(t),
         e => CoreError::Internal(e.to_string()),
     }
 }

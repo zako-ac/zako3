@@ -9,7 +9,8 @@ use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::NextFrame;
-use zako3_types::{AudioMetaResponse, CachedAudioRequest};
+use zako3_types::{AudioMetaResponse, CachedAudioRequest, TapHubError};
+use zakofish_taphub::ZakofishError;
 
 use crate::hub::TapHub;
 use crate::metrics;
@@ -19,7 +20,7 @@ use super::{cache::build_cache_item, cache::resolve_metadata, stream::bridge_rel
 pub(crate) async fn handle_request_audio_inner(
     tap_hub: &TapHub,
     request: CachedAudioRequest,
-) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), String> {
+) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, Bytes)>), TapHubError> {
     let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
 
     let ars = request.audio_request.to_string();
@@ -55,12 +56,11 @@ pub(crate) async fn handle_request_audio_inner(
         }
     };
 
-    let tap_id_str = tap_id.0.to_string();
-    let (tap_opt, conn_result) = tokio::join!(
-        tap_hub.app.hq_repository.get_tap_by_id(&tap_id_str),
+    let (tap_result, conn_result) = tokio::join!(
+        super::tap_lookup::resolve_tap(tap_hub, &tap_id),
         tap_hub.select_connection(&tap_id),
     );
-    let tap = tap_opt.ok_or_else(|| "Tap metadata not found".to_string())?;
+    let tap = tap_result?;
 
     super::permission::verify_permission(tap_hub, &tap, &request.discord_user_id).await?;
 
@@ -155,7 +155,7 @@ pub(crate) async fn handle_request_audio_inner(
             tap_id = %tap_id.0,
             connection_id,
         );
-        tokio::time::timeout(
+        let zf_result = tokio::time::timeout(
             tap_hub.request_timeout,
             tap_hub
                 .zf_hub
@@ -168,8 +168,25 @@ pub(crate) async fn handle_request_audio_inner(
                 .instrument(zakofish_span),
         )
         .await
-        .map_err(|_| format!("Tap request timed out after {:?}", tap_hub.request_timeout))?
-        .map_err(|e| format!("Failed to request audio from tap: {}", e))?
+        .map_err(|_| {
+            TapHubError::Internal(format!(
+                "Tap request timed out after {:?}",
+                tap_hub.request_timeout
+            ))
+        })?;
+
+        match zf_result {
+            Ok(triple) => triple,
+            Err(ZakofishError::TapRequestFailure { reason, try_others }) => {
+                return Err(TapHubError::TapScript { reason, try_others });
+            }
+            Err(e) => {
+                return Err(TapHubError::Internal(format!(
+                    "Failed to request audio from tap: {}",
+                    e
+                )));
+            }
+        }
     };
 
     tracing::info!(tap_id = %tap_id.0, connection_id, "Received audio from Tap");
@@ -250,7 +267,7 @@ pub(crate) async fn handle_request_audio_inner(
     let (tx, rx) = mpsc::channel(100);
     tokio::spawn(async move {
         while let Some(chunk) = unrel.recv().await {
-            if let Err(e) = tx.send((chunk.timestamp, chunk.content)).await {
+            if let Err(e) = tx.send(chunk).await {
                 tracing::warn!(%e, "Failed to send audio chunk to channel");
                 return;
             }

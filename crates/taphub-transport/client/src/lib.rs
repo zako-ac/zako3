@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
-use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest};
+use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
 
 pub struct TransportClient {
     conn: Arc<Mutex<ReconnectingConnection>>,
@@ -68,59 +68,72 @@ impl TransportClient {
         })
     }
 
-    async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, String> {
+    async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, TapHubError> {
         let mut stream = {
             let mut lock = self.conn.lock().await;
-            lock.open_mani().await.map_err(|e| e.to_string())?
+            lock.open_mani().await.map_err(|e| TapHubError::Internal(e.to_string()))?
         };
 
-        let payload = rmp_serde::to_vec(&req).map_err(|e| e.to_string())?;
+        let payload = rmp_serde::to_vec(&req).map_err(|e| TapHubError::Internal(e.to_string()))?;
         stream
             .send_payload(payload.into())
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
-        let resp_payload = stream.recv_payload().await.map_err(|e| e.to_string())?;
+        let resp_payload = stream
+            .recv_payload()
+            .await
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
         let resp: TapHubResponse =
-            rmp_serde::from_slice(&resp_payload).map_err(|e| e.to_string())?;
+            rmp_serde::from_slice(&resp_payload).map_err(|e| TapHubError::Internal(e.to_string()))?;
 
         Ok(resp)
     }
 
-    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, String> {
+    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, TapHubError> {
         let mut stream = {
             let mut lock = self.conn.lock().await;
-            lock.open_mani().await.map_err(|e| e.to_string())?
+            lock.open_mani().await.map_err(|e| TapHubError::Internal(e.to_string()))?
         };
 
         let req_clone = req.clone();
-        let payload =
-            rmp_serde::to_vec(&TapHubRequest::RequestAudio(req)).map_err(|e| e.to_string())?;
+        let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
         stream
             .send_payload(payload.into())
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
-        let resp_payload = stream.recv_payload().await.map_err(|e| e.to_string())?;
+        let resp_payload = stream
+            .recv_payload()
+            .await
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
         let resp: TapHubResponse =
-            rmp_serde::from_slice(&resp_payload).map_err(|e| e.to_string())?;
+            rmp_serde::from_slice(&resp_payload).map_err(|e| TapHubError::Internal(e.to_string()))?;
 
         match resp {
             TapHubResponse::AudioReady(meta) => {
-                let transfer = stream.accept_transfer().await.map_err(|e| e.to_string())?;
+                let transfer = stream
+                    .accept_transfer()
+                    .await
+                    .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
                 let unreliable_recv = match transfer {
                     protofish2::ManiTransferRecvStreams::UnreliableOnly { unreliable } => {
                         unreliable
                     }
-                    _ => return Err("Expected UnreliableOnly transfer".to_string()),
+                    _ => {
+                        return Err(TapHubError::Internal(
+                            "Expected UnreliableOnly transfer".to_string(),
+                        ));
+                    }
                 };
 
                 let (tx, rx) = mpsc::channel(100);
 
                 let mut jitter =
                     OpusJitterBuffer::new(unreliable_recv, 48000, opus::Channels::Stereo, 20, 100)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
                 let conn_clone = Arc::clone(&self.conn);
 
@@ -154,35 +167,44 @@ impl TransportClient {
                 })
             }
             TapHubResponse::Error(e) => Err(e),
-            _ => Err(format!("Unexpected response to RequestAudio: {:?}", resp)),
+            _ => Err(TapHubError::Internal(format!(
+                "Unexpected response to RequestAudio: {:?}",
+                resp
+            ))),
         }
     }
 
     pub async fn preload_audio(
         &self,
         req: CachedAudioRequest,
-    ) -> Result<AudioMetaResponse, String> {
+    ) -> Result<AudioMetaResponse, TapHubError> {
         match self
             .execute_request(TapHubRequest::PreloadAudio(req))
             .await?
         {
             TapHubResponse::MetaReady(meta) => Ok(meta),
             TapHubResponse::Error(e) => Err(e),
-            resp => Err(format!("Unexpected response to PreloadAudio: {:?}", resp)),
+            resp => Err(TapHubError::Internal(format!(
+                "Unexpected response to PreloadAudio: {:?}",
+                resp
+            ))),
         }
     }
 
-    pub async fn request_audio_meta(&self, req: AudioRequest) -> Result<AudioMetaResponse, String> {
+    pub async fn request_audio_meta(
+        &self,
+        req: AudioRequest,
+    ) -> Result<AudioMetaResponse, TapHubError> {
         match self
             .execute_request(TapHubRequest::RequestAudioMeta(req))
             .await?
         {
             TapHubResponse::MetaReady(meta) => Ok(meta),
             TapHubResponse::Error(e) => Err(e),
-            resp => Err(format!(
+            resp => Err(TapHubError::Internal(format!(
                 "Unexpected response to RequestAudioMeta: {:?}",
                 resp
-            )),
+            ))),
         }
     }
 }

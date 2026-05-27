@@ -6,10 +6,11 @@ use std::time::Duration;
 
 use protofish2::compression::CompressionType;
 use protofish2::config::ProtofishConfig;
-use protofish2::connection::ClientConfig;
+use protofish2::connection::ClientConfig as Pf2ClientConfig;
 use tokio::sync::mpsc;
 use zakofish::config::load_certs;
-use zakofish::tap::ZakofishTap;
+use zakofish::tap::ZakofishTapPf2;
+use zakofish::tap_pf3::ZakofishTapPf3;
 use zakofish::types::message::TapClientHello;
 use zakofish::types::model::TapId;
 
@@ -17,6 +18,16 @@ use crate::error::SdkError;
 use crate::handler::TapHandler;
 use crate::source::AudioSource;
 use crate::stream::AudioStreamSender;
+
+/// Transport selection for [`TapBuilder`]. Defaults to [`Transport::Pf2`] for
+/// backwards-compatibility with existing taps. Switch to [`Transport::Pf3`] for
+/// taps connecting to a pf3-enabled hub port.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Transport {
+    Protofish2,
+    #[default]
+    Protofish3,
+}
 
 pub fn tap() -> TapBuilder {
     TapBuilder::default()
@@ -31,6 +42,7 @@ pub struct TapBuilder {
     friendly_name: Option<String>,
     api_token: Option<String>,
     selection_weight: f32,
+    transport: Transport,
     #[cfg(feature = "healthcheck")]
     healthcheck_port: Option<u16>,
 }
@@ -71,6 +83,12 @@ impl TapBuilder {
 
     pub fn selection_weight(mut self, weight: f32) -> Self {
         self.selection_weight = weight;
+        self
+    }
+
+    /// Select the wire transport. Defaults to [`Transport::Pf2`].
+    pub fn transport(mut self, transport: Transport) -> Self {
+        self.transport = transport;
         self
     }
 
@@ -124,17 +142,6 @@ impl TapBuilder {
             result.certs
         };
 
-        let mut protofish_config = ProtofishConfig::default();
-        protofish_config.handshake_timeout = Duration::from_secs(10);
-
-        let client_config = ClientConfig {
-            bind_address: "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
-            root_certificates,
-            supported_compression_types: vec![CompressionType::None],
-            keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
-            protofish_config,
-        };
-
         let hello = TapClientHello {
             tap_id: TapId::from_str(
                 self.tap_id
@@ -153,10 +160,39 @@ impl TapBuilder {
         }
 
         let bridge = Arc::new(HandlerBridge(handler));
-        let zf_tap = ZakofishTap::new(client_config)?;
-        zf_tap
-            .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
-            .await?;
+
+        match self.transport {
+            Transport::Protofish2 => {
+                let mut protofish_config = ProtofishConfig::default();
+                protofish_config.handshake_timeout = Duration::from_secs(10);
+
+                let client_config = Pf2ClientConfig {
+                    bind_address: "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
+                    root_certificates,
+                    supported_compression_types: vec![CompressionType::None],
+                    keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
+                    protofish_config,
+                };
+
+                let zf_tap = ZakofishTapPf2::new(client_config)?;
+                zf_tap
+                    .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
+                    .await?;
+            }
+            Transport::Protofish3 => {
+                let mut client_config = protofish3::ClientConfig::new(
+                    "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
+                );
+                client_config.root_certificates = root_certificates;
+                client_config.protofish = zakofish::default_protofish3_config();
+                client_config.handshake_timeout = Duration::from_secs(10);
+
+                let zf_tap = ZakofishTapPf3::new(client_config)?;
+                zf_tap
+                    .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
+                    .await?;
+            }
+        }
         Ok(())
     }
 }

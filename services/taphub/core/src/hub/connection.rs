@@ -39,11 +39,15 @@ impl HubHandler for TapHubConnectionHandler {
             "Received tap authentication request"
         );
 
-        let tap = self
-            .app
-            .hq_repository
-            .authenticate_tap(&hello.api_token)
-            .await;
+        let tap = if self.app.bypass_hq {
+            let hq_tap_id = zako3_types::hq::TapId(hello.tap_id.0.clone());
+            Some(crate::handler::tap_lookup::synthetic_tap(&hq_tap_id))
+        } else {
+            self.app
+                .hq_repository
+                .authenticate_tap(&hello.api_token)
+                .await
+        };
 
         if let Some(tap) = tap {
             if hello.tap_id.0 == tap.id.0 {

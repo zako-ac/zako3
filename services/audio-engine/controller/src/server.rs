@@ -11,6 +11,7 @@ use tracing::{Instrument as _, error, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
+use zako3_audio_engine_core::error::ZakoError;
 
 pub struct AeTransportHandler {
     pub session_manager: Arc<OnceLock<Arc<SessionManager>>>,
@@ -112,7 +113,7 @@ impl AeTransportHandler {
                             .await
                         {
                             Ok(_) => AudioEngineCommandResponse::Ok,
-                            Err(e) => err(&e.to_string()),
+                            Err(e) => map_engine_err(e),
                         }
                     }
 
@@ -190,6 +191,18 @@ fn command_name(cmd: &AudioEngineCommand) -> &'static str {
 fn err(msg: &str) -> AudioEngineCommandResponse {
     error!(msg, "AudioEngine command error");
     AudioEngineCommandResponse::Error(AudioEngineError::InternalError(msg.to_string()))
+}
+
+/// Surface structured TapHub failures across the wire so the bot can render
+/// localized messages instead of seeing them as generic InternalError.
+fn map_engine_err(e: ZakoError) -> AudioEngineCommandResponse {
+    match e {
+        ZakoError::TapHub(t) => {
+            tracing::warn!(error = %t, "AudioEngine TapHub error");
+            AudioEngineCommandResponse::Error(AudioEngineError::Tap(t))
+        }
+        e => err(&e.to_string()),
+    }
 }
 
 #[cfg(test)]

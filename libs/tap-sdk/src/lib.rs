@@ -10,7 +10,7 @@ pub mod encode;
 #[cfg(feature = "healthcheck")]
 pub(crate) mod healthcheck;
 
-pub use builder::{tap, TapBuilder};
+pub use builder::{tap, TapBuilder, Transport};
 pub use error::{SdkError, TapError};
 pub use handler::TapHandler;
 pub use protofish2::TransferMode;

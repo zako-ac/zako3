@@ -11,6 +11,7 @@ use zako3_types::hq::TapId;
 use zakofish_taphub::{
     ZakofishError,
     create_server_config,
+    create_server_config_pf3,
     hub::ZakofishHub,
 };
 
@@ -43,19 +44,34 @@ impl TapHub {
     pub async fn new(
         app: App,
         bind_address: &str,
+        bind_address_pf3: Option<&str>,
         cert_file: impl AsRef<Path>,
         key_file: impl AsRef<Path>,
         audio_cache: Arc<dyn AudioCache>,
         request_timeout_ms: u64,
         history_pubsub: Arc<RedisPubSub>,
     ) -> Result<Self, ZakofishError> {
+        let cert_file = cert_file.as_ref().to_path_buf();
+        let key_file = key_file.as_ref().to_path_buf();
+
         let server_config = create_server_config(
             bind_address.parse().map_err(|_| {
                 ZakofishError::ProtocolError("Invalid bind address is provided".to_string())
             })?,
-            cert_file,
-            key_file,
+            &cert_file,
+            &key_file,
         )?;
+
+        let server_config_pf3 = bind_address_pf3
+            .map(|addr| {
+                let parsed = addr.parse().map_err(|_| {
+                    ZakofishError::ProtocolError(
+                        "Invalid pf3 bind address is provided".to_string(),
+                    )
+                })?;
+                create_server_config_pf3(parsed, &cert_file, &key_file)
+            })
+            .transpose()?;
 
         let connection_signals: ConnectionSignals = Arc::new(Mutex::new(HashMap::new()));
 
@@ -66,7 +82,8 @@ impl TapHub {
             connection_signals: Arc::clone(&connection_signals),
         };
 
-        let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
+        let zf_hub =
+            ZakofishHub::new(Some(server_config), server_config_pf3, Arc::new(handler))?;
 
         Ok(Self {
             zf_hub,
@@ -89,12 +106,14 @@ impl TapHub {
     pub(crate) async fn select_connection(
         &self,
         tap_id: &TapId,
-    ) -> Result<(u64, watch::Receiver<bool>), String> {
+    ) -> Result<(u64, watch::Receiver<bool>), zako3_types::TapHubError> {
         let states = self
             .state_service
             .get_tap_states(tap_id)
             .await
-            .map_err(|e| format!("Failed to get tap states: {}", e))?;
+            .map_err(|e| {
+                zako3_types::TapHubError::Internal(format!("Failed to get tap states: {}", e))
+            })?;
 
         let available: Vec<_> = states.to_vec();
 
@@ -102,7 +121,7 @@ impl TapHub {
             .sampler
             .lock()
             .next_connection_id(&available)
-            .ok_or_else(|| "No available connections for this tap".to_string())?;
+            .ok_or(zako3_types::TapHubError::TapUnavailable)?;
 
         // Subscribe to disconnect signal for this connection
         let disconnect_rx = self
