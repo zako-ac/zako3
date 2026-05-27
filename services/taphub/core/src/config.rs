@@ -16,11 +16,23 @@ pub struct AppConfig {
     pub request_timeout_ms: u64,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
+    pub bypass_hq: bool,
 }
 
 impl AppConfig {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         dotenvy::dotenv().ok();
+
+        let bypass_hq = env::var("ZK_TH_BYPASS_HQ")
+            .ok()
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "True"))
+            .unwrap_or(false);
+
+        let hq_rpc_admin_token = if bypass_hq {
+            env::var("ZK_TH_HQ_RPC_ADMIN_TOKEN").unwrap_or_default()
+        } else {
+            env::var("ZK_TH_HQ_RPC_ADMIN_TOKEN")?
+        };
 
         Ok(Self {
             transport_bind_addr: env::var("ZK_TH_TRANSPORT_BIND_ADDR")
@@ -29,7 +41,7 @@ impl AppConfig {
                 .unwrap_or_else(|_| "0.0.0.0:4001".to_string()),
             hq_rpc_url: env::var("ZK_TH_HQ_RPC_URL")
                 .unwrap_or_else(|_| "http://localhost:4002".to_string()),
-            hq_rpc_admin_token: env::var("ZK_TH_HQ_RPC_ADMIN_TOKEN")?,
+            hq_rpc_admin_token,
             zakofish_cert_file: env::var("ZK_TH_ZAKOFISH_CERT_FILE")
                 .unwrap_or_else(|_| "cert.pem".to_string()),
             zakofish_key_file: env::var("ZK_TH_ZAKOFISH_KEY_FILE")
@@ -54,6 +66,7 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .or(Some(9092)),
+            bypass_hq,
         })
     }
 }

@@ -1,6 +1,7 @@
 use crate::services::audio_engine::cli::AudioEngineCommands;
 use crate::services::config::cli::ConfigCommands;
 use crate::services::debug::cli::DebugCommands;
+use crate::services::taphub::cli::TaphubCommands;
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
@@ -40,6 +41,10 @@ pub enum Commands {
     /// Debug utilities
     #[command(visible_alias = "dbg")]
     Debug(DebugCommands),
+
+    /// TapHub service commands (direct transport-level requests)
+    #[command(visible_alias = "th")]
+    Taphub(TaphubCommands),
 
     /// Generate shell completion scripts
     Completion {

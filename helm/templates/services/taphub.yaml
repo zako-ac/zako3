@@ -76,6 +76,10 @@ spec:
                     "secretName" $thSecretName
                     "existingName" $existingSecret
                     "key" .Values.taphub.existingSecret.key) | nindent 16 }}
+            {{- if .Values.taphub.bypassHq }}
+            - name: ZK_TH_BYPASS_HQ
+              value: "true"
+            {{- end }}
           volumeMounts:
             - name: zakofish-tls-certs
               mountPath: /certs/zakofish

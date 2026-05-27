@@ -30,6 +30,7 @@
             openssl
             libopus
             pkg-config
+            alsa-lib
           ];
           hardeningDisable = [ "fortify" ];
         };

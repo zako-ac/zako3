@@ -22,6 +22,11 @@ comfy-table = "7.2.1"
 chrono = { version = "0.4", features = ["serde"] }
 jsonrpsee = "0.24"
 http = "1.0"
+zako3-taphub-transport-client = { workspace = true }
+rustls = { version = "0.23.40", features = ["aws-lc-rs"] }
+hound = "3.5.1"
+cpal = "0.17.3"
+ringbuf = "0.5.0"
 
 [[bin]]
 name = "zakoctl"

@@ -45,6 +45,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     tracing::info!("Starting TapHub Core...");
+
+    if config.bypass_hq {
+        tracing::warn!(
+            "ZK_TH_BYPASS_HQ=true — accepting all tap authentications and audio requests without HQ. Do NOT run in production."
+        );
+    }
+
     let bind_addr = config.transport_bind_addr.parse()?;
 
     let (cert_chain, private_key) = load_certs(&config)?;
@@ -57,6 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cache_repository: cache_repo.clone(),
         tap_state_service: TapHubStateService::new(cache_repo.clone()),
         tap_metrics_service: TapRedisMetrics::new(cache_repo.clone()),
+        bypass_hq: config.bypass_hq,
     };
 
     // Clear stale tap connection states left over from the previous run.

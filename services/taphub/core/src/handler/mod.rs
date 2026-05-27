@@ -15,6 +15,7 @@ mod meta;
 mod permission;
 mod preload;
 mod stream;
+mod tap_lookup;
 
 #[async_trait]
 impl TapHubBridgeHandler for TapHub {

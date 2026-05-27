@@ -80,6 +80,9 @@ taphub:
   requestTimeoutMs: "13000"
   metricsPort: "9092"
   tokioConsolePort: "6669"
+  # DEBUG ONLY: accept all tap auth and audio requests without HQ. Do NOT
+  # enable in production.
+  bypassHq: false
   # Annotations for the zakofish LoadBalancer Service (e.g. cloud-provider LB tuning)
   zakofishServiceAnnotations: {}
 

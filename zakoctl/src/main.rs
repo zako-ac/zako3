@@ -52,6 +52,9 @@ async fn main() -> Result<()> {
         Commands::Debug(cmd) => {
             services::debug::handle_command(cmd).await?;
         }
+        Commands::Taphub(cmd) => {
+            services::taphub::handle_command(cmd).await?;
+        }
         Commands::Completion { shell } => {
             let mut cmd = Cli::command();
             let bin_name = cmd.get_name().to_string();

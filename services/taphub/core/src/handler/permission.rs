@@ -7,6 +7,9 @@ pub(crate) async fn verify_permission(
     tap: &Tap,
     discord_user_id: &DiscordUserId,
 ) -> Result<(), String> {
+    if tap_hub.app.bypass_hq {
+        return Ok(());
+    }
     let allowed = tap_hub
         .app
         .hq_repository

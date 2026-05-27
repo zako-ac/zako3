@@ -22,12 +22,7 @@ pub(crate) async fn handle_request_audio_meta_inner(
 
     let tap_id = req.tap_id.clone();
 
-    let tap = tap_hub
-        .app
-        .hq_repository
-        .get_tap_by_id(&tap_id.0.to_string())
-        .await
-        .ok_or_else(|| "Tap metadata not found".to_string())?;
+    let tap = super::tap_lookup::resolve_tap(tap_hub, &tap_id).await?;
 
     super::permission::verify_permission(tap_hub, &tap, &req.discord_user_id).await?;
 

@@ -8,4 +8,5 @@ pub struct App {
     pub cache_repository: CacheRepositoryRef,
     pub tap_state_service: TapHubStateService,
     pub tap_metrics_service: TapRedisMetrics,
+    pub bypass_hq: bool,
 }
