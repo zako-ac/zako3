@@ -24,7 +24,7 @@ Every Zako3 service now exports:
 | `audio-engine-controller` | `audio-engine` (or `zako3-audio-engine`) | `9090` |
 | `emoji-matcher` | `emoji-matcher` | own HTTP server (see its config) |
 | `metrics-sync` | `metrics-sync` | none (batch job) |
-| `cache-gc` | `cache-gc` | none (CLI tool) |
+| `cache` | `cache` | none (HTTP `/healthz` on `ZK_CACHE_BIND_ADDR`) |
 
 ---
 
@@ -56,7 +56,7 @@ All services read these variables. Names are prefixed per service for TapHub; HQ
 | `METRICS_PORT` | `9090` | Port for `/health` and `/metrics`. |
 | `RUST_LOG` | `debug` | Log filter. |
 
-### Workers (`metrics-sync`, `cache-gc`, `emoji-matcher`)
+### Workers (`metrics-sync`, `cache`, `emoji-matcher`)
 
 | Variable | Default | Description |
 |---|---|---|

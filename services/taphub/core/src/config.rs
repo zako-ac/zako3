@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::env;
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -11,7 +11,8 @@ pub struct AppConfig {
     pub transport_cert_file: String,
     pub transport_key_file: String,
     pub redis_url: String,
-    pub cache_dir: PathBuf,
+    pub cache_rpc_url: String,
+    pub cache_rpc_admin_token: Option<String>,
     pub request_timeout_ms: u64,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
@@ -39,9 +40,11 @@ impl AppConfig {
                 .unwrap_or_else(|_| "key.pem".to_string()),
             redis_url: env::var("ZK_TH_REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
-            cache_dir: PathBuf::from(
-                env::var("ZK_TH_CACHE_DIR").unwrap_or_else(|_| "/tmp/zako3-cache".to_string()),
-            ),
+            cache_rpc_url: env::var("ZK_TH_CACHE_RPC_URL")
+                .unwrap_or_else(|_| "http://localhost:4100".to_string()),
+            cache_rpc_admin_token: env::var("ZK_TH_CACHE_RPC_ADMIN_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty()),
             request_timeout_ms: env::var("ZK_TH_REQUEST_TIMEOUT_MS")
                 .ok()
                 .and_then(|v| v.parse().ok())

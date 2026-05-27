@@ -1,0 +1,24 @@
+[package]
+name = "zako3-cache-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zako3-preload-cache = { path = "../preload-cache" }
+zako3-types         = { workspace = true }
+
+async-trait         = { workspace = true }
+bytes               = "1"
+chrono              = { workspace = true }
+futures-util        = "0.3"
+reqwest             = { workspace = true, features = ["stream"] }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+tokio               = { workspace = true }
+tokio-stream        = { version = "0.1" }
+tokio-util          = { version = "0.7", features = ["io"] }
+tracing             = { workspace = true }
+url                 = "2"
+
+[dev-dependencies]
+tempfile = "3"

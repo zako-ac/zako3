@@ -43,7 +43,7 @@ jobs:
              target/release/hq-boot \
              target/release/import_mappers \
              target/release/zako3-taphub-core \
-             target/release/cache-gc \
+             target/release/cache \
              target/release/metrics-sync \
              target/release/traffic-light \
              dist/
@@ -74,8 +74,8 @@ jobs:
           - name: taphub
             dockerfile: services/taphub/Dockerfile
             artifact: rust-binaries
-          - name: cache-gc
-            dockerfile: workers/cache-gc/Dockerfile
+          - name: cache
+            dockerfile: workers/cache/Dockerfile
             artifact: rust-binaries
           - name: metrics-sync
             dockerfile: workers/metrics-sync/Dockerfile

@@ -17,7 +17,7 @@ impl ActionMetrics {
             processing_count = self.processing_count,
             evict_count = self.evict_count,
             processing_time_ms = self.processing_time_ms,
-            "cache-gc action complete"
+            "cache gc action complete"
         );
     }
 }

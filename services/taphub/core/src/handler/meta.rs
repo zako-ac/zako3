@@ -4,7 +4,6 @@ use chrono::Utc;
 use opentelemetry::global;
 use sha2::Digest;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use zako3_preload_cache::AudioCache;
 use zako3_types::{
     AudioMetaResponse, AudioRequest,
     cache::{AudioCacheItem, AudioCacheItemKey},

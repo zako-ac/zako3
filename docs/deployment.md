@@ -139,14 +139,14 @@ Or pass `--set storageClass=local-path` at install time.
 |-----|-------------|--------------|------------|
 | `<release>-postgres-data` | ReadWriteOnce | 10Gi | `postgres.storageSize` |
 | `<release>-timescale-data` | ReadWriteOnce | 20Gi | `timescale.storageSize` |
-| `<release>-taphub-cache` | ReadWriteMany | 5Gi | `taphub.cacheStorageSize` |
+| `<release>-taphub-cache` | ReadWriteOnce | 5Gi | `taphub.cacheStorageSize` |
 
-The taphub cache PVC is shared between the `taphub` Deployment and the `cache-gc` CronJob. A StorageClass that supports `ReadWriteMany` (e.g. NFS, Longhorn, CephFS) is required in production; for single-node clusters `local-path` with a single replica also works.
+The cache PVC is mounted only by the `cache` Deployment. `taphub` talks to the cache over HTTP and does not mount the PVC, so `ReadWriteOnce` storage (e.g. the cloud provider's default block storage, or `local-path`) is sufficient.
 
 ### Workers
 
 - **`metrics-sync`** runs as a Deployment. It starts only after Redis is ready (enforced via an initContainer that polls `redis:6379`).
-- **`cache-gc`** runs as a CronJob. Default schedule: `*/30 * * * *`. Override with `cacheGc.schedule`. Mounts the shared taphub cache PVC to perform eviction.
+- **`cache`** runs as a Deployment. It owns the cache PVC, serves the HTTP cache API to taphub, and runs GC on a configurable interval (default 30 minutes, override with `cache.gcIntervalSeconds`).
 
 ### Verify
 
@@ -231,32 +231,30 @@ Source: `services/taphub/core/.env.example`
 | `ZK_TH_HQ_RPC_URL` | | `http://hq:50052` | HQ gRPC URL (set by compose) |
 | `ZK_TH_TRANSPORT_BIND_ADDR` | | `0.0.0.0:4000` | Taphub transport bind address |
 | `ZK_TH_ZAKOFISH_BIND_ADDR` | | `0.0.0.0:4001` | Zakofish protocol bind address |
-| `ZK_TH_CACHE_DIR` | | `/cache` | Directory for audio cache files |
+| `ZK_TH_CACHE_RPC_URL` | | `http://cache:4100` | Base URL of the cache server (replaces direct PVC access) |
+| `ZK_TH_CACHE_RPC_ADMIN_TOKEN` | | — | Token to authenticate against the cache server (must match `ZK_CACHE_ADMIN_TOKEN`). Empty disables auth |
 | `ZK_TH_REQUEST_TIMEOUT_MS` | | `13000` | Request timeout in milliseconds |
 | `ZK_TH_OTLP_ENDPOINT` | | `http://otel-lgtm:4317` | OpenTelemetry collector endpoint (set by compose) |
 | `ZK_TH_METRICS_PORT` | | `9092` | Prometheus metrics port |
 
 ---
 
-### cache-gc
+### cache
 
-Source: `workers/cache-gc/src/config.rs` (CLI args, also readable from env)
+Source: `workers/cache/src/config.rs`
+
+The `cache` worker is a long-running service. It serves the HTTP cache API consumed by taphub and runs background GC on a fixed interval — there is no separate CronJob.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CACHE_GC_CACHE_DIR` | yes | `/cache` | Directory containing `cache.db` and `.opus` files |
-| `CACHE_GC_MAX_BYTES` | | — | Maximum total cache size in bytes before GDSF eviction runs. Example: `10737418240` (10 GiB) |
-| `GC_BATCH_SIZE` | | `50` | Number of entries to evict per GDSF batch |
-| `REDIS_URL` | | `redis://redis:6379` | Redis connection for persisting GC metrics (optional; set by compose) |
-| `OTLP_ENDPOINT` | | `http://otel-lgtm:4317` | OpenTelemetry collector endpoint (set by compose) |
-
-cache-gc is a one-shot worker. Pair it with a cron job or `docker compose run cache-gc` invocation with a subcommand:
-
-```sh
-docker compose run --rm cache-gc run-evict   # evict expired + dangling + GDSF
-docker compose run --rm cache-gc run-all     # also validates .opus files
-docker compose run --rm cache-gc validate    # probe .opus files only
-```
+| `ZK_CACHE_DIR` | | `/cache` | Directory containing `cache.db` and `.opus` files |
+| `ZK_CACHE_BIND_ADDR` | | `0.0.0.0:4100` | HTTP listen address |
+| `ZK_CACHE_ADMIN_TOKEN` | | — | If set, callers must present this in `x-admin-token`. Must match `ZK_TH_CACHE_RPC_ADMIN_TOKEN` |
+| `ZK_CACHE_MAX_BYTES` | | — | Maximum total cache size in bytes before GDSF eviction runs. Example: `10737418240` (10 GiB) |
+| `ZK_CACHE_GC_INTERVAL_SECONDS` | | `1800` | How often the background GC runs |
+| `ZK_CACHE_GC_BATCH_SIZE` | | `50` | Number of entries to evict per GDSF batch |
+| `REDIS_URL` | | `redis://redis:6379` | Redis connection for persisting GC metrics (optional) |
+| `OTLP_ENDPOINT` | | `http://otel-lgtm:4317` | OpenTelemetry collector endpoint |
 
 ---
 

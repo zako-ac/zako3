@@ -1,0 +1,85 @@
+{{- $fullname := include "zako3.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-cache
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cache
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "cache" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "cache" "Release" .Release) | nindent 8 }}
+    spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.cache.nodeAffinity) | nindent 6 }}
+      containers:
+        - name: cache
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "cache" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["cache"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.ports.cache }}
+          env:
+            - name: ZK_CACHE_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.cache }}"
+            - name: ZK_CACHE_DIR
+              value: {{ .Values.cache.cacheDir | quote }}
+            - name: ZK_CACHE_GC_INTERVAL_SECONDS
+              value: {{ .Values.cache.gcIntervalSeconds | quote }}
+            {{- if .Values.cache.maxCacheBytes }}
+            - name: ZK_CACHE_MAX_BYTES
+              value: {{ .Values.cache.maxCacheBytes | quote }}
+            {{- end }}
+            - name: REDIS_URL
+              value: "redis://{{ $fullname }}-redis:6379"
+            - name: OTLP_ENDPOINT
+              value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- if .Values.cache.adminTokenSecret.name }}
+            - name: ZK_CACHE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.adminTokenSecret.name }}
+                  key: {{ .Values.cache.adminTokenSecret.key }}
+            {{- end }}
+          volumeMounts:
+            - name: cache
+              mountPath: {{ .Values.cache.cacheDir }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-taphub-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-cache
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "cache" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.ports.cache }}
+      targetPort: http

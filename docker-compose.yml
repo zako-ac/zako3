@@ -93,7 +93,8 @@ services:
       ZK_TH_ZAKOFISH_BIND_ADDR: "0.0.0.0:4001"
       ZK_TH_CERT_FILE: ${ZK_TH_CERT_FILE:-cert.pem}
       ZK_TH_KEY_FILE: ${ZK_TH_KEY_FILE:-key.pem}
-      ZK_TH_CACHE_DIR: /cache
+      ZK_TH_CACHE_RPC_URL: http://cache:4100
+      ZK_TH_CACHE_RPC_ADMIN_TOKEN: ${ZK_TH_CACHE_RPC_ADMIN_TOKEN:-}
       ZK_TH_REQUEST_TIMEOUT_MS: "13000"
       ZK_TH_OTLP_ENDPOINT: http://otel-lgtm:4317
       ZK_TH_METRICS_PORT: "9092"
@@ -104,6 +105,7 @@ services:
       - hq
       - nats
       - redis
+      - cache
       - otel-lgtm
 
   # --- Web ---
@@ -122,15 +124,20 @@ services:
 
   # --- Workers ---
 
-  cache-gc:
+  cache:
     build:
       context: .
-      dockerfile: workers/cache-gc/Dockerfile.dev
+      dockerfile: workers/cache/Dockerfile.dev
     environment:
+      ZK_CACHE_BIND_ADDR: "0.0.0.0:4100"
+      ZK_CACHE_DIR: ${ZK_CACHE_DIR:-/cache}
+      ZK_CACHE_ADMIN_TOKEN: ${ZK_CACHE_ADMIN_TOKEN:-}
+      ZK_CACHE_MAX_BYTES: ${ZK_CACHE_MAX_BYTES:-}
+      ZK_CACHE_GC_INTERVAL_SECONDS: ${ZK_CACHE_GC_INTERVAL_SECONDS:-1800}
       REDIS_URL: redis://redis:6379
-      CACHE_DIR: ${CACHE_GC_CACHE_DIR:-/cache}
-      MAX_CACHE_BYTES: ${CACHE_GC_MAX_BYTES:-}
       OTLP_ENDPOINT: http://otel-lgtm:4317
+    ports:
+      - "4100:4100"
     depends_on:
       - redis
 

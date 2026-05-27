@@ -76,7 +76,6 @@ taphub:
   transportTlsCertFilename: "transport-cert.pem"
   transportTlsKeyFilename: "transport-key.pem"
   transportTlsCaFilename: "ca-cert.pem"
-  cacheDir: "/cache"
   cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"
   metricsPort: "9092"
@@ -112,14 +111,16 @@ web:
   viteWsBaseUrl: "ws://localhost"
   viteGrafanaUrl: "http://localhost:3000"
 
-# --- Workers ---
-cacheGc:
+# --- Cache server (cache + GC, taphub talks to it over HTTP) ---
+cache:
   nodeAffinity: {}
-  schedule: "*/30 * * * *"
-  maxCacheBytes: "10737418240"
   cacheDir: "/cache"
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 1
+  gcIntervalSeconds: "1800"
+  maxCacheBytes: "10737418240"
+  # Optional shared admin token between cache server and taphub. Leave name empty to disable auth.
+  adminTokenSecret:
+    name: ""
+    key: "cache-admin-token"
 
 metricsSync:
   nodeAffinity: {}
@@ -133,6 +134,7 @@ ports:
   taphubZakofish: 7060
   tlRpc: 7070
   tlAeTransport: 7071
+  cache: 4100
   web: 80
 
 # --- Redis ---

@@ -1,5 +1,5 @@
 use std::path::Path;
-use zako3_cache_gc::actions;
+use zako3_cache::actions;
 use zako3_preload_cache::FileAudioCache;
 use zako3_types::cache::AudioCacheItemKey;
 

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::Duration,
 };
@@ -14,7 +14,7 @@ use zakofish_taphub::{
     hub::ZakofishHub,
 };
 
-use zako3_preload_cache::{AudioPreload, FileAudioCache};
+use zako3_preload_cache::AudioCache;
 
 use crate::{app::App, routing::DynamicSampler};
 use zako3_metrics::TapRedisMetrics;
@@ -31,8 +31,9 @@ pub struct TapHub {
     pub state_service: TapHubStateService,
     pub metrics_service: TapRedisMetrics,
     pub app: App,
-    pub audio_preload: Arc<AudioPreload>,
-    pub audio_cache: Arc<FileAudioCache>,
+    /// Cache client. Today this is the HTTP-backed [`zako3_cache_client::RemoteAudioCache`];
+    /// the trait indirection lets tests inject an in-memory impl.
+    pub audio_cache: Arc<dyn AudioCache>,
     pub request_timeout: Duration,
     pub history_pubsub: Arc<RedisPubSub>,
     pub(crate) connection_signals: ConnectionSignals,
@@ -44,7 +45,7 @@ impl TapHub {
         bind_address: &str,
         cert_file: impl AsRef<Path>,
         key_file: impl AsRef<Path>,
-        cache_dir: PathBuf,
+        audio_cache: Arc<dyn AudioCache>,
         request_timeout_ms: u64,
         history_pubsub: Arc<RedisPubSub>,
     ) -> Result<Self, ZakofishError> {
@@ -67,18 +68,13 @@ impl TapHub {
 
         let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
 
-        let audio_cache = FileAudioCache::open(cache_dir.clone(), None)
-            .await
-            .map_err(|e| ZakofishError::ProtocolError(e.to_string()))?;
-
         Ok(Self {
             zf_hub,
             sampler: Arc::new(Mutex::new(DynamicSampler::new())),
             state_service: app.tap_state_service.clone(),
             metrics_service: app.tap_metrics_service.clone(),
             app,
-            audio_preload: Arc::new(AudioPreload::new(cache_dir, None)),
-            audio_cache: Arc::new(audio_cache),
+            audio_cache,
             request_timeout: Duration::from_millis(request_timeout_ms),
             history_pubsub,
             connection_signals,

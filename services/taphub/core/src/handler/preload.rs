@@ -1,9 +1,7 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use opentelemetry::global;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use zako3_preload_cache::{AudioCache, NextFrame, PreloadId, PreloadReadEndAction};
 use zako3_types::AudioMetaResponse;
 use zako3_types::CachedAudioRequest;
 
@@ -83,70 +81,40 @@ pub(crate) async fn handle_preload_audio_inner(
     )
     .await;
 
-    // Preload reliable stream to disk. Tap must use Dual transfer mode for
-    // preload — UnreliableOnly has no persistable copy.
-    let rel = rel.ok_or_else(|| {
-        "Tap returned UnreliableOnly transfer for preload request".to_string()
-    })?;
-    let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
-    let (rel_rx, _done_rx) = bridge_rel(rel, disconnect_rx);
-    let signal = tap_hub.audio_preload.preload(preload_id, rel_rx);
+    // Tap must use Dual transfer mode for preload — UnreliableOnly has no
+    // persistable copy.
+    let rel =
+        rel.ok_or_else(|| "Tap returned UnreliableOnly transfer for preload request".to_string())?;
+    let (rel_rx, done_rx) = bridge_rel(rel, disconnect_rx);
 
-    // Determine finalization action
-    let action = match cache_item {
-        Some(item) => PreloadReadEndAction::MoveToCache {
-            item,
-            metadatas: metadatas.clone(),
-            cache_key: succ.cache.clone(),
-            cache: Arc::clone(&tap_hub.audio_cache) as Arc<dyn AudioCache>,
-        },
-        None => PreloadReadEndAction::Delete,
-    };
-
-    // Spawn finalization task: wait for file, drain frames, move to cache or delete
-    let audio_preload = Arc::clone(&tap_hub.audio_preload);
-    tokio::spawn(async move {
-        // Wait for write_task to create the frame file (first notify_one).
-        let ready = tokio::time::timeout(Duration::from_secs(30), signal.notify.notified()).await;
-        if ready.is_err() {
-            tracing::warn!(
-                preload_id = preload_id.0,
-                "Timed out waiting for preload file to appear"
-            );
-            return;
-        }
-
-        let mut reader = match audio_preload
-            .open_reader_with_signal(preload_id, Arc::clone(&signal))
+    if let Some(item) = cache_item {
+        // Hand the stream to the cache server. The client opens a preload
+        // session, uploads frames as they arrive, and commits on done.
+        let cache = Arc::clone(&tap_hub.audio_cache);
+        let cache_key = succ.cache.clone();
+        let metadatas_clone = metadatas.clone();
+        let preload_span = tracing::info_span!("cache.preload", tap_id = %tap_id.0);
+        tokio::spawn(async move {
+            use tracing::Instrument;
+            async move {
+                if let Err(e) = cache
+                    .store(item, metadatas_clone, cache_key, rel_rx, done_rx)
+                    .await
+                {
+                    tracing::warn!(%e, "Failed to preload audio into cache");
+                }
+            }
+            .instrument(preload_span)
             .await
-        {
-            Some(r) => r,
-            None => {
-                tracing::warn!(
-                    preload_id = preload_id.0,
-                    "Failed to open preload reader after signal"
-                );
-                return;
-            }
-        };
-
-        loop {
-            match reader.next_frame().await {
-                Ok(NextFrame::Frame(_)) => {}
-                Ok(NextFrame::Pending) => {} // next_frame waited internally
-                Ok(NextFrame::Done) => {
-                    if let Err(e) = reader.finalize(preload_id, &audio_preload, action).await {
-                        tracing::warn!(%e, "Failed to finalize preload");
-                    }
-                    break;
-                }
-                Err(e) => {
-                    tracing::warn!(%e, "Preload read error during finalization");
-                    break;
-                }
-            }
-        }
-    });
+        });
+    } else {
+        // No cache policy — drain rel_rx so the bridge task can exit cleanly.
+        tokio::spawn(async move {
+            let mut rel_rx = rel_rx;
+            while rel_rx.recv().await.is_some() {}
+            let _ = done_rx.await;
+        });
+    }
 
     Ok(AudioMetaResponse {
         metadatas,

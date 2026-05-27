@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use bytes::Bytes;
-use tokio::io::BufWriter;
+use tokio::io::{AsyncRead, BufWriter};
 use tokio::{
     fs,
     io::{self, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -89,10 +89,7 @@ impl AudioPreload {
     /// Returns `None` if the frame file doesn't exist yet.
     pub async fn open_reader(&self, id: PreloadId) -> Option<PreloadReader> {
         let file = fs::File::open(&self.frame_path(id)).await.ok()?;
-        Some(PreloadReader {
-            file: BufReader::new(file),
-            signal: None,
-        })
+        Some(PreloadReader::from_file(file, None))
     }
 
     /// Opens a reader for `id` with a `WriteSignal` for event-driven frame waiting.
@@ -103,10 +100,7 @@ impl AudioPreload {
         signal: Arc<WriteSignal>,
     ) -> Option<PreloadReader> {
         let file = fs::File::open(&self.frame_path(id)).await.ok()?;
-        Some(PreloadReader {
-            file: BufReader::new(file),
-            signal: Some(signal),
-        })
+        Some(PreloadReader::from_file(file, Some(signal)))
     }
 }
 
@@ -178,18 +172,38 @@ async fn write_task(
 }
 
 pub struct PreloadReader {
-    pub(crate) file: BufReader<fs::File>,
+    pub(crate) inner: Box<dyn AsyncRead + Send + Unpin>,
     pub(crate) signal: Option<Arc<WriteSignal>>,
 }
 
 impl PreloadReader {
+    /// Build a `PreloadReader` from a tokio file (wrapped in a `BufReader` for performance).
+    pub fn from_file(file: fs::File, signal: Option<Arc<WriteSignal>>) -> Self {
+        Self {
+            inner: Box::new(BufReader::new(file)),
+            signal,
+        }
+    }
+
+    /// Build a `PreloadReader` from any `AsyncRead` source (e.g. an HTTP response body).
+    /// The caller is expected to have already applied any buffering it needs.
+    pub fn from_reader<R: AsyncRead + Send + Unpin + 'static>(
+        reader: R,
+        signal: Option<Arc<WriteSignal>>,
+    ) -> Self {
+        Self {
+            inner: Box::new(reader),
+            signal,
+        }
+    }
+
     pub async fn next_frame(&mut self) -> io::Result<NextFrame> {
         let mut len_buf = [0u8; 4];
-        match self.file.read_exact(&mut len_buf).await {
+        match self.inner.read_exact(&mut len_buf).await {
             Ok(_) => {
                 let frame_len = u32::from_le_bytes(len_buf) as usize;
                 let mut buf = vec![0u8; frame_len];
-                self.file.read_exact(&mut buf).await?;
+                self.inner.read_exact(&mut buf).await?;
                 Ok(NextFrame::Frame(Bytes::from(buf)))
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => match &self.signal {

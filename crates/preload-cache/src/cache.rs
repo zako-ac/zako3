@@ -322,10 +322,7 @@ impl AudioCache for FileAudioCache {
         // Update usage stats (best-effort)
         let _ = self.db.touch(tap_id.to_string(), key_to_json(key)).await;
 
-        Some(PreloadReader {
-            file: tokio::io::BufReader::new(file),
-            signal: None,
-        })
+        Some(PreloadReader::from_file(file, None))
     }
 
     async fn get_entry(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> Option<CacheEntry> {

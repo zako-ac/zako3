@@ -1,7 +1,9 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::process;
 use std::sync::Arc;
+use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapRedisMetrics;
+use zako3_preload_cache::AudioCache;
 use zako3_states::{RedisCacheRepository, RedisPubSub, TapHubStateService};
 use zako3_taphub_core::app::App;
 use zako3_taphub_core::config::AppConfig;
@@ -81,12 +83,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Failed to connect RedisPubSub"),
     );
 
+    let cache_client = RemoteAudioCache::new(
+        config.cache_rpc_url.clone(),
+        config.cache_rpc_admin_token.clone(),
+    )?;
+    let audio_cache: Arc<dyn AudioCache> = Arc::new(cache_client);
+
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,
         &config.zakofish_cert_file,
         &config.zakofish_key_file,
-        config.cache_dir.clone(),
+        audio_cache,
         config.request_timeout_ms,
         history_pubsub,
     )

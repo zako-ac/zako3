@@ -53,8 +53,15 @@ spec:
               value: "/certs/transport/{{ .Values.taphub.transportTlsCertFilename }}"
             - name: ZK_TH_TAPHUB_TRANSPORT_KEY_FILE
               value: "/certs/transport/{{ .Values.taphub.transportTlsKeyFilename }}"
-            - name: ZK_TH_CACHE_DIR
-              value: {{ .Values.taphub.cacheDir | quote }}
+            - name: ZK_TH_CACHE_RPC_URL
+              value: "http://{{ $fullname }}-cache:{{ .Values.ports.cache }}"
+            {{- if .Values.cache.adminTokenSecret.name }}
+            - name: ZK_TH_CACHE_RPC_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.adminTokenSecret.name }}
+                  key: {{ .Values.cache.adminTokenSecret.key }}
+            {{- end }}
             - name: ZK_TH_REQUEST_TIMEOUT_MS
               value: {{ .Values.taphub.requestTimeoutMs | quote }}
             - name: ZK_TH_OTLP_ENDPOINT
@@ -70,8 +77,6 @@ spec:
                     "existingName" $existingSecret
                     "key" .Values.taphub.existingSecret.key) | nindent 16 }}
           volumeMounts:
-            - name: cache
-              mountPath: {{ .Values.taphub.cacheDir }}
             - name: zakofish-tls-certs
               mountPath: /certs/zakofish
               readOnly: true
@@ -91,9 +96,6 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
       volumes:
-        - name: cache
-          persistentVolumeClaim:
-            claimName: {{ include "zako3.fullname" . }}-taphub-cache
         - name: zakofish-tls-certs
           secret:
             secretName: {{ required "taphub.zakofishTlsSecret is required" .Values.taphub.zakofishTlsSecret }}

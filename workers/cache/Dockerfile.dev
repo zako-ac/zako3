@@ -11,9 +11,9 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN apt-get update && apt-get install -y libopus-dev pkg-config && rm -rf /var/lib/apt/lists/*
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin cache-gc
+RUN cargo build --release --bin cache
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 libopus0 && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/cache-gc /usr/local/bin/cache-gc
-CMD ["cache-gc"]
+COPY --from=builder /app/target/release/cache /usr/local/bin/cache
+CMD ["cache"]

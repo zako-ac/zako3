@@ -41,6 +41,6 @@ hq:
               values: [compute]
 ```
 
-Supported per-service keys: `hq`, `taphub`, `metricsSync`, `cacheGc`, and `audioEngine`.
+Supported per-service keys: `hq`, `taphub`, `metricsSync`, `cache`, and `audioEngine`.
 
 When `nodeAffinity` is empty (`{}`), no `affinity:` block is emitted for that pod.

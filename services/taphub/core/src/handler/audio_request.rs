@@ -8,7 +8,7 @@ use sha2::Digest;
 use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use zako3_preload_cache::{AudioCache, NextFrame};
+use zako3_preload_cache::NextFrame;
 use zako3_types::{AudioMetaResponse, CachedAudioRequest};
 
 use crate::hub::TapHub;
