@@ -10,12 +10,25 @@ impl From<imagehash::Hash> for ImgHash {
 }
 
 impl ImgHash {
-    pub fn to_float_vec(&self) -> Vec<f32> {
-        self.0.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect()
+    /// Pack the bit vector into bytes, MSB-first within each byte.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = vec![0u8; self.0.len().div_ceil(8)];
+        for (i, &bit) in self.0.iter().enumerate() {
+            if bit {
+                out[i / 8] |= 1 << (7 - (i % 8));
+            }
+        }
+        out
     }
 
-    pub fn from_float_vec(vec: Vec<f32>) -> Self {
-        ImgHash(vec.into_iter().map(|f| f > 0.5).collect())
+    /// Unpack `bit_len` bits from `bytes`, MSB-first within each byte.
+    pub fn from_bytes(bytes: &[u8], bit_len: usize) -> Self {
+        let mut bits = Vec::with_capacity(bit_len);
+        for i in 0..bit_len {
+            let byte = bytes.get(i / 8).copied().unwrap_or(0);
+            bits.push((byte >> (7 - (i % 8))) & 1 == 1);
+        }
+        ImgHash(bits)
     }
 
     /// Hamming distance: number of differing bits.

@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use hq_types::hq::settings::{EmojiMappingRule, PartialUserSettings, UserSettingsField};
-use pgvector::Vector;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 
 use crate::types::{ImgHash, Scope};
+
+/// Hash bit-length stored in `emoji_hash_cache`. The perceptual hash from
+/// `imagehash::perceptual_hash` is 64 bits.
+const HASH_BITS: usize = 64;
 
 pub type ArcHashCache = Arc<dyn HashCache + Send + Sync>;
 pub type ArcSettingsStore = Arc<dyn SettingsStore + Send + Sync>;
@@ -27,14 +30,10 @@ pub struct PgHashCache {
 
 impl PgHashCache {
     pub async fn new(pool: PgPool) -> anyhow::Result<Self> {
-        sqlx::query("CREATE EXTENSION IF NOT EXISTS vector")
-            .execute(&pool)
-            .await?;
-
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS emoji_hash_cache (
                 emoji_id TEXT PRIMARY KEY,
-                embedding vector(64) NOT NULL,
+                hash_bytes BYTEA NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )",
         )
@@ -48,23 +47,23 @@ impl PgHashCache {
 #[async_trait]
 impl HashCache for PgHashCache {
     async fn get(&self, emoji_id: &str) -> anyhow::Result<Option<ImgHash>> {
-        let row: Option<(Vector,)> =
-            sqlx::query_as("SELECT embedding FROM emoji_hash_cache WHERE emoji_id = $1")
+        let row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT hash_bytes FROM emoji_hash_cache WHERE emoji_id = $1")
                 .bind(emoji_id)
                 .fetch_optional(&self.pool)
                 .await?;
 
-        Ok(row.map(|(v,)| ImgHash::from_float_vec(v.to_vec())))
+        Ok(row.map(|(bytes,)| ImgHash::from_bytes(&bytes, HASH_BITS)))
     }
 
     async fn put(&self, emoji_id: &str, hash: &ImgHash) -> anyhow::Result<()> {
-        let embedding = Vector::from(hash.to_float_vec());
+        let bytes = hash.to_bytes();
         sqlx::query(
-            "INSERT INTO emoji_hash_cache (emoji_id, embedding) VALUES ($1, $2) \
-             ON CONFLICT (emoji_id) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = now()",
+            "INSERT INTO emoji_hash_cache (emoji_id, hash_bytes) VALUES ($1, $2) \
+             ON CONFLICT (emoji_id) DO UPDATE SET hash_bytes = EXCLUDED.hash_bytes, updated_at = now()",
         )
         .bind(emoji_id)
-        .bind(embedding)
+        .bind(bytes)
         .execute(&self.pool)
         .await?;
         Ok(())

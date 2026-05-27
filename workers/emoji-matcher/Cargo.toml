@@ -22,7 +22,6 @@ futures-util = "0.3.31"
 hq-types = { workspace = true }
 image = "0.24.7"
 imagehash = "0.3.0"
-pgvector = { version = "0.4.1", features = ["sqlx"] }
 prometheus = "0.14.0"
 reqwest = { workspace = true }
 serde = { workspace = true }
