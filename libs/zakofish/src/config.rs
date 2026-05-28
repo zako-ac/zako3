@@ -60,9 +60,7 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
 /// (max_datagram_size, retransmission buffer, credit batching, ack interval)
 /// keep their pf3 library defaults.
 pub fn default_protofish3_config() -> protofish3::ProtofishConfig {
-    let mut cfg = protofish3::ProtofishConfig::default();
-    cfg.keepalive_interval = Some(Duration::from_secs(3));
-    cfg.keepalive_timeout = Some(Duration::from_secs(9));
+    let cfg = protofish3::ProtofishConfig::default();
     cfg
 }
 
