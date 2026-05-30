@@ -5,11 +5,13 @@ refer hq todo
 # Do Now
 - [x] URGENT: TapHub Memopry Leak, Steaming support
 
-- [ ] Dedicated cache server
-- [ ] Timescale Persistence
+- [ ] cache remove
+
+- [x] Dedicated cache server
+- [x] Timescale Persistence
 
 - [x] Make unreliable-only mode for TH
-- [ ] Add fancy logging and error code for failed requests in frontend/HQ.
+- [x] Add fancy logging and error code for failed requests in frontend/HQ.
 - [ ] TapRef + Parameter System
 - [x] Allow tap explore page to be public
 - [ ] move tap settings in the top of guilds

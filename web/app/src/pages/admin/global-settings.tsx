@@ -12,7 +12,7 @@ export const AdminGlobalSettingsPage = () => {
     const { data: tapsData } = useTaps()
     const taps = tapsData?.data ?? []
 
-    const { data: globalPartial } = useGlobalSettings()
+    const { data: globalPartial, isLoading } = useGlobalSettings()
     const { mutateAsync: saveGlobal, isPending: saving } = useSaveGlobalSettings()
 
     const handleSave = async (settings: PartialUserSettings) => {
@@ -33,13 +33,19 @@ export const AdminGlobalSettingsPage = () => {
                 </p>
             </div>
 
-            <UserSettingsCard
-                initialValue={globalPartial ?? emptyPartial}
-                taps={taps}
-                onSave={handleSave}
-                isSaving={saving}
-                showImportant={true}
-            />
+            {isLoading ? (
+                <div className="text-muted-foreground text-center">
+                    {t('common.loading')}
+                </div>
+            ) : (
+                <UserSettingsCard
+                    initialValue={globalPartial ?? emptyPartial}
+                    taps={taps}
+                    onSave={handleSave}
+                    isSaving={saving}
+                    showImportant={true}
+                />
+            )}
         </div>
     )
 }
