@@ -59,6 +59,25 @@ export const tapsApi = {
     return apiCall(apiClient.delete(`/taps/${tapId}`))
   },
 
+  // Admin cache management
+  clearTapCache: async (tapId: string): Promise<{ deleted: number }> => {
+    return apiCall(
+      apiClient.delete<{ deleted: number }>(`/admin/taps/${tapId}/cache`)
+    )
+  },
+
+  deleteTapCacheEntry: async (
+    tapId: string,
+    data: { audioRequest?: string; cacheKey?: string }
+  ): Promise<{ found: boolean }> => {
+    return apiCall(
+      apiClient.delete<{ found: boolean }>(`/admin/taps/${tapId}/cache/entry`, {
+        audio_request: data.audioRequest,
+        cache_key: data.cacheKey,
+      })
+    )
+  },
+
   getTapStats: async (tapId: string): Promise<TapStats> => {
     return apiCall(apiClient.get<TapStats>(`/taps/${tapId}/stats`))
   },

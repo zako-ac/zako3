@@ -24,7 +24,6 @@ zako3-telemetry = { path = "crates/telemetry" }
 
 zako3-taphub-transport-client = { path = "crates/taphub-transport/client" }
 zako3-taphub-transport-server = { path = "crates/taphub-transport/server" }
-zako3-audio-engine-client = { path = "services/audio-engine/client" }
 zako3-preload-cache = { path = "crates/preload-cache" }
 zako3-cache-client = { path = "crates/cache-client" }
 zako3-types = { path = "crates/types" }

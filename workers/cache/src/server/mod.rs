@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use axum::{
     Router, middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use dashmap::DashMap;
 use tokio::net::TcpListener;
@@ -40,6 +40,7 @@ pub fn build(
         .route("/preload/:id/abort", post(preload::abort))
         .route("/stream", get(stream::stream))
         .route("/entry", get(entry::get_entry).delete(entry::delete_entry))
+        .route("/entries", delete(entry::delete_entries))
         .route("/metadata", post(entry::store_metadata))
         .route("/healthz", get(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(state.clone(), auth::admin_token))

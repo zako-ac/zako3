@@ -263,6 +263,16 @@ export const tapHandlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  http.delete(`${API_BASE}/admin/taps/:tapId/cache`, async () => {
+    await delay(200)
+    return HttpResponse.json({ deleted: 0 })
+  }),
+
+  http.delete(`${API_BASE}/admin/taps/:tapId/cache/entry`, async () => {
+    await delay(200)
+    return HttpResponse.json({ found: true })
+  }),
+
   http.get(`${API_BASE}/taps/:tapId/stats`, async ({ params }) => {
     await delay(200)
     const { tapId } = params

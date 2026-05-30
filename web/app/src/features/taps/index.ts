@@ -9,6 +9,8 @@ export {
   useCreateTap,
   useUpdateTap,
   useDeleteTap,
+  useClearTapCache,
+  useDeleteTapCacheEntry,
   useReportTap,
   useRequestVerification,
   useTapApiTokens,

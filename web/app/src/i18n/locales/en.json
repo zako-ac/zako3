@@ -133,6 +133,30 @@
         "actions": {
           "delete": "Delete"
         },
+        "cache": {
+          "audioRequest": "Audio request",
+          "audioRequestHint": "The audio request is hashed to locate its cached entry.",
+          "audioRequestPlaceholder": "Enter the exact audio request",
+          "cacheKey": "Cache key",
+          "cacheKeyPlaceholder": "Enter the cache key",
+          "deleteAll": "Delete all caches",
+          "deleteAllConfirm": {
+            "description": "Delete every cached audio entry for this tap? This cannot be undone.",
+            "title": "Delete all caches"
+          },
+          "deleteAllEmpty": "No cached entries to delete for this tap.",
+          "deleteAllSuccess": "Deleted {{count}} cache entries.",
+          "deleteEntry": "Delete entry",
+          "deleteEntryConfirm": {
+            "description": "Delete the cached entry for this audio request? This cannot be undone.",
+            "title": "Delete cache entry"
+          },
+          "deleteEntryNotFound": "No matching cache entry was found.",
+          "deleteEntrySuccess": "Cache entry deleted.",
+          "description": "Manage cached audio for this tap.",
+          "emptyInput": "Enter a value first.",
+          "title": "Cache"
+        },
         "deleteConfirm": {
           "description": "Are you sure you want to delete the tap {{name}}? This action cannot be undone.",
           "title": "Delete Tap"

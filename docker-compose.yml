@@ -75,6 +75,8 @@ services:
       OTLP_ENDPOINT: http://otel-lgtm:4317
       METRICS_PORT: "9091"
       NATS_URL: nats://nats:4222
+      HQ_CACHE_RPC_URL: http://cache:4100
+      HQ_CACHE_RPC_ADMIN_TOKEN: ${ZK_TH_CACHE_RPC_ADMIN_TOKEN:-}
     ports:
       - "8080:8080"
       - "50052:50052"

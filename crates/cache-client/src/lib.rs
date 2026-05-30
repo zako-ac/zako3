@@ -3,6 +3,6 @@ pub mod dto;
 
 pub use client::RemoteAudioCache;
 pub use dto::{
-    CacheEntryDto, CacheEntryKindDto, CreatePreloadReq, EntryQuery, PreloadCreatedResp,
-    StoreMetadataReq,
+    CacheEntryDto, CacheEntryKindDto, ClearTapResp, CreatePreloadReq, DeleteEntryResp, EntryQuery,
+    PreloadCreatedResp, StoreMetadataReq, TapQuery,
 };

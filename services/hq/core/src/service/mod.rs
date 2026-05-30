@@ -38,6 +38,7 @@ use hq_types::hq::playback::PlaybackEvent;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapMetricsService;
 use zako3_tl_client::TlClient;
 use zako3_states::{
@@ -63,6 +64,8 @@ pub struct Service {
     pub tts_channel: TTSChannelService,
     pub audio_engine: AudioEngineService,
     pub emoji_match_publisher: Option<EmojiMatchPublisher>,
+    /// Admin client for the cache worker (clear/delete cached audio).
+    pub cache_admin: Arc<RemoteAudioCache>,
 }
 
 impl Service {
@@ -148,6 +151,14 @@ impl Service {
 
         let mapping = MappingService::new(pool.clone(), name_resolver_slot.clone())?;
 
+        let cache_admin = Arc::new(
+            RemoteAudioCache::new(
+                config.cache_rpc_url.clone(),
+                config.cache_rpc_admin_token.clone(),
+            )
+            .map_err(|e| CoreError::Internal(format!("cache client error: {e}")))?,
+        );
+
         let guild_settings_repo = Arc::new(PgGuildSettingsRepository::new(pool.clone()));
         let user_guild_settings_repo = Arc::new(PgUserGuildSettingsRepository::new(pool.clone()));
         let global_settings_repo = Arc::new(PgGlobalSettingsRepository::new(pool.clone()));
@@ -191,6 +202,7 @@ impl Service {
             tts_channel: TTSChannelService::new(tts_channel_repo),
             audio_engine: audio_engine_service,
             emoji_match_publisher,
+            cache_admin,
         })
     }
 }

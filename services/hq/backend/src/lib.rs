@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Extension, Router,
 };
 use hq_core::{PlaybackEvent, Service};
@@ -17,6 +17,7 @@ use handlers::admin;
 use handlers::api_key;
 use handlers::audit_log;
 use handlers::auth;
+use handlers::cache;
 use handlers::guild;
 use handlers::mapper;
 use handlers::notification;
@@ -39,6 +40,8 @@ use handlers::users;
         handlers::tap::update_tap,
         handlers::tap::admin_update_tap,
         handlers::tap::admin_update_tap_occupation,
+        handlers::cache::clear_tap_cache,
+        handlers::cache::delete_tap_cache_entry,
         handlers::tap::delete_tap,
         handlers::tap::get_tap_stats,
         handlers::audit_log::get_tap_audit_logs,
@@ -118,6 +121,9 @@ use handlers::users;
             hq_types::hq::CreateNotificationDto,
             handlers::admin::VerificationRequestsQuery,
             handlers::admin::PaginatedVerificationRequestsDto,
+            handlers::cache::DeleteCacheEntryDto,
+            handlers::cache::ClearCacheResponseDto,
+            handlers::cache::DeleteCacheEntryResultDto,
             handlers::admin::AdminUsersQuery,
             hq_types::hq::VerificationRequest,
             hq_types::hq::VerificationStatus,
@@ -247,6 +253,14 @@ pub fn app(
         .route(
             "/api/v1/admin/taps/:id/occupation",
             axum::routing::patch(tap::admin_update_tap_occupation),
+        )
+        .route(
+            "/api/v1/admin/taps/:id/cache",
+            delete(cache::clear_tap_cache),
+        )
+        .route(
+            "/api/v1/admin/taps/:id/cache/entry",
+            delete(cache::delete_tap_cache_entry),
         )
         .route(
             "/api/v1/admin/stats",

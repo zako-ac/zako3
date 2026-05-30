@@ -2,6 +2,7 @@ pub mod admin;
 pub mod api_key;
 pub mod audit_log;
 pub mod auth;
+pub mod cache;
 pub mod guild;
 pub mod mapper;
 pub use mapper::ApiErrorResponse;

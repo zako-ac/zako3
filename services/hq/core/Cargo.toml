@@ -32,3 +32,4 @@ futures-util = "0.3.32"
 zako3-metrics.workspace = true
 async-nats = { workspace = true }
 zako3-emoji-matcher-proto = { workspace = true }
+zako3-cache-client.workspace = true

@@ -16,7 +16,8 @@ use zako3_types::{
 };
 
 use crate::dto::{
-    CacheEntryDto, CreatePreloadReq, EntryQuery, PreloadCreatedResp, StoreMetadataReq,
+    CacheEntryDto, ClearTapResp, CreatePreloadReq, DeleteEntryResp, EntryQuery,
+    PreloadCreatedResp, StoreMetadataReq, TapQuery,
 };
 
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
@@ -50,6 +51,50 @@ impl RemoteAudioCache {
             req = req.header(ADMIN_TOKEN_HEADER, token);
         }
         req
+    }
+
+    /// Delete a single cached entry by key (`DELETE /entry`). Returns `true` if a
+    /// matching entry existed, `false` if there was nothing to delete. Inherent
+    /// method so callers don't need the [`AudioCache`] trait in scope.
+    pub async fn delete_entry(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<bool> {
+        let q = EntryQuery::new(tap_id, key);
+        let resp = self
+            .request(reqwest::Method::DELETE, "/entry")
+            .query(&q)
+            .send()
+            .await
+            .map_err(io_other)?;
+        if resp.status() == StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        if !resp.status().is_success() {
+            return Err(io_other(format!(
+                "DELETE /entry failed: {}",
+                resp.status()
+            )));
+        }
+        let parsed: DeleteEntryResp = resp.json().await.map_err(io_other)?;
+        Ok(parsed.deleted)
+    }
+
+    /// Delete every cached entry for `tap_id` (`DELETE /entries`). Returns the
+    /// number of entries removed.
+    pub async fn delete_all_for_tap(&self, tap_id: &TapId) -> io::Result<usize> {
+        let q = TapQuery::new(tap_id);
+        let resp = self
+            .request(reqwest::Method::DELETE, "/entries")
+            .query(&q)
+            .send()
+            .await
+            .map_err(io_other)?;
+        if !resp.status().is_success() {
+            return Err(io_other(format!(
+                "DELETE /entries failed: {}",
+                resp.status()
+            )));
+        }
+        let parsed: ClearTapResp = resp.json().await.map_err(io_other)?;
+        Ok(parsed.deleted)
     }
 }
 
@@ -232,19 +277,6 @@ impl AudioCache for RemoteAudioCache {
     }
 
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()> {
-        let q = EntryQuery::new(tap_id, key);
-        let resp = self
-            .request(reqwest::Method::DELETE, "/entry")
-            .query(&q)
-            .send()
-            .await
-            .map_err(io_other)?;
-        if !resp.status().is_success() && resp.status() != StatusCode::NOT_FOUND {
-            return Err(io_other(format!(
-                "DELETE /entry failed: {}",
-                resp.status()
-            )));
-        }
-        Ok(())
+        self.delete_entry(tap_id, key).await.map(|_| ())
     }
 }

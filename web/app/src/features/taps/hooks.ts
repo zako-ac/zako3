@@ -121,6 +121,19 @@ export const useReportTap = () => {
   })
 }
 
+export const useClearTapCache = (tapId: string) => {
+  return useMutation({
+    mutationFn: () => tapsApi.clearTapCache(tapId),
+  })
+}
+
+export const useDeleteTapCacheEntry = (tapId: string) => {
+  return useMutation({
+    mutationFn: (data: { audioRequest?: string; cacheKey?: string }) =>
+      tapsApi.deleteTapCacheEntry(tapId, data),
+  })
+}
+
 export const useRequestVerification = () => {
   const queryClient = useQueryClient()
 

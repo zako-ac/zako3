@@ -3,7 +3,14 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ArrowLeft, Trash2, Users, Activity, MousePointer2, Database } from 'lucide-react'
-import { useTap, useTapStats, useDeleteTap, tapKeys } from '@/features/taps'
+import {
+    useTap,
+    useTapStats,
+    useDeleteTap,
+    useClearTapCache,
+    useDeleteTapCacheEntry,
+    tapKeys,
+} from '@/features/taps'
 import { useStatsSSE } from '@/features/stats'
 import { useUpdateTapOccupation } from '@/features/admin/hooks'
 import { PermissionBadge, TapRolesBadge, CopyableId, OccupationSelect } from '@/components/tap'
@@ -13,6 +20,9 @@ import { formatRelativeTime } from '@/lib/date'
 import { ROUTES } from '@/lib/constants'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserBadge } from '@/components/tap/user-badge'
 import { StatsCard } from '@/components/dashboard/stats-card'
@@ -23,6 +33,10 @@ export const AdminTapDetailPage = () => {
     const { t, i18n } = useTranslation()
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false)
+    const [deleteEntryDialogOpen, setDeleteEntryDialogOpen] = useState(false)
+    const [cacheKeyMode, setCacheKeyMode] = useState<'audioRequest' | 'cacheKey'>('audioRequest')
+    const [cacheKeyInput, setCacheKeyInput] = useState('')
 
     useStatsSSE(tapId ? [tapKeys.stats(tapId)] : [])
     const { data: tap, isLoading: isLoadingTap } = useTap(tapId)
@@ -31,6 +45,8 @@ export const AdminTapDetailPage = () => {
     const owner = tap?.owner
     const { mutateAsync: deleteTap, isPending: isDeleting } = useDeleteTap()
     const { mutate: updateOccupation, isPending: isUpdating } = useUpdateTapOccupation(tapId!)
+    const { mutateAsync: clearTapCache, isPending: isClearingCache } = useClearTapCache(tapId!)
+    const { mutateAsync: deleteCacheEntry, isPending: isDeletingEntry } = useDeleteTapCacheEntry(tapId!)
 
     const handleOccupationChange = (occupation: any) => {
         updateOccupation(occupation, {
@@ -49,6 +65,51 @@ export const AdminTapDetailPage = () => {
         await deleteTap(tapId)
         toast.success(t('admin.taps.deleteSuccess'))
         navigate(ROUTES.ADMIN_TAPS)
+    }
+
+    const handleClearCache = async () => {
+        if (!tapId) return
+        try {
+            const { deleted } = await clearTapCache()
+            if (deleted > 0) {
+                toast.success(t('admin.taps.cache.deleteAllSuccess', { count: deleted }))
+            } else {
+                toast.warning(t('admin.taps.cache.deleteAllEmpty'))
+            }
+        } catch {
+            toast.error(t('errors.updateFailed'))
+        } finally {
+            setClearCacheDialogOpen(false)
+        }
+    }
+
+    const openDeleteEntryDialog = () => {
+        if (!cacheKeyInput.trim()) {
+            toast.error(t('admin.taps.cache.emptyInput'))
+            return
+        }
+        setDeleteEntryDialogOpen(true)
+    }
+
+    const handleDeleteCacheEntry = async () => {
+        if (!tapId) return
+        try {
+            const { found } = await deleteCacheEntry(
+                cacheKeyMode === 'audioRequest'
+                    ? { audioRequest: cacheKeyInput }
+                    : { cacheKey: cacheKeyInput }
+            )
+            if (found) {
+                toast.success(t('admin.taps.cache.deleteEntrySuccess'))
+                setCacheKeyInput('')
+            } else {
+                toast.warning(t('admin.taps.cache.deleteEntryNotFound'))
+            }
+        } catch {
+            toast.error(t('errors.updateFailed'))
+        } finally {
+            setDeleteEntryDialogOpen(false)
+        }
     }
 
     if (isLoadingTap) {
@@ -250,6 +311,77 @@ export const AdminTapDetailPage = () => {
                 </>
             )}
 
+            {/* Cache Management Card */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>{t('admin.taps.cache.title')}</CardTitle>
+                    <p className="text-muted-foreground text-sm">
+                        {t('admin.taps.cache.description')}
+                    </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Delete a specific cache entry */}
+                    <div className="space-y-3">
+                        <RadioGroup
+                            value={cacheKeyMode}
+                            onValueChange={(v) =>
+                                setCacheKeyMode(v as 'audioRequest' | 'cacheKey')
+                            }
+                            className="flex gap-6"
+                        >
+                            <div className="flex items-center gap-2">
+                                <RadioGroupItem value="audioRequest" id="cache-mode-audio" />
+                                <Label htmlFor="cache-mode-audio">
+                                    {t('admin.taps.cache.audioRequest')}
+                                </Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <RadioGroupItem value="cacheKey" id="cache-mode-key" />
+                                <Label htmlFor="cache-mode-key">
+                                    {t('admin.taps.cache.cacheKey')}
+                                </Label>
+                            </div>
+                        </RadioGroup>
+                        <div className="flex gap-2">
+                            <Input
+                                value={cacheKeyInput}
+                                onChange={(e) => setCacheKeyInput(e.target.value)}
+                                placeholder={
+                                    cacheKeyMode === 'audioRequest'
+                                        ? t('admin.taps.cache.audioRequestPlaceholder')
+                                        : t('admin.taps.cache.cacheKeyPlaceholder')
+                                }
+                            />
+                            <Button
+                                variant="destructive"
+                                onClick={openDeleteEntryDialog}
+                                disabled={isDeletingEntry}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {t('admin.taps.cache.deleteEntry')}
+                            </Button>
+                        </div>
+                        {cacheKeyMode === 'audioRequest' && (
+                            <p className="text-muted-foreground text-xs">
+                                {t('admin.taps.cache.audioRequestHint')}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Delete all caches for this tap */}
+                    <div className="border-t pt-4">
+                        <Button
+                            variant="destructive"
+                            onClick={() => setClearCacheDialogOpen(true)}
+                            disabled={isClearingCache}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {t('admin.taps.cache.deleteAll')}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Delete Confirmation Dialog */}
             <ConfirmDialog
                 open={deleteDialogOpen}
@@ -260,6 +392,28 @@ export const AdminTapDetailPage = () => {
                 })}
                 onConfirm={handleDelete}
                 isLoading={isDeleting}
+                variant="destructive"
+            />
+
+            {/* Clear All Cache Dialog */}
+            <ConfirmDialog
+                open={clearCacheDialogOpen}
+                onOpenChange={setClearCacheDialogOpen}
+                title={t('admin.taps.cache.deleteAllConfirm.title')}
+                description={t('admin.taps.cache.deleteAllConfirm.description')}
+                onConfirm={handleClearCache}
+                isLoading={isClearingCache}
+                variant="destructive"
+            />
+
+            {/* Delete Cache Entry Dialog */}
+            <ConfirmDialog
+                open={deleteEntryDialogOpen}
+                onOpenChange={setDeleteEntryDialogOpen}
+                title={t('admin.taps.cache.deleteEntryConfirm.title')}
+                description={t('admin.taps.cache.deleteEntryConfirm.description')}
+                onConfirm={handleDeleteCacheEntry}
+                isLoading={isDeletingEntry}
                 variant="destructive"
             />
         </div>

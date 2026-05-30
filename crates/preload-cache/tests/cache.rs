@@ -239,6 +239,64 @@ async fn delete_metadata_only_removes_json() {
     }
 }
 
+#[tokio::test]
+async fn delete_returning_found_reports_existence() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = open_cache(&dir).await;
+
+    store_n_frames(&cache, "tap1", "k1", 1).await;
+
+    // Existing entry → true.
+    assert!(cache.delete_returning_found(&tap("tap1"), &key("k1")).await.unwrap());
+    // Now gone → false.
+    assert!(!cache.delete_returning_found(&tap("tap1"), &key("k1")).await.unwrap());
+    // Never existed → false.
+    assert!(!cache.delete_returning_found(&tap("tap1"), &key("missing")).await.unwrap());
+}
+
+#[tokio::test]
+async fn delete_all_for_tap_removes_only_that_taps_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = open_cache(&dir).await;
+
+    store_n_frames(&cache, "tapA", "k1", 1).await;
+    store_n_frames(&cache, "tapA", "k2", 1).await;
+    store_n_frames(&cache, "tapB", "k1", 1).await;
+
+    let deleted = cache.delete_all_for_tap(&tap("tapA")).await.unwrap();
+    assert_eq!(deleted, 2, "should remove both tapA entries");
+
+    // tapA entries are gone, tapB entry remains.
+    assert!(cache.get_entry(&tap("tapA"), &key("k1")).await.is_none());
+    assert!(cache.get_entry(&tap("tapA"), &key("k2")).await.is_none());
+    assert!(cache.get_entry(&tap("tapB"), &key("k1")).await.is_some());
+
+    // Exactly one .opus and one .json (tapB) remain on disk.
+    let mut opus_count = 0;
+    let mut json_count = 0;
+    for entry in std::fs::read_dir(dir.path()).unwrap() {
+        let path = entry.unwrap().path();
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("opus") => opus_count += 1,
+            Some("json") => json_count += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(opus_count, 1, "only tapB .opus should remain");
+    assert_eq!(json_count, 1, "only tapB .json should remain");
+}
+
+#[tokio::test]
+async fn delete_all_for_tap_on_empty_tap_returns_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = open_cache(&dir).await;
+
+    store_n_frames(&cache, "tapA", "k1", 1).await;
+    let deleted = cache.delete_all_for_tap(&tap("tapMissing")).await.unwrap();
+    assert_eq!(deleted, 0);
+    assert!(cache.get_entry(&tap("tapA"), &key("k1")).await.is_some());
+}
+
 // ---------------------------------------------------------------------------
 // Expiry
 // ---------------------------------------------------------------------------

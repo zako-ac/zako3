@@ -138,6 +138,39 @@ impl FileAudioCache {
         Ok(result)
     }
 
+    /// Delete a single cached entry, removing its `.opus`/`.json` files and the
+    /// index row. Returns `true` if a matching entry existed (regardless of
+    /// expiry), `false` if there was nothing to delete.
+    pub async fn delete_returning_found(
+        &self,
+        tap_id: &TapId,
+        key: &AudioCacheItemKey,
+    ) -> io::Result<bool> {
+        let key_json = key_to_json(key);
+        let existing = self.db.get(tap_id.to_string(), key_json.clone()).await?;
+        if let Some(entry) = &existing {
+            if let Some(path) = &entry.opus_path {
+                let _ = remove_if_exists(&PathBuf::from(path)).await;
+            }
+            let _ = remove_if_exists(&PathBuf::from(&entry.json_path)).await;
+        }
+        self.db.delete(tap_id.to_string(), key_json).await?;
+        Ok(existing.is_some())
+    }
+
+    /// Delete every cached entry belonging to `tap_id`, removing both the index
+    /// entries and their `.opus`/`.json` files. Returns the number removed.
+    pub async fn delete_all_for_tap(&self, tap_id: &TapId) -> io::Result<usize> {
+        let removed = self.db.delete_all_for_tap(&tap_id.to_string()).await?;
+        for entry in &removed {
+            if let Some(path) = &entry.opus_path {
+                let _ = remove_if_exists(&PathBuf::from(path)).await;
+            }
+            let _ = remove_if_exists(&PathBuf::from(&entry.json_path)).await;
+        }
+        Ok(removed.len())
+    }
+
     fn new_opus_path(&self) -> PathBuf {
         self.dir.join(format!("{}.opus", uuid::Uuid::new_v4()))
     }
@@ -392,14 +425,7 @@ impl AudioCache for FileAudioCache {
     }
 
     async fn delete(&self, tap_id: &TapId, key: &AudioCacheItemKey) -> io::Result<()> {
-        let key_json = key_to_json(key);
-        if let Ok(Some(entry)) = self.db.get(tap_id.to_string(), key_json.clone()).await {
-            if let Some(path) = entry.opus_path {
-                let _ = remove_if_exists(&PathBuf::from(path)).await;
-            }
-            let _ = remove_if_exists(&PathBuf::from(&entry.json_path)).await;
-        }
-        self.db.delete(tap_id.to_string(), key_json).await
+        self.delete_returning_found(tap_id, key).await.map(|_| ())
     }
 }
 

@@ -101,8 +101,12 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'PATCH', body, signal })
   }
 
-  delete<T>(endpoint: string, signal?: AbortSignal): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE', signal })
+  delete<T>(
+    endpoint: string,
+    body?: unknown,
+    signal?: AbortSignal
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'DELETE', body, signal })
   }
 
   async postFormData<T>(endpoint: string, body: FormData): Promise<ApiResponse<T>> {

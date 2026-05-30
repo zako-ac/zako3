@@ -185,6 +185,25 @@ impl CacheDb {
         Ok(())
     }
 
+    /// Remove every entry belonging to `tap_id` from the index and return the
+    /// removed entries so the caller can delete their `.opus`/`.json` files.
+    /// Does **not** delete files (caller's responsibility).
+    pub async fn delete_all_for_tap(&self, tap_id: &str) -> io::Result<Vec<DbEntry>> {
+        let mut map = self.entries.write().await;
+        let keys: Vec<(String, String)> = map
+            .keys()
+            .filter(|(tid, _)| tid == tap_id)
+            .cloned()
+            .collect();
+        let mut removed = Vec::with_capacity(keys.len());
+        for key in keys {
+            if let Some((path, sidecar)) = map.remove(&key) {
+                removed.push(to_db_entry(&path, &sidecar));
+            }
+        }
+        Ok(removed)
+    }
+
     /// Increment `use_count` and update `last_used_at`.
     pub async fn touch(&self, tap_id: String, cache_key: String) -> io::Result<()> {
         let now = chrono::Utc::now().timestamp();

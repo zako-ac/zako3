@@ -23,6 +23,8 @@ pub struct AppConfig {
     pub sub_bot_ids: Vec<String>,
     pub bot_invite_permissions: String,
     pub nats_url: Option<String>,
+    pub cache_rpc_url: String,
+    pub cache_rpc_admin_token: Option<String>,
 }
 
 impl AppConfig {
@@ -62,6 +64,11 @@ impl AppConfig {
             bot_invite_permissions: env::var("BOT_INVITE_PERMISSIONS")
                 .unwrap_or_else(|_| "4895026873161728".to_string()),
             nats_url: env::var("NATS_URL").ok().filter(|s| !s.is_empty()),
+            cache_rpc_url: env::var("HQ_CACHE_RPC_URL")
+                .unwrap_or_else(|_| "http://localhost:4100".to_string()),
+            cache_rpc_admin_token: env::var("HQ_CACHE_RPC_ADMIN_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty()),
         })
     }
 }

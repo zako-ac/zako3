@@ -3,7 +3,9 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
-use zako3_cache_client::{CacheEntryDto, EntryQuery, StoreMetadataReq};
+use zako3_cache_client::{
+    CacheEntryDto, ClearTapResp, DeleteEntryResp, EntryQuery, StoreMetadataReq, TapQuery,
+};
 use zako3_preload_cache::AudioCache;
 use zako3_types::{cache::AudioCacheItemKey, hq::TapId};
 
@@ -25,23 +27,41 @@ pub async fn get_entry(
     Ok(Json(entry.into()))
 }
 
-/// `DELETE /entry?tap_id&key` — remove a cache entry.
+/// `DELETE /entry?tap_id&key` — remove a cache entry. Reports whether a matching
+/// entry existed via `{ "deleted": bool }`.
 pub async fn delete_entry(
     State(state): State<AppState>,
     Query(q): Query<EntryQuery>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<Json<DeleteEntryResp>, StatusCode> {
     let key: AudioCacheItemKey =
         serde_json::from_str(&q.key).map_err(|_| StatusCode::BAD_REQUEST)?;
     let tap_id = TapId(q.tap_id);
-    state
+    let deleted = state
         .cache
-        .delete(&tap_id, &key)
+        .delete_returning_found(&tap_id, &key)
         .await
         .map_err(|e| {
             tracing::warn!(%e, "delete failed");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(DeleteEntryResp { deleted }))
+}
+
+/// `DELETE /entries?tap_id` — remove every cache entry for a tap.
+pub async fn delete_entries(
+    State(state): State<AppState>,
+    Query(q): Query<TapQuery>,
+) -> Result<Json<ClearTapResp>, StatusCode> {
+    let tap_id = TapId(q.tap_id);
+    let deleted = state
+        .cache
+        .delete_all_for_tap(&tap_id)
+        .await
+        .map_err(|e| {
+            tracing::warn!(%e, "delete_all_for_tap failed");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(ClearTapResp { deleted }))
 }
 
 /// `POST /metadata` — write a metadata-only entry (no audio file).

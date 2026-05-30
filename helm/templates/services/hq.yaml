@@ -59,6 +59,15 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: TRAFFIC_LIGHT_URL
               value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
+            - name: HQ_CACHE_RPC_URL
+              value: "http://{{ $fullname }}-cache:{{ .Values.ports.cache }}"
+            {{- if .Values.cache.adminTokenSecret.name }}
+            - name: HQ_CACHE_RPC_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.adminTokenSecret.name }}
+                  key: {{ .Values.cache.adminTokenSecret.key }}
+            {{- end }}
             - name: NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
             - name: METRICS_PORT

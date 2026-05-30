@@ -133,6 +133,30 @@
         "actions": {
           "delete": "삭제"
         },
+        "cache": {
+          "audioRequest": "오디오 요청",
+          "audioRequestHint": "오디오 요청을 해시하여 캐시 항목을 찾습니다.",
+          "audioRequestPlaceholder": "정확한 오디오 요청을 입력하세요",
+          "cacheKey": "캐시 키",
+          "cacheKeyPlaceholder": "캐시 키를 입력하세요",
+          "deleteAll": "모든 캐시 삭제",
+          "deleteAllConfirm": {
+            "description": "이 탭의 모든 캐시된 오디오 항목을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+            "title": "모든 캐시 삭제"
+          },
+          "deleteAllEmpty": "이 탭에 삭제할 캐시 항목이 없습니다.",
+          "deleteAllSuccess": "{{count}}개의 캐시 항목을 삭제했습니다.",
+          "deleteEntry": "항목 삭제",
+          "deleteEntryConfirm": {
+            "description": "이 오디오 요청의 캐시 항목을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+            "title": "캐시 항목 삭제"
+          },
+          "deleteEntryNotFound": "일치하는 캐시 항목을 찾을 수 없습니다.",
+          "deleteEntrySuccess": "캐시 항목이 삭제되었습니다.",
+          "description": "이 탭의 캐시된 오디오를 관리합니다.",
+          "emptyInput": "값을 먼저 입력하세요.",
+          "title": "캐시"
+        },
         "deleteConfirm": {
           "description": "이 탭을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
           "title": "탭 삭제 확인"

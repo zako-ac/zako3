@@ -45,6 +45,32 @@ impl EntryQuery {
     }
 }
 
+/// Query string for the tap-wide clear endpoint (`DELETE /entries?tap_id`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TapQuery {
+    pub tap_id: String,
+}
+
+impl TapQuery {
+    pub fn new(tap_id: &TapId) -> Self {
+        Self {
+            tap_id: tap_id.0.clone(),
+        }
+    }
+}
+
+/// Response body for `DELETE /entries` — number of entries removed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClearTapResp {
+    pub deleted: usize,
+}
+
+/// Response body for `DELETE /entry` — whether a matching entry existed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteEntryResp {
+    pub deleted: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CacheEntryKindDto {
