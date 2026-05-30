@@ -78,6 +78,9 @@ taphub:
   transportTlsCaFilename: "ca-cert.pem"
   cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"
+  # TTL (seconds) for tap connection-state leases in Redis; refreshed by the hub
+  # on a heartbeat (~ttl/3) so stale state from a crash expires within this window.
+  connectionLeaseTtlSecs: "30"
   metricsPort: "9092"
   tokioConsolePort: "6669"
   # DEBUG ONLY: accept all tap auth and audio requests without HQ. Do NOT

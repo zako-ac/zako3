@@ -17,6 +17,10 @@ pub struct AppConfig {
     pub cache_rpc_url: String,
     pub cache_rpc_admin_token: Option<String>,
     pub request_timeout_ms: u64,
+    /// TTL (seconds) for published tap connection-state leases in Redis. The hub
+    /// refreshes them on a heartbeat at roughly `ttl / 3`; if the process dies the
+    /// keys expire after this window, so stale "online" state cannot linger.
+    pub connection_lease_ttl_secs: u64,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
     pub bypass_hq: bool,
@@ -67,6 +71,10 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10_000),
+            connection_lease_ttl_secs: env::var("ZK_TH_CONNECTION_LEASE_TTL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
             otlp_endpoint: env::var("ZK_TH_OTLP_ENDPOINT").ok(),
             metrics_port: env::var("ZK_TH_METRICS_PORT")
                 .ok()

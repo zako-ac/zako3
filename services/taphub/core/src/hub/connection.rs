@@ -12,13 +12,25 @@ use crate::metrics;
 use zako3_metrics::TapRedisMetrics;
 use zako3_states::TapHubStateService;
 
-use super::ConnectionSignals;
+use super::{ConnEntry, ConnectionRegistry};
 
 pub struct TapHubConnectionHandler {
     pub(super) app: App,
     pub(super) state_service: TapHubStateService,
     pub(super) metrics_service: TapRedisMetrics,
-    pub(super) connection_signals: ConnectionSignals,
+    pub(super) connections: ConnectionRegistry,
+}
+
+impl TapHubConnectionHandler {
+    /// Snapshot the current live states for a tap from the authoritative registry.
+    fn tap_snapshot(&self, tap_id: &TapId) -> zako3_types::OnlineTapStates {
+        self.connections
+            .lock()
+            .values()
+            .filter(|e| &e.state.tap_id == tap_id)
+            .map(|e| e.state.clone())
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -77,21 +89,30 @@ impl HubHandler for TapHubConnectionHandler {
                     tracing::warn!(%e, "Failed to register tap in metrics service");
                 }
 
-                self.state_service
-                    .set_connection_state(online_tap)
-                    .await
-                    .map_err(|e| {
-                        tracing::warn!(%e, "error while setting tap connection state");
-                        TapServerReject {
-                            reason_type: HubRejectReasonType::InternalError,
-                            reason: "internal error".to_string(),
-                        }
-                    })?;
-
+                // Register in the authoritative in-memory registry, then publish
+                // the tap's full live set to Redis with a TTL lease. The registry
+                // is the source of truth; Redis is a projection refreshed by the
+                // heartbeat in `TapHub::run`.
                 let (disconnect_tx, _) = watch::channel(false);
-                self.connection_signals
-                    .lock()
-                    .insert(connection_id, disconnect_tx);
+                self.connections.lock().insert(
+                    connection_id,
+                    ConnEntry {
+                        state: online_tap,
+                        disconnect_tx,
+                    },
+                );
+
+                let states = self.tap_snapshot(&tap.id);
+                if let Err(e) = self.state_service.publish_tap_states(&tap.id, &states).await {
+                    // Roll back the registry insert so we don't advertise a
+                    // connection we failed to publish.
+                    self.connections.lock().remove(&connection_id);
+                    tracing::warn!(%e, "error while publishing tap connection state");
+                    return Err(TapServerReject {
+                        reason_type: HubRejectReasonType::InternalError,
+                        reason: "internal error".to_string(),
+                    });
+                }
 
                 metrics::metrics().connected_taps.add(1, &[]);
                 metrics::metrics()
@@ -128,35 +149,27 @@ impl HubHandler for TapHubConnectionHandler {
 
     #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0, connection_id))]
     async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64) {
-        if let Some(tx) = self.connection_signals.lock().remove(&connection_id) {
-            tracing::warn!(
-                tap_id = %tap_id.0,
-                connection_id,
-                "Tap disconnected — erroring all active streams for this connection"
-            );
-            let _ = tx.send(true);
-        }
-
-        let states = match self.state_service.get_tap_states(&tap_id).await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!(%e, tap_id = %tap_id.0, "Failed to get tap states on disconnect; uptime will not be recorded");
-                vec![]
-            }
+        // Drop the connection from the authoritative registry and fire its
+        // disconnect signal so any active streams error out immediately.
+        let removed = self.connections.lock().remove(&connection_id);
+        let Some(entry) = removed else {
+            // Already gone (e.g. failed publish rolled it back) — nothing to do.
+            return;
         };
 
-        let uptime_secs =
-            if let Some(conn) = states.iter().find(|s| s.connection_id == connection_id) {
-                let secs = (chrono::Utc::now() - conn.connected_at)
-                    .num_seconds()
-                    .max(0);
-                if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), secs).await {
-                    tracing::warn!(%e, "Failed to accumulate uptime metric");
-                }
-                secs
-            } else {
-                0
-            };
+        tracing::warn!(
+            tap_id = %tap_id.0,
+            connection_id,
+            "Tap disconnected — erroring all active streams for this connection"
+        );
+        let _ = entry.disconnect_tx.send(true);
+
+        let uptime_secs = (chrono::Utc::now() - entry.state.connected_at)
+            .num_seconds()
+            .max(0);
+        if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), uptime_secs).await {
+            tracing::warn!(%e, "Failed to accumulate uptime metric");
+        }
 
         tracing::info!(
             tap_id = %tap_id.0,
@@ -171,12 +184,11 @@ impl HubHandler for TapHubConnectionHandler {
             &[KeyValue::new("tap_id", tap_id.0.to_string())],
         );
 
-        if let Err(e) = self
-            .state_service
-            .remove_connection_state(&tap_id, connection_id)
-            .await
-        {
-            tracing::warn!(%e, "error while removing tap connection state");
+        // Re-publish the tap's remaining live set (deletes the key if this was the
+        // last connection) so the Redis projection reflects the drop right away.
+        let states = self.tap_snapshot(&tap_id);
+        if let Err(e) = self.state_service.publish_tap_states(&tap_id, &states).await {
+            tracing::warn!(%e, "error while publishing tap connection state on disconnect");
         }
     }
 }

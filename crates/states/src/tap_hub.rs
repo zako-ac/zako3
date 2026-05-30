@@ -1,16 +1,40 @@
-use zako3_types::{OnlineTapState, OnlineTapStates, TapName, hq::TapId};
+use zako3_types::{OnlineTapStates, TapName, hq::TapId};
 
 use crate::cache_repo::CacheRepositoryRef;
 use crate::error::{Result, StateServiceError};
 
+/// Default lease TTL used when none is configured. The taphub overrides this via
+/// [`TapHubStateService::with_lease_ttl_secs`]; read-only consumers (hq, workers)
+/// never publish so the value is irrelevant to them.
+pub const DEFAULT_LEASE_TTL_SECS: u64 = 30;
+
 #[derive(Clone)]
 pub struct TapHubStateService {
     pub cache_repository: CacheRepositoryRef,
+    /// TTL applied to every published connection-state key. The taphub refreshes
+    /// these keys on a heartbeat well within the TTL; if the process dies the
+    /// keys expire on their own, so stale "online" state can never linger.
+    lease_ttl_secs: u64,
 }
 
 impl TapHubStateService {
     pub fn new(cache_repository: CacheRepositoryRef) -> Self {
-        Self { cache_repository }
+        Self {
+            cache_repository,
+            lease_ttl_secs: DEFAULT_LEASE_TTL_SECS,
+        }
+    }
+
+    /// Set the TTL (seconds) for published connection-state leases.
+    pub fn with_lease_ttl_secs(mut self, secs: u64) -> Self {
+        self.lease_ttl_secs = secs.max(1);
+        self
+    }
+
+    /// The configured lease TTL in seconds. Callers derive the heartbeat interval
+    /// from this (typically `ttl / 3`).
+    pub fn lease_ttl_secs(&self) -> u64 {
+        self.lease_ttl_secs
     }
 
     pub async fn get_tap_id_by_name(&self, tap_name: &TapName) -> Result<Option<TapId>> {
@@ -33,59 +57,41 @@ impl TapHubStateService {
         Ok(state)
     }
 
-    pub async fn set_tap_states(&self, tap_id: &TapId, state: &OnlineTapStates) -> Result<()> {
+    /// Publish the complete live connection set for a tap, with a TTL lease.
+    ///
+    /// The taphub registry is the single writer, so we always write the full list
+    /// rather than read-modify-write a shared list. An empty list deletes the key
+    /// immediately (last connection gone); otherwise the key (and the name index)
+    /// are written with `set_ex(lease_ttl_secs)` and must be refreshed before the
+    /// TTL elapses to stay online.
+    pub async fn publish_tap_states(
+        &self,
+        tap_id: &TapId,
+        states: &OnlineTapStates,
+    ) -> Result<()> {
         let key = format!("tap:{}", tap_id.0);
 
-        let state_str = serde_json::to_string(state).map_err(|_| StateServiceError::CacheError)?;
-        self.cache_repository.set(&key, &state_str).await;
-        Ok(())
-    }
+        if states.is_empty() {
+            self.cache_repository.del(&key).await;
+            return Ok(());
+        }
 
-    pub async fn set_connection_state(&self, state: OnlineTapState) -> Result<()> {
-        let tap_id = state.tap_id.clone();
+        if let Some(first) = states.first() {
+            let name_key = format!("tap_name:{}", first.tap_name.0);
+            self.cache_repository
+                .set_ex(&name_key, &tap_id.0, self.lease_ttl_secs)
+                .await;
+        }
 
-        let name_key = format!("tap_name:{}", state.tap_name.0);
-        self.cache_repository.set(&name_key, &tap_id.0).await;
-
-        let mut states = self.get_tap_states(&state.tap_id).await?;
-
-        states.retain(|s| !(s.tap_id == state.tap_id && s.connection_id == state.connection_id));
-        states.push(state);
-
-        self.set_tap_states(&tap_id, &states).await?;
-
-        Ok(())
-    }
-
-    pub async fn get_connection_state(
-        &self,
-        state: OnlineTapState,
-    ) -> Result<Option<OnlineTapState>> {
-        let states = self.get_tap_states(&state.tap_id).await?;
-        let found = states
-            .into_iter()
-            .find(|s| s.tap_id == state.tap_id && s.connection_id == state.connection_id);
-
-        Ok(found)
-    }
-
-    pub async fn remove_connection_state(&self, tap_id: &TapId, connection_id: u64) -> Result<()> {
-        let mut states = self.get_tap_states(tap_id).await?;
-        states.retain(|s| !(&s.tap_id == tap_id && s.connection_id == connection_id));
-        self.set_tap_states(tap_id, &states).await?;
+        let state_str = serde_json::to_string(states).map_err(|_| StateServiceError::CacheError)?;
+        self.cache_repository
+            .set_ex(&key, &state_str, self.lease_ttl_secs)
+            .await;
 
         Ok(())
     }
 
     pub async fn get_online_count(&self, tap_id: &TapId) -> Result<usize> {
         Ok(self.get_tap_states(tap_id).await?.len())
-    }
-
-    pub async fn clear_all_tap_states(&self, tap_ids: &[TapId]) -> Result<()> {
-        for tap_id in tap_ids {
-            let key = format!("tap:{}", tap_id.0);
-            self.cache_repository.del(&key).await;
-        }
-        Ok(())
     }
 }

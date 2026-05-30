@@ -239,38 +239,59 @@ pub async fn emoji_map(
         return Ok(());
     }
 
-    // Step 5: Save to the selected scope
+    // Step 5: Save to the selected scope.
+    // Read-modify-write: the scope save path overwrites the whole settings blob, so we
+    // must fetch the existing partial and replace only `emoji_mappings`, otherwise every
+    // other setting at that scope would be wiped.
     let service = &ctx.data().service;
     let guild_id_str = guild_id.get().to_string();
-    let partial = PartialUserSettings {
-        emoji_mappings: UserSettingsField::Normal(rules.clone()),
-        ..PartialUserSettings::empty()
-    };
 
     match scope.as_str() {
-        "guild_user" | "user" => {
+        "guild_user" => {
             let hq_user = hq_user.ok_or(Error::Unauthorized)?;
-
-            if scope == "guild_user" {
-                service
-                    .user_settings
-                    .save_guild_user_settings(&hq_user.id, &guild_id_str, partial)
-                    .await?;
-            } else {
-                service
-                    .user_settings
-                    .save_settings(hq_user.id, partial)
-                    .await?;
-            }
-        }
-        "guild" => {
+            let mut current = service
+                .user_settings
+                .get_guild_user_settings(&hq_user.id, &guild_id_str)
+                .await?
+                .unwrap_or_else(PartialUserSettings::empty);
+            current.emoji_mappings = merge_emoji_rules(&current.emoji_mappings, rules.clone());
             service
                 .user_settings
-                .save_guild_settings(&guild_id_str, partial)
+                .save_guild_user_settings(&hq_user.id, &guild_id_str, current)
+                .await?;
+        }
+        "user" => {
+            let hq_user = hq_user.ok_or(Error::Unauthorized)?;
+            let mut current = service
+                .user_settings
+                .get_settings(hq_user.id.clone())
+                .await?;
+            current.emoji_mappings = merge_emoji_rules(&current.emoji_mappings, rules.clone());
+            service
+                .user_settings
+                .save_settings(hq_user.id, current)
+                .await?;
+        }
+        "guild" => {
+            let mut current = service
+                .user_settings
+                .get_guild_settings(&guild_id_str)
+                .await?
+                .unwrap_or_else(PartialUserSettings::empty);
+            current.emoji_mappings = merge_emoji_rules(&current.emoji_mappings, rules.clone());
+            service
+                .user_settings
+                .save_guild_settings(&guild_id_str, current)
                 .await?;
         }
         "global" => {
-            service.user_settings.save_global_settings(partial).await?;
+            let mut current = service
+                .user_settings
+                .get_global_settings()
+                .await?
+                .unwrap_or_else(PartialUserSettings::empty);
+            current.emoji_mappings = merge_emoji_rules(&current.emoji_mappings, rules.clone());
+            service.user_settings.save_global_settings(current).await?;
         }
         _ => {}
     }
@@ -288,6 +309,32 @@ pub async fn emoji_map(
     .await?;
 
     Ok(())
+}
+
+/// Merge freshly-submitted emoji rules into whatever is already stored at a scope.
+/// New rules win on `emoji_id` conflicts; previously-mapped emojis not in this batch
+/// are preserved. The existing field's `Important`/`Normal` wrapper is retained so the
+/// cascade priority of an admin-set list isn't silently downgraded.
+fn merge_emoji_rules(
+    existing: &UserSettingsField<Vec<EmojiMappingRule>>,
+    new_rules: Vec<EmojiMappingRule>,
+) -> UserSettingsField<Vec<EmojiMappingRule>> {
+    let (mut merged, important) = match existing {
+        UserSettingsField::None => (Vec::new(), false),
+        UserSettingsField::Normal(v) => (v.clone(), false),
+        UserSettingsField::Important(v) => (v.clone(), true),
+    };
+
+    let new_ids: std::collections::HashSet<&str> =
+        new_rules.iter().map(|r| r.emoji_id.as_str()).collect();
+    merged.retain(|r| !new_ids.contains(r.emoji_id.as_str()));
+    merged.extend(new_rules);
+
+    if important {
+        UserSettingsField::Important(merged)
+    } else {
+        UserSettingsField::Normal(merged)
+    }
 }
 
 fn scope_label(scope: &str) -> &str {

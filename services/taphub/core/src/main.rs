@@ -62,28 +62,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = App {
         hq_repository: Arc::new(hq_repository),
         cache_repository: cache_repo.clone(),
-        tap_state_service: TapHubStateService::new(cache_repo.clone()),
+        tap_state_service: TapHubStateService::new(cache_repo.clone())
+            .with_lease_ttl_secs(config.connection_lease_ttl_secs),
         tap_metrics_service: TapRedisMetrics::new(cache_repo.clone()),
         bypass_hq: config.bypass_hq,
     };
 
-    // Clear stale tap connection states left over from the previous run.
-    // Taps that are still online will reconnect and re-register immediately.
-    let known_taps = match app.tap_metrics_service.get_known_taps().await {
-        Ok(taps) => taps,
-        Err(e) => {
-            tracing::warn!(%e, "Failed to fetch known taps; skipping stale state clear");
-            vec![]
-        }
-    };
-    if let Err(e) = app
-        .tap_state_service
-        .clear_all_tap_states(&known_taps)
-        .await
-    {
-        tracing::warn!(%e, "Failed to clear stale tap states on startup");
-    }
-    tracing::info!("Cleared online state for {} known taps", known_taps.len());
+    // Stale connection state from a previous run self-heals via TTL leases: any
+    // leftover `tap:{id}` key expires within ZK_TH_CONNECTION_LEASE_TTL_SECS, and
+    // live taps reconnect and re-publish. No boot-time clear is needed.
 
     let history_pubsub = Arc::new(
         RedisPubSub::new(&config.redis_url)
