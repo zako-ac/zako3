@@ -84,6 +84,7 @@ pub async fn run(
                 commands::music::wedding(),
                 commands::queue::queue(),
                 commands::queue::clear(),
+                commands::queue::enqueue(),
                 commands::tts::tts(),
                 commands::help::help(),
                 commands::emoji_map::emoji_map(),

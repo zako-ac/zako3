@@ -39,7 +39,7 @@ export function DemoSection() {
                 <Card className="p-8 md:p-12 bg-card/50 backdrop-blur border-border/50 shadow-2xl">
                     <div className="space-y-12">
                         {/* Discord Command UI */}
-                        <div className="bg-discord-1 rounded-lg px-5 py-3 font-mono text-sm border-discord-3 border-2">
+                        <div className="bg-discord-1 text-discord-text rounded-lg px-5 py-3 font-mono text-sm border-discord-3 border-2">
                             <div className="flex items-center gap-3 flex-wrap">
                                 <img
                                     className="w-8 h-8 rounded-full"
@@ -48,7 +48,7 @@ export function DemoSection() {
                                     width={32}
                                     height={32}
                                 />
-                                <span className="text-foreground font-semibold">/재생</span>
+                                <span className="font-semibold">/재생</span>
                                 <div className="flex items-center rounded-md border-primary border-2">
                                     <div className="flex p-2 items-center justify-center bg-discord-2 rounded-l-md">소스</div>
                                     <div className="flex p-2 items-center justify-center bg-discord-3 rounded-r-md">

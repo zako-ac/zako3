@@ -1,5 +1,6 @@
 use crate::{Context, Error, ui, util};
-use hq_types::{AudioStopFilter, QueueName, Track, UserId};
+use hq_core::CoreError;
+use hq_types::{AudioRequestString, AudioStopFilter, QueueName, Track, UserId, Volume, hq::{DiscordUserId, TapName}};
 use poise::serenity_prelude as serenity;
 
 const MUSIC_QUEUE_PREFIX: &str = "music";
@@ -135,6 +136,84 @@ pub async fn web(ctx: Context<'_>) -> Result<(), Error> {
     } else {
         Err(Error::UserNotInSession)
     }
+}
+
+/// Enqueue directly to a named queue with an explicit tap and request string.
+#[poise::command(slash_command)]
+pub async fn enqueue(
+    ctx: Context<'_>,
+    #[description = "Queue name to enqueue into"] queue: String,
+    #[description = "Tap name to use as the audio source"] tap: String,
+    #[description = "Request string (URL or query)"] request: String,
+    #[description = "Voice channel (defaults to your current channel)"]
+    #[channel_types("Voice")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let session = util::resolve_session(ctx, channel).await?;
+    let service = &ctx.data().service;
+
+    let tap_record = service
+        .tap
+        .get_tap_by_name(&TapName::from(tap.clone()))
+        .await?
+        .ok_or_else(|| Error::from(CoreError::NotFound(format!("Tap '{}' not found.", tap))))?;
+
+    let queue_name = QueueName::from(queue.clone());
+    let audio_request = AudioRequestString::from(request.clone());
+    let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
+
+    let reply_handle = ctx
+        .send(poise::CreateReply::default().content("로딩 중…"))
+        .await?;
+
+    let result: Result<(), Error> = service
+        .audio_engine
+        .play(
+            session.guild_id,
+            session.channel_id,
+            queue_name,
+            tap_record.id,
+            audio_request,
+            Volume::from(1.0f32),
+            discord_user_id,
+        )
+        .await
+        .map_err(Error::from);
+
+    match result {
+        Ok(_) => {
+            let state = service
+                .audio_engine
+                .get_session_state(session.guild_id, session.channel_id)
+                .await?;
+            let q = QueueName::from(queue.clone());
+            let reply = if let Some(tracks) = state.queues.get(&q) {
+                let pos = tracks.len();
+                if pos > 0 {
+                    let embed = ui::embeds::track_queued_embed(&tracks[pos - 1], pos);
+                    poise::CreateReply::default().content("").embed(embed)
+                } else {
+                    poise::CreateReply::default()
+                        .content(format!("대기열 `{queue}`에 추가했어요: *{request}*"))
+                }
+            } else {
+                poise::CreateReply::default()
+                    .content(format!("대기열 `{queue}`에 추가했어요: *{request}*"))
+            };
+            reply_handle.edit(ctx, reply).await?;
+        }
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("enqueue command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Clear a queue.

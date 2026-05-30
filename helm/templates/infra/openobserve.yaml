@@ -51,13 +51,14 @@ data:
           exporters: [otlp_http/openobserve]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ $fullname }}-openobserve
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: openobserve
 spec:
+  serviceName: {{ $fullname }}-openobserve
   replicas: 1
   selector:
     matchLabels:
@@ -105,6 +106,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
+  clusterIP: None
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 4 }}
   ports:

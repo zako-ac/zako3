@@ -20,8 +20,8 @@ export function DiscordVoiceUser({ name, avatarSrc, tag, isSpeaking }: DiscordVo
                 />
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-discord-2" />
             </div>
-            <span className="text-sm text-[#dcddde] group-hover:text-white transition-colors">{name}</span>
-            {tag && <span className="text-xs text-[#8e9297] ml-0.5">{tag}</span>}
+            <span className="text-sm text-discord-text group-hover:text-white transition-colors">{name}</span>
+            {tag && <span className="text-xs text-discord-text-muted ml-0.5">{tag}</span>}
         </div>
     )
 }

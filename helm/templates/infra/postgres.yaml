@@ -15,13 +15,14 @@ spec:
       storage: {{ .Values.postgres.storageSize }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "zako3.fullname" . }}-postgres
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
+  serviceName: {{ include "zako3.fullname" . }}-postgres
   replicas: 1
   selector:
     matchLabels:
@@ -71,6 +72,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
+  clusterIP: None
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "postgres" "Release" .Release) | nindent 4 }}
   ports:

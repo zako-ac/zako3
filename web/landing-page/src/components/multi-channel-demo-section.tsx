@@ -34,7 +34,7 @@ export function MultiChannelDemoSection() {
                             {/* Server name header */}
                             <div className="px-4 py-3 bg-discord-1 border-b border-discord-4/50 flex items-center justify-between">
                                 <span className="font-semibold text-white text-sm truncate">자코 서버</span>
-                                <ChevronDown className="w-4 h-4 text-[#8e9297] flex-shrink-0" />
+                                <ChevronDown className="w-4 h-4 text-discord-text-muted flex-shrink-0" />
                             </div>
 
                             {/* Main area: sidebar + participants */}
@@ -42,8 +42,8 @@ export function MultiChannelDemoSection() {
                                 {/* Left: channel sidebar */}
                                 <div className="w-40 flex-shrink-0 py-3 border-r border-discord-4/30">
                                     <div className="flex items-center gap-1 px-2 mb-1 cursor-pointer group">
-                                        <ChevronDown className="w-3 h-3 text-[#8e9297] group-hover:text-[#dcddde] transition-colors" />
-                                        <span className="text-xs font-semibold text-[#8e9297] group-hover:text-[#dcddde] uppercase tracking-wide transition-colors">
+                                        <ChevronDown className="w-3 h-3 text-discord-text-muted group-hover:text-discord-text transition-colors" />
+                                        <span className="text-xs font-semibold text-discord-text-muted group-hover:text-discord-text uppercase tracking-wide transition-colors">
                                             음성 채널
                                         </span>
                                     </div>
@@ -51,8 +51,8 @@ export function MultiChannelDemoSection() {
                                         {channels.map((ch) => (
                                             <div key={ch.id}>
                                                 <div className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-discord-4/60 transition-colors cursor-pointer group mx-1">
-                                                    <Volume2 className="w-4 h-4 text-[#8e9297] group-hover:text-[#dcddde] flex-shrink-0" />
-                                                    <span className="text-sm text-[#8e9297] group-hover:text-[#dcddde] transition-colors truncate">
+                                                    <Volume2 className="w-4 h-4 text-discord-text-muted group-hover:text-discord-text flex-shrink-0" />
+                                                    <span className="text-sm text-discord-text-muted group-hover:text-discord-text transition-colors truncate">
                                                         {ch.name}
                                                     </span>
                                                 </div>
@@ -70,7 +70,7 @@ export function MultiChannelDemoSection() {
                                 {/* Right: participants list */}
                                 <div className="flex-1 py-3 px-1">
                                     <div className="px-2 mb-2">
-                                        <span className="text-xs font-semibold text-[#8e9297] uppercase tracking-wide">
+                                        <span className="text-xs font-semibold text-discord-text-muted uppercase tracking-wide">
                                             멤버 — 21
                                         </span>
                                     </div>
@@ -100,7 +100,7 @@ export function MultiChannelDemoSection() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-sm font-semibold text-white truncate">자코♡</div>
-                                    <div className="text-xs text-[#8e9297] truncate">온라인</div>
+                                    <div className="text-xs text-discord-text-muted truncate">온라인</div>
                                 </div>
                             </div>
                         </div>

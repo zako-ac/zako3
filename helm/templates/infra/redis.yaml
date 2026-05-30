@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "zako3.fullname" . }}-redis
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
+  serviceName: {{ include "zako3.fullname" . }}-redis
   replicas: 1
   selector:
     matchLabels:
@@ -35,6 +36,7 @@ metadata:
   labels:
     {{- include "zako3.labels" . | nindent 4 }}
 spec:
+  clusterIP: None
   selector:
     {{- include "zako3.selectorLabels" (dict "component" "redis" "Release" .Release) | nindent 4 }}
   ports:

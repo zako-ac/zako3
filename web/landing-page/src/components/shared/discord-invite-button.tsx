@@ -40,7 +40,7 @@ export function DiscordInviteButton({ label, className }: DiscordInviteButtonPro
         <div ref={ref} className="relative">
             <Button
                 size="lg"
-                className={cn("gap-2 text-base pl-6 pr-8 py-6", className)}
+                className={cn("gap-2 text-base pl-6 pr-8 py-6 border-primary", className)}
                 onClick={() => setOpen((prev) => !prev)}
             >
                 <ChevronRight

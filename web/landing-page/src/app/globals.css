@@ -46,18 +46,24 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  /* Discord UI colors */
+  /* Discord UI colors (always dark, theme-independent) */
   --color-discord-1: var(--discord-bg-100);
   --color-discord-2: var(--discord-bg-200);
   --color-discord-3: var(--discord-bg-300);
   --color-discord-4: var(--discord-bg-400);
+  --color-discord-text: var(--discord-text);
+  --color-discord-text-muted: var(--discord-text-muted);
 }
 
 :root {
+  /* Discord UI palette — used by the always-dark Discord previews.
+     Not theme-dependent: defined once here. */
   --discord-bg-100: #171717;
   --discord-bg-200: #272727;
   --discord-bg-300: #2e2e2e;
   --discord-bg-400: #3c3c3c;
+  --discord-text: #dcddde;
+  --discord-text-muted: #8e9297;
 
   --background: oklch(0.98 0 0);
   --foreground: oklch(0.145 0 0);
@@ -67,7 +73,7 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.6327 0.2253 358.14);
   --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.2715 0.2081 358.14);
+  --secondary: oklch(0.93 0.03 358.14);
   --secondary-foreground: oklch(0.2 0 0);
   --muted: oklch(0.94 0 0);
   --muted-foreground: oklch(0.55 0 0);
