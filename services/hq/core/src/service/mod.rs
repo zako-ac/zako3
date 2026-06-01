@@ -90,9 +90,12 @@ impl Service {
         let pubsub = zako3_states::RedisPubSub::new(redis_url)
             .await
             .map_err(|e| CoreError::Internal(format!("Redis pubsub error: {e}")))?;
+        // Shared handle for mapper-cache publish (writes) and subscribe (invalidation).
+        let mapper_pubsub = Arc::new(pubsub.clone());
+        let history_pubsub = pubsub;
         let history_metrics = tap_metrics_service.clone();
         tokio::spawn(async move {
-            match pubsub.subscribe_history().await {
+            match history_pubsub.subscribe_history().await {
                 Ok(stream) => {
                     use futures_util::StreamExt;
                     let mut stream = Box::pin(stream);
@@ -149,7 +152,52 @@ impl Service {
             name_resolver_slot.clone(),
         );
 
-        let mapping = MappingService::new(pool.clone(), name_resolver_slot.clone())?;
+        let mapping = MappingService::new(
+            pool.clone(),
+            name_resolver_slot.clone(),
+            Some(mapper_pubsub.clone()),
+        )?;
+
+        // Mapper-cache invalidation subscriber. Reconnect loop: refresh on every (re)connect
+        // (re-syncing any events missed while disconnected), then reload on each event.
+        let sub_pubsub = mapper_pubsub.clone();
+        let sub_mapping = mapping.clone();
+        tokio::spawn(async move {
+            use futures_util::StreamExt;
+            loop {
+                // Warm / re-sync on connect before consuming the stream.
+                sub_mapping.refresh_cache().await;
+                match (*sub_pubsub).clone().subscribe_mapper_cache().await {
+                    Ok(stream) => {
+                        let mut stream = Box::pin(stream);
+                        while let Some(event) = stream.next().await {
+                            tracing::debug!(?event, "mapper-cache invalidation received");
+                            sub_mapping.refresh_cache().await;
+                        }
+                        tracing::warn!("mapper-cache subscription ended; reconnecting");
+                    }
+                    Err(e) => {
+                        tracing::error!(%e, "failed to subscribe to mapper-cache channel");
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
+
+        // Periodic safety refresh — backstop for any missed (fire-and-forget) pub/sub message.
+        let refresh_secs = config.mapper_cache_refresh_secs;
+        if refresh_secs > 0 {
+            let refresh_mapping = mapping.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(refresh_secs));
+                interval.tick().await; // skip the immediate first tick (subscriber already warms)
+                loop {
+                    interval.tick().await;
+                    refresh_mapping.refresh_cache().await;
+                }
+            });
+        }
 
         let cache_admin = Arc::new(
             RemoteAudioCache::new(

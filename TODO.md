@@ -5,7 +5,9 @@ refer hq todo
 # Do Now
 - [x] URGENT: TapHub Memopry Leak, Steaming support
 
-- [ ] cache remove
+- [x] cache remove
+- [ ] "Get Trace ID" button for message and play command
+- [ ] Clean settings UI. Unified UI and "Your voice is XXX in this guild". Add a command and UI to check what settings are applied to me in this guild.
 
 - [x] Dedicated cache server
 - [x] Timescale Persistence

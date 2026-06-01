@@ -25,6 +25,8 @@ pub struct AppConfig {
     pub nats_url: Option<String>,
     pub cache_rpc_url: String,
     pub cache_rpc_admin_token: Option<String>,
+    /// Interval (seconds) for the periodic mapper-cache safety refresh. 0 disables it.
+    pub mapper_cache_refresh_secs: u64,
 }
 
 impl AppConfig {
@@ -69,6 +71,10 @@ impl AppConfig {
             cache_rpc_admin_token: env::var("HQ_CACHE_RPC_ADMIN_TOKEN")
                 .ok()
                 .filter(|s| !s.is_empty()),
+            mapper_cache_refresh_secs: env::var("MAPPER_CACHE_REFRESH_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(300),
         })
     }
 }

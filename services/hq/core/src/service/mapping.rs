@@ -18,9 +18,13 @@ use zako3_tts_matching::{
     service::{DiscordInfoProvider, ProcessContext},
 };
 
+use zako3_states::RedisPubSub;
+
 use crate::{
     CoreError, CoreResult,
-    repo::{PgMapperRepository, PgPipelineRepository},
+    repo::{
+        CachedMapperRepository, CachedPipelineRepository, PgMapperRepository, PgPipelineRepository,
+    },
     service::DiscordNameResolverSlot,
 };
 
@@ -100,18 +104,46 @@ fn tts_error(e: zako3_tts_matching::Error) -> CoreError {
 pub struct MappingService {
     inner: Arc<TtsMatchingService>,
     resolver: DiscordNameResolverSlot,
+    /// Cache decorators, retained so background tasks can force a reload.
+    mapper_cache: Arc<CachedMapperRepository>,
+    pipeline_cache: Arc<CachedPipelineRepository>,
 }
 
 impl MappingService {
-    pub fn new(pool: PgPool, resolver: DiscordNameResolverSlot) -> CoreResult<Self> {
-        let mapper_repo = Arc::new(PgMapperRepository::new(pool.clone()));
-        let pipeline_repo = Arc::new(PgPipelineRepository::new(pool));
-        let inner = TtsMatchingService::new(mapper_repo, pipeline_repo).map_err(tts_error)?;
+    pub fn new(
+        pool: PgPool,
+        resolver: DiscordNameResolverSlot,
+        pubsub: Option<Arc<RedisPubSub>>,
+    ) -> CoreResult<Self> {
+        let pg_mapper = Arc::new(PgMapperRepository::new(pool.clone()));
+        let pg_pipeline = Arc::new(PgPipelineRepository::new(pool));
+
+        let mapper_cache = Arc::new(CachedMapperRepository::new(pg_mapper, pubsub.clone()));
+        let pipeline_cache = Arc::new(CachedPipelineRepository::new(pg_pipeline, pubsub));
+
+        let inner = TtsMatchingService::new(mapper_cache.clone(), pipeline_cache.clone())
+            .map_err(tts_error)?;
 
         Ok(Self {
             inner: Arc::new(inner),
             resolver,
+            mapper_cache,
+            pipeline_cache,
         })
+    }
+
+    /// Reload the in-process mapper and pipeline caches from the backing store.
+    ///
+    /// Called by the pub/sub invalidation subscriber, on subscriber (re)connect, and by the
+    /// periodic safety-refresh task. Errors are logged, not propagated — a stale cache is
+    /// preferable to a crashed background task.
+    pub async fn refresh_cache(&self) {
+        if let Err(e) = self.mapper_cache.refresh().await {
+            tracing::warn!(error = %e, "failed to refresh mapper cache");
+        }
+        if let Err(e) = self.pipeline_cache.refresh().await {
+            tracing::warn!(error = %e, "failed to refresh pipeline cache");
+        }
     }
 
     pub async fn list_mappers(&self) -> CoreResult<Vec<WasmMapperDto>> {

@@ -59,6 +59,7 @@ hq:
   tokioConsolePort: "6669"
   subBotIds: ""                         # Comma-separated sub-bot client IDs
   botInvitePermissions: "4895026873161728"
+  mapperCacheRefreshSecs: "300"         # Periodic mapper-cache safety refresh (seconds); 0 disables
 
 # --- TapHub service ---
 taphub:

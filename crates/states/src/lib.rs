@@ -13,7 +13,7 @@ pub use cache_repo::RedisCacheRepository;
 pub use error::{Result, StateServiceError};
 pub use intended_vc::IntendedVoiceChannelService;
 #[cfg(feature = "redis")]
-pub use pubsub::RedisPubSub;
+pub use pubsub::{MapperCacheEvent, RedisPubSub, MAPPER_CACHE_CHANNEL};
 pub use tap_hub::TapHubStateService;
 pub use user_settings::UserSettingsStateService;
 pub use voice_state::{VoiceChannelLocation, VoiceStateService};
