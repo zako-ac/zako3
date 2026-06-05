@@ -94,20 +94,37 @@ impl Service {
         let mapper_pubsub = Arc::new(pubsub.clone());
         let history_pubsub = pubsub;
         let history_metrics = tap_metrics_service.clone();
+        let history_redis_url = redis_url.clone();
         tokio::spawn(async move {
-            match history_pubsub.subscribe_history().await {
-                Ok(stream) => {
-                    use futures_util::StreamExt;
-                    let mut stream = Box::pin(stream);
-                    while let Some(entry) = stream.next().await {
-                        if let hq_types::hq::history::UseHistoryEntry::PlayAudio(ref h) = entry {
-                            if let Err(e) = history_metrics.insert_history(h).await {
-                                tracing::warn!(%e, "Failed to insert use_history entry");
+            use futures_util::StreamExt;
+            let mut history_pubsub = Some(history_pubsub);
+            loop {
+                let pubsub = match history_pubsub.take() {
+                    Some(p) => Ok(p),
+                    None => zako3_states::RedisPubSub::new(&history_redis_url)
+                        .await
+                        .map_err(|e| CoreError::Internal(format!("Redis pubsub error: {e}"))),
+                };
+                match pubsub {
+                    Ok(pubsub) => match pubsub.subscribe_history().await {
+                        Ok(stream) => {
+                            let mut stream = Box::pin(stream);
+                            while let Some(entry) = stream.next().await {
+                                if let hq_types::hq::history::UseHistoryEntry::PlayAudio(ref h) =
+                                    entry
+                                {
+                                    if let Err(e) = history_metrics.insert_history(h).await {
+                                        tracing::warn!(%e, "Failed to insert use_history entry");
+                                    }
+                                }
                             }
+                            tracing::warn!("history subscription ended; reconnecting");
                         }
-                    }
+                        Err(e) => tracing::error!(%e, "Failed to subscribe to history channel"),
+                    },
+                    Err(e) => tracing::error!(%e, "Failed to connect Redis pubsub for history"),
                 }
-                Err(e) => tracing::error!(%e, "Failed to subscribe to history channel"),
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         });
         let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
