@@ -134,6 +134,9 @@ async fn handle_message_create(
             } else { mapped };
 
             if !with_attach.is_empty() {
+                tracing::Span::current().record("tts_content", &with_attach.as_str());
+                tracing::Span::current().record("tts_channel_count", channel_ids.len());
+
                 for channel_id in channel_ids {
                     service
                         .audio_engine

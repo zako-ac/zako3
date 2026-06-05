@@ -114,6 +114,7 @@ pub async fn run(
 
     let cache_resolver = Arc::new(SerenityNameResolver {
         cache: client.cache.clone(),
+        http: client.http.clone(),
     });
     let _ = resolver_slot.set(cache_resolver as Arc<dyn DiscordNameResolver>);
 
