@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     },
     openGraph: {
         title: "ZAKO",
-        description: "통화 채널을 더 다채롭게 만드는 디스코드 봇",
+        description: "자코는 여러 목소리를 가진 디스코드 TTS 및 음악 봇입니다. 유저들이 TTS와 음악 소스를 직접 개발할 수 있습니다.",
         url: "https://zako.ac",
         siteName: "ZAKO",
         images: {

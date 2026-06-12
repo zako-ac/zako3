@@ -83,19 +83,23 @@ impl TapMetricsService {
     }
 
     pub async fn get_latest_total_uses(&self, tap_id: &TapId) -> Result<u64> {
-        Ok(self
+        let base = self
             .get_latest_row(tap_id)
             .await?
-            .map(|r| r.total_uses as u64)
-            .unwrap_or(0))
+            .map(|r| r.total_uses)
+            .unwrap_or(0);
+        let (delta_total, _) = self.redis.peek_delta(tap_id).await.unwrap_or((0, 0));
+        Ok((base + delta_total).max(0) as u64)
     }
 
     pub async fn get_latest_cache_hits(&self, tap_id: &TapId) -> Result<u64> {
-        Ok(self
+        let base = self
             .get_latest_row(tap_id)
             .await?
-            .map(|r| r.cache_hits as u64)
-            .unwrap_or(0))
+            .map(|r| r.cache_hits)
+            .unwrap_or(0);
+        let (_, delta_cache) = self.redis.peek_delta(tap_id).await.unwrap_or((0, 0));
+        Ok((base + delta_cache).max(0) as u64)
     }
 
     pub async fn get_time_series(

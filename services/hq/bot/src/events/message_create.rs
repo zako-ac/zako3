@@ -109,10 +109,16 @@ async fn handle_message_create(
             .await?;
 
         if !channel_ids.is_empty() {
+
+            let attach_count = msg.attachments.len();
+            let with_attach = if attach_count > 0 {
+                format!("첨부파일 {attach_count}개와 함께, {content}")
+            } else { content.to_string() };
+
             let mapped: AudioRequestString = service
                 .mapping
                 .map_text(
-                    content.to_string(),
+                    with_attach.to_string(),
                     guild_id,
                     message_channel_id,
                     author_id.clone(),
@@ -126,15 +132,10 @@ async fn handle_message_create(
 
             let queue_name = queue_name(&author_id, settings.enable_tts_queue);
 
-            let mapped = mapped.to_string();
+            let mapped = mapped.to_string().trim().to_string();
 
-            let attach_count = msg.attachments.len();
-            let with_attach = if attach_count > 0 {
-                format!("첨부파일 {attach_count}개와 함께, {mapped}")
-            } else { mapped };
-
-            if !with_attach.is_empty() {
-                tracing::Span::current().record("tts_content", &with_attach.as_str());
+            if !mapped.is_empty() {
+                tracing::Span::current().record("tts_content", &mapped);
                 tracing::Span::current().record("tts_channel_count", channel_ids.len());
 
                 for channel_id in channel_ids {
@@ -145,7 +146,7 @@ async fn handle_message_create(
                             channel_id,
                             queue_name.clone(),
                             tap_id.clone(),
-                            with_attach.clone().into(),
+                            mapped.to_owned().into(),
                             1.0.into(),
                             author_id.clone(),
                         )

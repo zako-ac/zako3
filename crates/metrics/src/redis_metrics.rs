@@ -79,12 +79,22 @@ impl TapRedisMetrics {
         Ok(())
     }
 
+    /// Returns (delta_total_uses, delta_cache_hits) without clearing the hash.
+    pub async fn peek_delta(&self, tap_id: &TapId) -> Result<(i64, i64)> {
+        let key = self.delta_key(tap_id);
+        let fields = self.redis.hgetall(&key).await.unwrap_or_default();
+        Ok(Self::parse_delta(&fields))
+    }
+
     /// Returns (delta_total_uses, delta_cache_hits), atomically clearing the hash.
     pub async fn drain_delta(&self, tap_id: &TapId) -> Result<(i64, i64)> {
         let key = self.delta_key(tap_id);
         let fields = self.redis.hgetall(&key).await.unwrap_or_default();
         let _ = self.redis.hdel_key(&key).await;
+        Ok(Self::parse_delta(&fields))
+    }
 
+    fn parse_delta(fields: &[(String, String)]) -> (i64, i64) {
         let total = fields
             .iter()
             .find(|(k, _)| k == "total_uses")
@@ -95,6 +105,6 @@ impl TapRedisMetrics {
             .find(|(k, _)| k == "cache_hits")
             .and_then(|(_, v)| v.parse().ok())
             .unwrap_or(0i64);
-        Ok((total, cache))
+        (total, cache)
     }
 }

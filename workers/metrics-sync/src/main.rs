@@ -64,35 +64,6 @@ async fn main() -> Result<()> {
     let metrics_svc = TapMetricsService::new(std::sync::Arc::clone(&cache_repo), Some(pool.clone()), None);
     let hub_state_service = TapHubStateService::new(std::sync::Arc::clone(&cache_repo));
 
-    let redis_url_clone = redis_url.clone();
-    let metrics_svc2 = metrics_svc.clone();
-    let _pubsub_handle = tokio::spawn(async move {
-        use futures_util::StreamExt;
-        loop {
-            match zako3_states::RedisPubSub::new(&redis_url_clone).await {
-                Ok(pubsub) => match pubsub.subscribe_history().await {
-                    Ok(stream) => {
-                        let mut stream = Box::pin(stream);
-                        while let Some(entry) = stream.next().await {
-                            if let zako3_types::hq::history::UseHistoryEntry::PlayAudio(ref h) =
-                                entry
-                            {
-                                let _ = metrics_svc2.incr_delta_total_uses(&h.tap_id).await;
-                                if h.cache_hit {
-                                    let _ = metrics_svc2.incr_delta_cache_hits(&h.tap_id).await;
-                                }
-                            }
-                        }
-                        tracing::warn!("history subscription ended; reconnecting");
-                    }
-                    Err(e) => tracing::error!(%e, "Failed to subscribe to history"),
-                },
-                Err(e) => tracing::error!(%e, "Failed to connect Redis PubSub for delta"),
-            }
-            sleep(Duration::from_secs(5)).await;
-        }
-    });
-
     info!("Starting sync loop with interval {}s", sync_interval);
 
     loop {

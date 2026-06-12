@@ -121,7 +121,11 @@ pub(crate) async fn handle_request_audio_inner(
                     },
                 );
                 let pubsub = tap_hub.history_pubsub.clone();
+                let metrics = tap_hub.metrics_service.clone();
+                let metrics_tap_id = tap_id.clone();
                 tokio::spawn(async move {
+                    let _ = metrics.incr_delta_total_uses(&metrics_tap_id).await;
+                    let _ = metrics.incr_delta_cache_hits(&metrics_tap_id).await;
                     if let Err(e) = pubsub.publish_history(&entry).await {
                         tracing::warn!(%e, "Failed to publish history (cache hit)");
                     }
@@ -287,7 +291,10 @@ pub(crate) async fn handle_request_audio_inner(
             },
         );
         let pubsub = tap_hub.history_pubsub.clone();
+        let metrics = tap_hub.metrics_service.clone();
+        let metrics_tap_id = tap_id.clone();
         tokio::spawn(async move {
+            let _ = metrics.incr_delta_total_uses(&metrics_tap_id).await;
             if let Err(e) = pubsub.publish_history(&entry).await {
                 tracing::warn!(%e, "Failed to publish history (cache miss)");
             }
