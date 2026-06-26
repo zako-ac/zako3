@@ -293,21 +293,31 @@ async fn autocomplete_provider(
     let discord_id = ctx.author().id.to_string();
     let username = &ctx.author().name;
 
-    let user = match service
-        .auth
-        .get_or_create_user(&discord_id, username, None, None, None)
+    let user_id = match service
+        .tap
+        .get_user_by_discord_id(&discord_id)
         .await
     {
-        Ok(u) => u,
+        Ok(Some(u)) => Some(u.id),
+        Ok(None) => None,
         Err(e) => {
-            tracing::error!("Failed to get or create user for autocomplete: {:?}", e);
+            tracing::error!("Failed to get user for autocomplete: {:?}", e);
             return vec![];
         }
     };
 
     let taps = match service
         .tap
-        .list_all_paginated(Some(user.id), None, None, None, None, Some(true), None, None)
+        .list_all_paginated(
+            user_id,
+            None,
+            None,
+            Some(partial.to_string()),
+            None,
+            Some(true),
+            None,
+            None,
+        )
         .await
     {
         Ok(t) => t,
@@ -320,7 +330,6 @@ async fn autocomplete_provider(
     taps.data
         .iter()
         .map(|t| t.tap.name.to_string())
-        .filter(|name| name.to_lowercase().contains(&partial.to_lowercase()))
         .take(25)
         .collect()
 }
