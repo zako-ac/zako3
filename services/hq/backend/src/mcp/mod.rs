@@ -19,6 +19,7 @@ pub mod tools;
 pub use server::McpServer;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use hq_core::{PlaybackEvent, Service};
 use std::sync::Arc;
@@ -48,5 +49,6 @@ pub fn mcp_routes(service: Arc<Service>, event_tx: broadcast::Sender<PlaybackEve
         .route("/mcp", post(handler::mcp_post))
         .route("/mcp/sse", get(handler::mcp_sse))
         .layer(CorsLayer::permissive())
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .with_state(state)
 }

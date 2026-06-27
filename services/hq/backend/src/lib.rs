@@ -1,5 +1,6 @@
 use axum::{
     Extension, Router,
+    extract::DefaultBodyLimit,
     routing::{delete, get, post},
 };
 use hq_core::{PlaybackEvent, Service};
@@ -357,6 +358,7 @@ pub fn app(
         .layer(TraceLayer::new_for_http())
         .layer(middleware::metrics::MetricsLayer::new())
         .layer(CorsLayer::permissive())
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .with_state(state);
 
     rest.merge(mcp::mcp_routes(mcp_service, mcp_event_tx))
