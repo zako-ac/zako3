@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use hq_types::hq::UserId;
 use hq_types::hq::settings::{PartialUserSettings, UserSettings, UserSettingsField};
 use hq_types::hq::tap::TapPermission;
-use hq_types::hq::UserId;
 use zako3_states::UserSettingsStateService;
 
 use crate::repo::{
@@ -141,7 +141,9 @@ impl UserSettingsService {
         settings: PartialUserSettings,
     ) -> CoreResult<PartialUserSettings> {
         // Validate tts_voice: OwnerOnly taps may not be used as guild settings
-        if let UserSettingsField::Normal(Some(tap_id)) | UserSettingsField::Important(Some(tap_id)) = &settings.tts_voice {
+        if let UserSettingsField::Normal(Some(tap_id))
+        | UserSettingsField::Important(Some(tap_id)) = &settings.tts_voice
+        {
             if let Some(tap) = self.tap_repo.find_by_id(tap_id.clone()).await? {
                 if matches!(tap.permission, TapPermission::OwnerOnly) {
                     return Err(CoreError::InvalidInput(

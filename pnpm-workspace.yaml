@@ -2,6 +2,13 @@ packages:
   - packages/*
   - web/*
 
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - '@swc/core'
   - cpu-features

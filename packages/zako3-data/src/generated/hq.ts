@@ -108,6 +108,12 @@ export const CreateTapDtoSchema = z.object({
 });
 export type CreateTapDto = z.infer<typeof CreateTapDtoSchema>;
 
+export const CreateUserApiKeyDtoSchema = z.object({
+  label: z.string(),
+  expiry: z.union([z.literal('1_month'), z.literal('3_months'), z.literal('6_months'), z.literal('1_year'), z.literal('never')])
+});
+export type CreateUserApiKeyDto = z.infer<typeof CreateUserApiKeyDtoSchema>;
+
 export const LoginResponseDtoSchema = z.object({
   redirectUrl: z.string()
 });
@@ -291,6 +297,37 @@ export const UpdateTapDtoSchema = z.object({
   baseVolume: z.number().nullable()
 });
 export type UpdateTapDto = z.infer<typeof UpdateTapDtoSchema>;
+
+export const UpdateUserApiKeyDtoSchema = z.object({
+  label: z.string().nullable()
+});
+export type UpdateUserApiKeyDto = z.infer<typeof UpdateUserApiKeyDtoSchema>;
+
+export const UserApiKeyDtoSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  expiresAt: z.string().datetime().nullable(),
+  lastUsedAt: z.string().datetime().nullable(),
+  revoked: z.boolean(),
+  createdAt: z.string().datetime()
+});
+export type UserApiKeyDto = z.infer<typeof UserApiKeyDtoSchema>;
+
+export const UserApiKeyExpirySchema = z.union([z.literal('1_month'), z.literal('3_months'), z.literal('6_months'), z.literal('1_year'), z.literal('never')]);
+export type UserApiKeyExpiry = z.infer<typeof UserApiKeyExpirySchema>;
+
+export const UserApiKeyResponseDtoSchema = z.object({
+  apiKey: z.object({
+  id: z.string(),
+  label: z.string(),
+  expiresAt: z.string().datetime().nullable(),
+  lastUsedAt: z.string().datetime().nullable(),
+  revoked: z.boolean(),
+  createdAt: z.string().datetime()
+}),
+  token: z.string()
+});
+export type UserApiKeyResponseDto = z.infer<typeof UserApiKeyResponseDtoSchema>;
 
 export const UserSummaryDtoSchema = z.object({
   id: z.string(),

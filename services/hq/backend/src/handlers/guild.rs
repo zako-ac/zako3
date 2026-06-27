@@ -1,10 +1,14 @@
-use axum::{Json, extract::{State, Path}, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
 use hq_core::Service;
 use hq_types::hq::guild::GuildSummaryDto;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::middleware::auth::{AuthUser, AdminUser};
+use crate::middleware::auth::{AdminUser, AuthUser};
 
 fn map_error(e: hq_core::CoreError) -> (StatusCode, String) {
     match e {
@@ -64,7 +68,11 @@ pub async fn get_my_guilds(
     // Try to fetch guilds from Discord API using OAuth token
     let guild_infos = if let Some(token) = &db_user.oauth_access_token {
         tracing::info!("User has OAuth token, attempting Discord API call");
-        match service.auth.fetch_discord_guilds_for_user(&discord_id_str, token).await {
+        match service
+            .auth
+            .fetch_discord_guilds_for_user(&discord_id_str, token)
+            .await
+        {
             Ok(guilds) => {
                 tracing::info!(
                     count = guilds.len(),
@@ -103,7 +111,10 @@ pub async fn get_my_guilds(
         cache_guilds
     };
 
-    tracing::debug!(total_guilds = guild_infos.len(), "Intersecting with bot's guild list");
+    tracing::debug!(
+        total_guilds = guild_infos.len(),
+        "Intersecting with bot's guild list"
+    );
 
     // Get bot's guild list and intersect with user's guilds
     let resolver = service.name_resolver_slot.get();
@@ -179,11 +190,7 @@ pub async fn get_user_guilds(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<GuildSummaryDto>>, (StatusCode, String)> {
     // Get target user's discord ID
-    let db_user = service
-        .auth
-        .get_full_user(&id)
-        .await
-        .map_err(map_error)?;
+    let db_user = service.auth.get_full_user(&id).await.map_err(map_error)?;
 
     let discord_id_str = db_user.discord_user_id.0.clone();
     let discord_id: u64 = discord_id_str.parse().map_err(|_| {

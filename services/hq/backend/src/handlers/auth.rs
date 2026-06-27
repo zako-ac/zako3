@@ -1,5 +1,5 @@
 use crate::middleware::auth::AuthUser;
-use axum::{extract::Query, extract::State, response::Redirect, Json};
+use axum::{Json, extract::Query, extract::State, response::Redirect};
 use hq_core::Service;
 use hq_types::hq::{AuthCallbackDto, AuthResponseDto};
 use serde::Deserialize;

@@ -1,5 +1,5 @@
-use std::sync::{Arc, OnceLock};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, OnceLock};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuildInfo {

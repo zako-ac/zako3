@@ -12,6 +12,8 @@ pub use discord_resolver::{
 pub use tts_channel::TTSChannelService;
 pub mod api_key;
 pub use api_key::ApiKeyService;
+pub mod user_api_key;
+pub use user_api_key::UserApiKeyService;
 pub mod audit_log;
 pub use audit_log::AuditLogService;
 pub use auth::Claims; // Export Claims
@@ -30,7 +32,7 @@ pub use emoji_match_publisher::EmojiMatchPublisher;
 
 use crate::repo::{
     PgApiKeyRepository, PgAuditLogRepo, PgGlobalSettingsRepository, PgGuildSettingsRepository,
-    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo,
+    PgPlaybackActionRepo, PgTapRepository, PgTtsChannelRepo, PgUserApiKeyRepository,
     PgUserGuildSettingsRepository, PgUserRepository,
 };
 use crate::{AppConfig, CoreError, CoreResult};
@@ -40,10 +42,10 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapMetricsService;
-use zako3_tl_client::TlClient;
 use zako3_states::{
     IntendedVoiceChannelService, TapHubStateService, UserSettingsStateService, VoiceStateService,
 };
+use zako3_tl_client::TlClient;
 
 #[derive(Clone)]
 pub struct Service {
@@ -52,6 +54,7 @@ pub struct Service {
     pub tap: TapService,
     pub notification: NotificationService,
     pub api_key: ApiKeyService,
+    pub user_api_key: UserApiKeyService,
     pub audit_log: AuditLogService,
     pub tap_metrics: TapMetricsService,
     pub verification: VerificationService,
@@ -69,10 +72,16 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new(pool: PgPool, timescale_pool: Option<PgPool>, config: Arc<AppConfig>, event_tx: broadcast::Sender<PlaybackEvent>) -> CoreResult<Self> {
+    pub async fn new(
+        pool: PgPool,
+        timescale_pool: Option<PgPool>,
+        config: Arc<AppConfig>,
+        event_tx: broadcast::Sender<PlaybackEvent>,
+    ) -> CoreResult<Self> {
         let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
         let tap_repo = Arc::new(PgTapRepository::new(pool.clone()));
         let api_key_repo = Arc::new(PgApiKeyRepository::new(pool.clone()));
+        let user_api_key_repo = Arc::new(PgUserApiKeyRepository::new(pool.clone()));
         let audit_log_repo = Arc::new(PgAuditLogRepo::new(pool.clone()));
         let verification_repo = Arc::new(crate::repo::PgVerificationRepository::new(pool.clone()));
         let tts_channel_repo = Arc::new(PgTtsChannelRepo::new(pool.clone()));
@@ -84,7 +93,8 @@ impl Service {
         let redis_url = &config.redis_url;
         let redis_repo = Arc::new(zako3_states::RedisCacheRepository::new(redis_url).await?);
 
-        let tap_metrics_service = TapMetricsService::new(redis_repo.clone(), timescale_pool, Some(pool.clone()));
+        let tap_metrics_service =
+            TapMetricsService::new(redis_repo.clone(), timescale_pool, Some(pool.clone()));
 
         // Spawn history subscriber background task
         let pubsub = zako3_states::RedisPubSub::new(redis_url)
@@ -142,6 +152,8 @@ impl Service {
             tap_repo.clone(),
             audit_log_service.clone(),
         );
+        let user_api_key_service =
+            UserApiKeyService::new(user_api_key_repo.clone(), config.clone());
 
         let verification_service = VerificationService::new(
             verification_repo,
@@ -247,6 +259,7 @@ impl Service {
             auth: AuthService::new(config.clone(), user_repo.clone(), redis_repo.clone()),
             tap: tap_service,
             api_key: api_key_service,
+            user_api_key: user_api_key_service,
             notification: notification_service,
             audit_log: audit_log_service,
             tap_metrics: tap_metrics_service,

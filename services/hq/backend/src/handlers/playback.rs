@@ -2,7 +2,10 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
 };
 use axum_extra::{
     TypedHeader,
@@ -283,11 +286,13 @@ pub async fn playback_sse(
     let rx = event_tx.subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|msg| async move {
         msg.ok().and_then(|event| {
-            serde_json::to_string(&event).ok().map(|data| {
-                Ok::<Event, std::convert::Infallible>(Event::default().data(data))
-            })
+            serde_json::to_string(&event)
+                .ok()
+                .map(|data| Ok::<Event, std::convert::Infallible>(Event::default().data(data)))
         })
     });
 
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }

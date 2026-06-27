@@ -15,15 +15,13 @@
 //! covered by the backstops.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use tracing::warn;
 use zako3_states::{MapperCacheEvent, RedisPubSub};
-use zako3_tts_matching::{
-    MapperRepository, PipelineRepository, Result as TtsResult, WasmMapper,
-};
+use zako3_tts_matching::{MapperRepository, PipelineRepository, Result as TtsResult, WasmMapper};
 
 /// Publishes an invalidation event, logging (but never failing) on error.
 async fn publish(pubsub: &Option<Arc<RedisPubSub>>, event: MapperCacheEvent) {
@@ -211,10 +209,7 @@ mod tests {
     #[async_trait]
     impl MapperRepository for FakeMapperRepo {
         async fn create(&self, m: WasmMapper) -> TtsResult<WasmMapper> {
-            self.mappers
-                .lock()
-                .unwrap()
-                .insert(m.id.clone(), m.clone());
+            self.mappers.lock().unwrap().insert(m.id.clone(), m.clone());
             Ok(m)
         }
         async fn find_by_id(&self, id: &str) -> TtsResult<Option<WasmMapper>> {
@@ -222,10 +217,7 @@ mod tests {
             Ok(self.mappers.lock().unwrap().get(id).cloned())
         }
         async fn update(&self, m: WasmMapper) -> TtsResult<WasmMapper> {
-            self.mappers
-                .lock()
-                .unwrap()
-                .insert(m.id.clone(), m.clone());
+            self.mappers.lock().unwrap().insert(m.id.clone(), m.clone());
             Ok(m)
         }
         async fn delete(&self, id: &str) -> TtsResult<()> {
@@ -241,8 +233,16 @@ mod tests {
     #[tokio::test]
     async fn cold_read_bulk_loads_once_then_serves_from_cache() {
         let inner = Arc::new(FakeMapperRepo::default());
-        inner.mappers.lock().unwrap().insert("a".into(), mapper("a", "A"));
-        inner.mappers.lock().unwrap().insert("b".into(), mapper("b", "B"));
+        inner
+            .mappers
+            .lock()
+            .unwrap()
+            .insert("a".into(), mapper("a", "A"));
+        inner
+            .mappers
+            .lock()
+            .unwrap()
+            .insert("b".into(), mapper("b", "B"));
         let cache = CachedMapperRepository::new(inner.clone(), None);
 
         // First read triggers exactly one bulk load.
@@ -277,13 +277,21 @@ mod tests {
     #[tokio::test]
     async fn refresh_picks_up_out_of_band_change() {
         let inner = Arc::new(FakeMapperRepo::default());
-        inner.mappers.lock().unwrap().insert("a".into(), mapper("a", "A"));
+        inner
+            .mappers
+            .lock()
+            .unwrap()
+            .insert("a".into(), mapper("a", "A"));
         let cache = CachedMapperRepository::new(inner.clone(), None);
 
         assert_eq!(cache.find_by_id("a").await.unwrap().unwrap().name, "A");
 
         // Mutate the backing store directly (simulating another replica's write).
-        inner.mappers.lock().unwrap().insert("a".into(), mapper("a", "A-new"));
+        inner
+            .mappers
+            .lock()
+            .unwrap()
+            .insert("a".into(), mapper("a", "A-new"));
         // Stale until refresh.
         assert_eq!(cache.find_by_id("a").await.unwrap().unwrap().name, "A");
 

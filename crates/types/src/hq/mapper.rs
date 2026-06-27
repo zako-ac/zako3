@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// Input data types that a WASM mapper can request from the host.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MapperInputData {
     MappingList,

@@ -1,7 +1,6 @@
 use axum::http::{Method, Request, Response};
 use opentelemetry::{
-    KeyValue,
-    global,
+    KeyValue, global,
     metrics::{Counter, Histogram},
 };
 use std::{

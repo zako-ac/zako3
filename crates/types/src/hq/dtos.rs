@@ -187,6 +187,55 @@ pub struct ApiKeyResponseDto {
     pub token: String,
 }
 
+/// Preset expiry windows for a user-scoped API key.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema, PartialEq, Eq,
+)]
+pub enum UserApiKeyExpiry {
+    #[serde(rename = "1_month")]
+    OneMonth,
+    #[serde(rename = "3_months")]
+    ThreeMonths,
+    #[serde(rename = "6_months")]
+    SixMonths,
+    #[serde(rename = "1_year")]
+    OneYear,
+    #[serde(rename = "never")]
+    Never,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateUserApiKeyDto {
+    pub label: String,
+    pub expiry: UserApiKeyExpiry,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserApiKeyDto {
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UserApiKeyDto {
+    pub id: String,
+    pub label: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub revoked: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UserApiKeyResponseDto {
+    #[serde(flatten)]
+    pub api_key: UserApiKeyDto,
+    pub token: String,
+}
+
 #[derive(
     Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema, zod_gen_derive::ZodSchema,
 )]
