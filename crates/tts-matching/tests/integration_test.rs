@@ -12,6 +12,7 @@ use zako3_types::{
 };
 
 static LOWERCASE_WASM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lowercase.wasm"));
+static EMPTY_OUTPUT_WASM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/empty-output.wasm"));
 
 struct NoopDiscord;
 
@@ -151,4 +152,68 @@ async fn mapper_with_wrong_hash_skips() {
 
     let result = service.process(ctx("Hello World")).await.unwrap();
     assert_eq!(result, "Hello World");
+}
+
+#[tokio::test]
+async fn mapper_returning_empty_text_blocks_output() {
+    let (service, _repo) = make_service();
+
+    service
+        .mapper_repo()
+        .create(WasmMapper {
+            id: "empty-output".to_string(),
+            name: "Empty Output".to_string(),
+            wasm_bytes: EMPTY_OUTPUT_WASM.to_vec(),
+            sha256_hash: wasm_hash(EMPTY_OUTPUT_WASM),
+            input_data: vec![],
+        })
+        .await
+        .unwrap();
+
+    service
+        .pipeline_repo()
+        .set_ordered(&["empty-output".to_string()])
+        .await
+        .unwrap();
+
+    // A mapper that returns "" should produce "" — not the original input.
+    // This is the "block TTS" signal: downstream code checks `.trim().is_empty()`.
+    let result = service.process(ctx("Hello World")).await.unwrap();
+    assert_eq!(result, "");
+}
+
+#[tokio::test]
+async fn empty_output_then_lowercase_still_empty() {
+    let (service, repo) = make_service();
+
+    repo.create(WasmMapper {
+        id: "empty-output".to_string(),
+        name: "Empty Output".to_string(),
+        wasm_bytes: EMPTY_OUTPUT_WASM.to_vec(),
+        sha256_hash: wasm_hash(EMPTY_OUTPUT_WASM),
+        input_data: vec![],
+    })
+    .await
+    .unwrap();
+
+    repo.create(WasmMapper {
+        id: "lowercase".to_string(),
+        name: "Lowercase".to_string(),
+        wasm_bytes: LOWERCASE_WASM.to_vec(),
+        sha256_hash: wasm_hash(LOWERCASE_WASM),
+        input_data: vec![],
+    })
+    .await
+    .unwrap();
+
+    // empty-output runs first and clears text to "".
+    // lowercase runs second and lowercases "" → still "".
+    service
+        .pipeline_repo()
+        .set_ordered(&["empty-output".to_string(), "lowercase".to_string()])
+        .await
+        .unwrap();
+
+    let result = service.process(ctx("Hello World")).await.unwrap();
+    assert_eq!(result, "");
 }
