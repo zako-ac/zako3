@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -43,7 +44,11 @@ fn build_example(example_dir: &Path, out_wasm: &Path) {
         .expect("failed to invoke cargo for WASM example");
     assert!(status.success(), "WASM example build failed");
 
-    let crate_name = example_dir.file_name().unwrap().to_string_lossy();
+    let crate_name = example_dir
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .replace('-', "_");
     let wasm_src = example_dir
         .join("target/wasm32-unknown-unknown/release")
         .join(format!("{crate_name}.wasm"));
