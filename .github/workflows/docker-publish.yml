@@ -21,9 +21,10 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
+          shared-key: docker-publish-rust
           cache-targets: true
           cache-all-crates: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: true
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
