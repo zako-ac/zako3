@@ -143,7 +143,10 @@ pub(crate) async fn execute_pipeline(
                     );
                 }
 
-                if !out.text.is_empty() {
+                // Always accept the mapper's text output (including empty string,
+                // which signals "block TTS"). Only skip the update on error —
+                // error outputs carry no meaningful text.
+                if out.error.is_none() {
                     text = out.text;
                 }
 
@@ -307,7 +310,9 @@ pub(crate) async fn execute_pipeline_traced(
                     warn!(mapper_id = %mapper_id, error = %err, "mapper reported error");
                 }
 
-                if !out.text.is_empty() {
+                // Always accept the mapper's text output (including empty string,
+                // which signals "block TTS"). Only skip the update on error.
+                if out.error.is_none() {
                     text = out.text;
                 }
                 if let Some(override_ids) = out.override_future_mappers {
