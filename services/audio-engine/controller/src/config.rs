@@ -9,6 +9,9 @@ pub struct AppConfig {
     pub ae_advertise_addr: Option<String>,
     #[serde(default = "default_tl_rpc_url")]
     pub tl_rpc_url: String,
+    /// Redis used to persist active voice sessions so a restarted AE can rejoin them.
+    #[serde(default = "default_redis_url")]
+    pub redis_url: String,
     #[serde(default = "default_taphub_url")]
     pub taphub_url: String,
     #[serde(default = "default_taphub_sni")]
@@ -30,6 +33,10 @@ fn default_ae_port() -> u16 {
 
 fn default_tl_rpc_url() -> String {
     "http://127.0.0.1:7070".to_string()
+}
+
+fn default_redis_url() -> String {
+    "redis://127.0.0.1:6379".to_string()
 }
 
 fn default_taphub_url() -> String {

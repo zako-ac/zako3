@@ -5,7 +5,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serenity::all::ChannelId as SerenityChannelId;
 use serenity::cache::Cache;
-use songbird::Songbird;
+use songbird::events::context_data::DisconnectReason;
+use songbird::{CoreEvent, Event, EventContext, EventHandler as VoiceEventHandler, Songbird};
+use tokio::sync::mpsc;
 use tracing::instrument;
 use zako3_audio_engine_audio::OpusCons;
 use zako3_audio_engine_core::{
@@ -17,11 +19,22 @@ use zako3_audio_engine_core::{
 pub struct SongbirdDiscordService {
     manager: Arc<Songbird>,
     cache: Arc<Cache>,
+    /// Signals a *terminal* voice disconnect (guild, channel) — fired only after songbird has
+    /// exhausted its own reconnect attempts. The controller consumes this to clean up / rejoin.
+    disconnect_tx: mpsc::UnboundedSender<(GuildId, ChannelId)>,
 }
 
 impl SongbirdDiscordService {
-    pub fn new(manager: Arc<Songbird>, cache: Arc<Cache>) -> Self {
-        Self { manager, cache }
+    pub fn new(
+        manager: Arc<Songbird>,
+        cache: Arc<Cache>,
+        disconnect_tx: mpsc::UnboundedSender<(GuildId, ChannelId)>,
+    ) -> Self {
+        Self {
+            manager,
+            cache,
+            disconnect_tx,
+        }
     }
 
     fn to_songbird_guild_id(guild_id: GuildId) -> songbird::id::GuildId {
@@ -72,13 +85,35 @@ impl DiscordService for SongbirdDiscordService {
         let g_id = Self::to_songbird_guild_id(guild_id);
         let c_id = Self::to_serenity_channel_id(channel_id);
 
-        match tokio::time::timeout(Duration::from_secs(10), self.manager.join(g_id, c_id)).await {
-            Ok(join_result) => join_result.map(|_| ())?,
-            Err(_) => {
-                tracing::warn!(guild_id = ?guild_id, channel_id = ?channel_id, "join_voice_channel timed out after 10s");
-                return Err(ZakoError::Rpc("join_voice_channel timed out after 10s".to_string()));
-            }
+        let call_lock =
+            match tokio::time::timeout(Duration::from_secs(10), self.manager.join(g_id, c_id)).await
+            {
+                Ok(join_result) => join_result?,
+                Err(_) => {
+                    tracing::warn!(guild_id = ?guild_id, channel_id = ?channel_id, "join_voice_channel timed out after 10s");
+                    return Err(ZakoError::Rpc(
+                        "join_voice_channel timed out after 10s".to_string(),
+                    ));
+                }
+            };
+
+        // Watch for terminal driver disconnects. songbird fires DriverDisconnect with a
+        // `reason` only after exhausting its own reconnect attempts, so this does NOT trip on
+        // the transient voice-server blips that previously caused the bot to flap. A
+        // `reason == None` disconnect is user-requested (our own leave / channel move) and is
+        // ignored here.
+        {
+            let mut call = call_lock.lock().await;
+            call.add_global_event(
+                CoreEvent::DriverDisconnect.into(),
+                DriverDisconnectWatcher {
+                    disconnect_tx: self.disconnect_tx.clone(),
+                    guild_id,
+                    channel_id,
+                },
+            );
         }
+
         Ok(())
     }
 
@@ -114,5 +149,36 @@ impl DiscordService for SongbirdDiscordService {
         }
 
         Ok(())
+    }
+}
+
+/// Songbird global-event handler that reports a *terminal* voice disconnect for one
+/// (guild, channel) to the controller. Registered per-join in `join_voice_channel`.
+struct DriverDisconnectWatcher {
+    disconnect_tx: mpsc::UnboundedSender<(GuildId, ChannelId)>,
+    guild_id: GuildId,
+    channel_id: ChannelId,
+}
+
+#[async_trait]
+impl VoiceEventHandler for DriverDisconnectWatcher {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::DriverDisconnect(data) = ctx {
+            // Ignore user-requested disconnects: `reason == None` (gateway-level leave/move)
+            // and `reason == Some(Requested)` (our own Driver::leave) are already handled by
+            // SessionManager::leave(). Everything else means songbird gave up after exhausting
+            // reconnects, so the connection is genuinely dead and the session must be cleaned.
+            let terminal_failure = matches!(data.reason, Some(r) if r != DisconnectReason::Requested);
+            if terminal_failure {
+                tracing::warn!(
+                    guild_id = %self.guild_id,
+                    channel_id = %self.channel_id,
+                    reason = ?data.reason,
+                    "Driver disconnected after exhausting reconnects; signalling controller"
+                );
+                let _ = self.disconnect_tx.send((self.guild_id, self.channel_id));
+            }
+        }
+        None
     }
 }

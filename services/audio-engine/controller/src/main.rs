@@ -14,12 +14,11 @@ use zako3_audio_engine_controller::{
     guild_reporter::{report_guilds_once, run_ae_heartbeat, run_guild_reporter},
     ready_waiter::create_ready_waiter,
     server::AeTransportHandler,
-    voice_state::VoiceStateHandler,
 };
 
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
-    InMemoryStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
+    RedisStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
 use zako3_telemetry::TelemetryConfig;
@@ -78,7 +77,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let taphub_service = Arc::new(RealTapHubService::new_lazy(taphub_cell));
-    let state_service = Arc::new(InMemoryStateService::new());
 
     // Step 1: Resolve advertised address.
     let advertised_addr = if let Some(addr) = &config.ae_advertise_addr {
@@ -155,14 +153,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let songbird_manager = songbird::Songbird::serenity();
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
-    let voice_state_handler = Arc::new(VoiceStateHandler {
-        session_manager: sm_cell.clone(),
-    });
-
     let intents = GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILDS;
     let mut discord_client = Client::builder(&token_str, intents)
         .event_handler_arc(ready_waiter)
-        .event_handler_arc(voice_state_handler)
         .register_songbird_with(songbird_manager.clone())
         .await
         .expect("Failed to create Discord client");
@@ -180,7 +173,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ready_recv.recv().await;
     let serenity_ctx = ctx_recv.recv().await.expect("ctx channel closed before ready");
 
-    let discord_service = Arc::new(SongbirdDiscordService::new(songbird_manager.clone(), serenity_ctx.cache.clone()));
+    // Channel carrying terminal voice disconnects from the songbird driver-event watcher
+    // (registered per-join) to the controller's consumer task below.
+    let (disconnect_tx, mut disconnect_rx) = tokio::sync::mpsc::unbounded_channel::<(
+        zako3_audio_engine_core::types::GuildId,
+        zako3_audio_engine_core::types::ChannelId,
+    )>();
+
+    let discord_service = Arc::new(SongbirdDiscordService::new(
+        songbird_manager.clone(),
+        serenity_ctx.cache.clone(),
+        disconnect_tx,
+    ));
+
+    // Redis-backed session store, namespaced by this bot's token so a restart rejoins exactly
+    // this bot's previously-active channels. Best-effort: degrades to no persistence if Redis
+    // is unavailable.
+    let state_service = Arc::new(RedisStateService::new(&config.redis_url, &token_str).await);
 
     let session_manager = Arc::new(SessionManager::new(
         discord_service,
@@ -191,7 +200,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Fill the OnceLock now that session_manager is constructed
     let _ = sm_cell.set(session_manager.clone());
 
-    // Voice state handler is now ready and registered with the Discord client
+    // Rejoin any sessions persisted from a previous run. The bot reconnects to its channels
+    // automatically; TL's reconcile will re-adopt these live sessions into its cache.
+    match session_manager.list_sessions().await {
+        Ok(persisted) if !persisted.is_empty() => {
+            tracing::info!(count = persisted.len(), "Rejoining persisted voice sessions");
+            for s in persisted {
+                if let Err(e) = session_manager.rejoin(&s).await {
+                    tracing::error!(
+                        guild_id = %s.guild_id,
+                        channel_id = %s.channel_id,
+                        "rejoin failed; dropping persisted session: {e}"
+                    );
+                    let _ = session_manager
+                        .cleanup_session(s.guild_id, s.channel_id)
+                        .await;
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("failed to list persisted sessions for rejoin: {e}"),
+    }
+
+    // Consume terminal voice disconnects (songbird exhausted reconnects). Clean up the dead
+    // session so TL's cache stays consistent and reconcile won't see it as dangling.
+    {
+        let sm = session_manager.clone();
+        tokio::spawn(async move {
+            while let Some((guild_id, channel_id)) = disconnect_rx.recv().await {
+                tracing::warn!(
+                    ?guild_id,
+                    ?channel_id,
+                    "terminal voice disconnect; cleaning up session"
+                );
+                if let Err(e) = sm.cleanup_session(guild_id, channel_id).await {
+                    tracing::error!(
+                        ?guild_id,
+                        ?channel_id,
+                        "driver-disconnect cleanup failed: {e}"
+                    );
+                }
+            }
+        });
+    }
 
     tracing::info!("Audio Engine is ready and connected to Discord!");
     telemetry.healthy();
