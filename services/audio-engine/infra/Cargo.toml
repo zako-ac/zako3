@@ -19,3 +19,4 @@ zako3-types.workspace = true
 opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
 redis = { version = "0.27", features = ["tokio-comp"] }
+sha2 = "0.10"

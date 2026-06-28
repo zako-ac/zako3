@@ -1,9 +1,7 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
 use async_trait::async_trait;
 use dashmap::DashMap;
 use redis::AsyncCommands;
+use sha2::{Digest, Sha256};
 use zako3_audio_engine_core::{
     error::ZakoResult,
     service::state::StateService,
@@ -69,11 +67,12 @@ impl RedisStateService {
     }
 
     fn hash_namespace(token: &str) -> String {
-        // Non-cryptographic, but deterministic across runs (DefaultHasher uses fixed keys).
-        // We only need a stable, non-secret namespace — not to protect the token.
-        let mut h = DefaultHasher::new();
-        token.hash(&mut h);
-        format!("{:016x}", h.finish())
+        // SHA-256 of the bot token → first 16 hex chars (64-bit worth).
+        // Cryptographic hash ensures determinism across process restarts (unlike
+        // DefaultHasher which is randomly seeded per-execution). The token is sensitive,
+        // so a cryptographic hash is appropriate even though we only need a stable ID.
+        let hash = Sha256::digest(token.as_bytes());
+        format!("{:016x}", u64::from_be_bytes(hash[..8].try_into().unwrap()))
     }
 
     fn key(&self, guild_id: GuildId, channel_id: ChannelId) -> String {
