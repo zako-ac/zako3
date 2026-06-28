@@ -291,7 +291,6 @@ async fn autocomplete_provider(
 ) -> Vec<String> {
     let service = &ctx.data().service;
     let discord_id = ctx.author().id.to_string();
-    let username = &ctx.author().name;
 
     let user_id = match service
         .tap
@@ -316,7 +315,7 @@ async fn autocomplete_provider(
             None,
             Some(true),
             None,
-            None,
+            Some(25),
         )
         .await
     {
