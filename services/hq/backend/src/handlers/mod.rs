@@ -11,4 +11,5 @@ pub mod playback;
 pub mod settings;
 pub mod stats;
 pub mod tap;
+pub mod user_api_key;
 pub mod users;

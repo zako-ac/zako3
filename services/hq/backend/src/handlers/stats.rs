@@ -44,5 +44,7 @@ pub async fn stats_sse(
             .map(|_| Ok::<Event, std::convert::Infallible>(Event::default().data("stats_changed")))
     });
 
-    Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }

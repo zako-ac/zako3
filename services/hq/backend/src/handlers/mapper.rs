@@ -24,12 +24,19 @@ fn map_error(e: CoreError) -> (StatusCode, Json<ApiErrorResponse>) {
         CoreError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg),
         CoreError::Forbidden(msg) => (StatusCode::FORBIDDEN, "FORBIDDEN", msg),
         CoreError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg),
-        other => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", other.to_string()),
+        other => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            other.to_string(),
+        ),
     };
-    (status, Json(ApiErrorResponse {
-        code: code.to_string(),
-        message,
-    }))
+    (
+        status,
+        Json(ApiErrorResponse {
+            code: code.to_string(),
+            message,
+        }),
+    )
 }
 
 #[utoipa::path(
@@ -78,50 +85,82 @@ pub async fn get_mapper(
 /// Parse multipart fields common to create and update.
 async fn parse_multipart(
     mut multipart: Multipart,
-) -> Result<(Option<String>, Option<String>, Vec<MapperInputData>, Option<Vec<u8>>), (StatusCode, Json<ApiErrorResponse>)> {
+) -> Result<
+    (
+        Option<String>,
+        Option<String>,
+        Vec<MapperInputData>,
+        Option<Vec<u8>>,
+    ),
+    (StatusCode, Json<ApiErrorResponse>),
+> {
     let mut id: Option<String> = None;
     let mut name: Option<String> = None;
     let mut input_data: Vec<MapperInputData> = vec![];
     let mut wasm_bytes: Option<Vec<u8>> = None;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| {
-            (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse {
                 code: "MULTIPART_ERROR".to_string(),
                 message: e.to_string(),
-            }))
-        })? {
+            }),
+        )
+    })? {
         match field.name() {
             Some("id") => {
-                id = field.text().await.map(Some).map_err(|e| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-                    code: "MULTIPART_ERROR".to_string(),
-                    message: e.to_string(),
-                })))?;
+                id = field.text().await.map(Some).map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            code: "MULTIPART_ERROR".to_string(),
+                            message: e.to_string(),
+                        }),
+                    )
+                })?;
             }
             Some("name") => {
-                name = field.text().await.map(Some).map_err(|e| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-                    code: "MULTIPART_ERROR".to_string(),
-                    message: e.to_string(),
-                })))?;
+                name = field.text().await.map(Some).map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            code: "MULTIPART_ERROR".to_string(),
+                            message: e.to_string(),
+                        }),
+                    )
+                })?;
             }
             Some("input_data") => {
-                let text = field.text().await.map_err(|e| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-                    code: "MULTIPART_ERROR".to_string(),
-                    message: e.to_string(),
-                })))?;
-                input_data = serde_json::from_str(&text)
-                    .map_err(|e| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-                        code: "INVALID_JSON".to_string(),
-                        message: format!("Invalid input_data JSON: {}", e),
-                    })))?;
+                let text = field.text().await.map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            code: "MULTIPART_ERROR".to_string(),
+                            message: e.to_string(),
+                        }),
+                    )
+                })?;
+                input_data = serde_json::from_str(&text).map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            code: "INVALID_JSON".to_string(),
+                            message: format!("Invalid input_data JSON: {}", e),
+                        }),
+                    )
+                })?;
             }
             Some("file") => {
-                let bytes = field.bytes().await.map_err(|e| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-                    code: "MULTIPART_ERROR".to_string(),
-                    message: e.to_string(),
-                })))?;
+                let bytes = field.bytes().await.map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            code: "MULTIPART_ERROR".to_string(),
+                            message: e.to_string(),
+                        }),
+                    )
+                })?;
                 wasm_bytes = Some(bytes.to_vec());
             }
             _ => {}
@@ -147,18 +186,33 @@ pub async fn create_mapper(
 ) -> Result<(StatusCode, Json<WasmMapperDto>), (StatusCode, Json<ApiErrorResponse>)> {
     let (id, name, input_data, wasm_bytes) = parse_multipart(multipart).await?;
 
-    let id = id.ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-        code: "MISSING_FIELD".to_string(),
-        message: "Missing 'id' field".to_string(),
-    })))?;
-    let name = name.ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-        code: "MISSING_FIELD".to_string(),
-        message: "Missing 'name' field".to_string(),
-    })))?;
-    let wasm_bytes = wasm_bytes.ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-        code: "MISSING_FIELD".to_string(),
-        message: "Missing 'file' field".to_string(),
-    })))?;
+    let id = id.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse {
+                code: "MISSING_FIELD".to_string(),
+                message: "Missing 'id' field".to_string(),
+            }),
+        )
+    })?;
+    let name = name.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse {
+                code: "MISSING_FIELD".to_string(),
+                message: "Missing 'name' field".to_string(),
+            }),
+        )
+    })?;
+    let wasm_bytes = wasm_bytes.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse {
+                code: "MISSING_FIELD".to_string(),
+                message: "Missing 'file' field".to_string(),
+            }),
+        )
+    })?;
 
     service
         .mapping
@@ -186,10 +240,15 @@ pub async fn update_mapper(
 ) -> Result<Json<WasmMapperDto>, (StatusCode, Json<ApiErrorResponse>)> {
     let (_, name, input_data, wasm_bytes) = parse_multipart(multipart).await?;
 
-    let name = name.ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ApiErrorResponse {
-        code: "MISSING_FIELD".to_string(),
-        message: "Missing 'name' field".to_string(),
-    })))?;
+    let name = name.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse {
+                code: "MISSING_FIELD".to_string(),
+                message: "Missing 'name' field".to_string(),
+            }),
+        )
+    })?;
 
     service
         .mapping

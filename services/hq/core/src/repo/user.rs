@@ -268,14 +268,12 @@ impl UserRepository for PgUserRepository {
             "Updating OAuth token for user"
         );
 
-        sqlx::query(
-            "UPDATE users SET oauth_access_token = $1, updated_at = $2 WHERE id = $3",
-        )
-        .bind(&oauth_token)
-        .bind(chrono::Utc::now())
-        .bind(id.0)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE users SET oauth_access_token = $1, updated_at = $2 WHERE id = $3")
+            .bind(&oauth_token)
+            .bind(chrono::Utc::now())
+            .bind(id.0)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }

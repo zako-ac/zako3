@@ -52,6 +52,15 @@ impl FromRequestParts<Arc<Service>> for AuthUser {
 
         let user_id = UserId(token_data.claims.sub);
 
+        // Revocable user API keys carry a `jti`; reject if the key was revoked.
+        if let Some(jti) = token_data.claims.jti {
+            state
+                .user_api_key
+                .validate_jti(&jti)
+                .await
+                .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?;
+        }
+
         state
             .auth
             .get_user(&user_id.to_string())
@@ -103,6 +112,12 @@ impl FromRequestParts<Arc<Service>> for OptionalAuthUser {
         };
 
         let user_id = UserId(token_data.claims.sub);
+
+        if let Some(jti) = token_data.claims.jti
+            && state.user_api_key.validate_jti(&jti).await.is_err()
+        {
+            return Ok(OptionalAuthUser(None));
+        }
 
         if state.auth.get_user(&user_id.to_string()).await.is_err() {
             return Ok(OptionalAuthUser(None));

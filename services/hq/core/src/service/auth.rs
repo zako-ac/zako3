@@ -13,6 +13,10 @@ use zako3_states::CacheRepositoryRef;
 pub struct Claims {
     pub sub: String, // internal user id
     pub exp: usize,
+    /// JWT id. Present only for revocable user API keys; `None` for session
+    /// tokens issued by login/refresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jti: Option<String>,
 }
 
 #[derive(Clone)]
@@ -120,7 +124,13 @@ impl AuthService {
 
         // Find or create user
         let user = self
-            .get_or_create_user(discord_id, username, avatar.as_deref(), email.as_deref(), Some(access_token))
+            .get_or_create_user(
+                discord_id,
+                username,
+                avatar.as_deref(),
+                email.as_deref(),
+                Some(access_token),
+            )
             .await?;
 
         if user.banned {
@@ -136,6 +146,7 @@ impl AuthService {
         let claims = Claims {
             sub: user.id.0.to_string(),
             exp: expiration as usize,
+            jti: None,
         };
 
         let token = encode(
@@ -294,14 +305,11 @@ impl AuthService {
             )));
         }
 
-        let guilds: Vec<serde_json::Value> = response
-            .json()
-            .await
-            .map_err(|e| {
-                let err_msg = format!("Failed to parse Discord response: {}", e);
-                tracing::error!("{}", err_msg);
-                CoreError::Internal(err_msg)
-            })?;
+        let guilds: Vec<serde_json::Value> = response.json().await.map_err(|e| {
+            let err_msg = format!("Failed to parse Discord response: {}", e);
+            tracing::error!("{}", err_msg);
+            CoreError::Internal(err_msg)
+        })?;
 
         tracing::debug!(count = guilds.len(), "Received guilds from Discord API");
 
@@ -360,7 +368,11 @@ impl AuthService {
             })
             .collect();
 
-        tracing::info!(count = guild_infos.len(), "Successfully fetched {} guilds from Discord API", guild_infos.len());
+        tracing::info!(
+            count = guild_infos.len(),
+            "Successfully fetched {} guilds from Discord API",
+            guild_infos.len()
+        );
 
         // Store in cache with 5-minute TTL
         if let Ok(json) = serde_json::to_string(&guild_infos) {
@@ -395,6 +407,7 @@ impl AuthService {
         let claims = Claims {
             sub: user.id.0.to_string(),
             exp: expiration as usize,
+            jti: None,
         };
 
         let token = encode(

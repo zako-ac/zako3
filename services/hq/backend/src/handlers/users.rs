@@ -1,7 +1,7 @@
 use crate::middleware::auth::AuthUser;
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
 use hq_core::{CoreError, Service};
 use hq_types::hq::settings::{PartialUserSettings, UserSettings};

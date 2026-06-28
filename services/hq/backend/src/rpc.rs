@@ -1,10 +1,10 @@
 use hq_core::service::api_key::ApiKeyService;
 use hq_core::service::auth::AuthService;
 use hq_core::service::tap::TapService;
+use hq_types::ZakoResult;
 use hq_types::hq::rpc::HqRpcServer;
 use hq_types::hq::{Tap, TapId, User, UserId};
-use hq_types::ZakoResult;
-use jsonrpsee::core::{async_trait, RpcResult};
+use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee::types::ErrorObjectOwned;
 use std::future::Future;
 use std::pin::Pin;
@@ -219,7 +219,11 @@ impl HqRpcServer for HqRpcImpl {
             Ok(None) => return Ok(false),
             Err(e) => return Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)),
         };
-        let user_id = match self.tap_service.get_user_by_discord_id(&discord_user_id).await {
+        let user_id = match self
+            .tap_service
+            .get_user_by_discord_id(&discord_user_id)
+            .await
+        {
             Ok(Some(u)) => UserId::from_str(&u.id.0).ok(),
             _ => None,
         };

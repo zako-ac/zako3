@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use zako3_tts_matching::{
-    Error as TtsError, MapperRepository, Result as TtsResult, WasmMapper,
-    model::MapperInputData,
+    Error as TtsError, MapperRepository, Result as TtsResult, WasmMapper, model::MapperInputData,
 };
 
 fn db_err(e: sqlx::Error) -> TtsError {
@@ -99,7 +98,10 @@ impl MapperRepository for PgMapperRepository {
         .map_err(db_err)?;
 
         if result.rows_affected() == 0 {
-            return Err(TtsError::NotFound(format!("mapper {} not found", mapper.id)));
+            return Err(TtsError::NotFound(format!(
+                "mapper {} not found",
+                mapper.id
+            )));
         }
 
         Ok(mapper)

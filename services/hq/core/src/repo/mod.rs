@@ -10,6 +10,7 @@ pub mod playback_action;
 pub mod tap;
 pub mod tts_channel;
 pub mod user;
+pub mod user_api_key;
 pub mod user_guild_settings;
 pub mod verification;
 
@@ -25,5 +26,6 @@ pub use playback_action::*;
 pub use tap::*;
 pub use tts_channel::*;
 pub use user::*;
+pub use user_api_key::*;
 pub use user_guild_settings::*;
 pub use verification::*;

@@ -1,7 +1,7 @@
 use crate::middleware::auth::{AdminUser, AuthUser, OptionalAuthUser};
 use axum::{
     Json,
-    extract::{Path, State, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/features/auth'
 import {
@@ -13,8 +14,17 @@ import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { LanguageToggle } from '@/components/layout/language-toggle'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AlertTriangle, Key } from 'lucide-react'
 import { useTaps } from '@/features/taps'
+import {
+    useApiKeys,
+    useCreateApiKey,
+    useRevokeApiKey,
+    CreateApiKeyDialog,
+    ApiKeyItem,
+} from '@/features/api-keys'
+import type { CreateUserApiKeyInput } from '@zako-ac/zako3-data'
 import { UserSettingsCard, usePartialUserSettings, useSavePartialUserSettings, emptyPartial } from '@/features/settings'
 import type { PartialUserSettings } from '@/features/settings'
 import { LoadingSkeleton } from '@/components/common'
@@ -28,7 +38,32 @@ export const SettingsPage = () => {
     const { data: settingsData, isLoading: isLoadingSettings } = usePartialUserSettings()
     const { mutateAsync: saveSettings } = useSavePartialUserSettings()
 
+    const [createKeyDialogOpen, setCreateKeyDialogOpen] = useState(false)
+    const { data: apiKeys, isLoading: isLoadingKeys } = useApiKeys()
+    const { mutateAsync: createApiKey, isPending: isCreatingKey } = useCreateApiKey()
+    const { mutateAsync: revokeApiKey, isPending: isRevokingKey } = useRevokeApiKey()
+
     if (!user) return null
+
+    const handleCreateApiKey = async (data: CreateUserApiKeyInput) => {
+        try {
+            const result = await createApiKey(data)
+            toast.success(t('settings.apiKeys.created'))
+            return result
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : t('settings.apiKeys.createError'))
+            throw error
+        }
+    }
+
+    const handleRevokeApiKey = async (keyId: string) => {
+        try {
+            await revokeApiKey(keyId)
+            toast.success(t('settings.apiKeys.revokedToast'))
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : t('settings.apiKeys.revokeError'))
+        }
+    }
 
     const handleSaveSettings = async (settings: PartialUserSettings) => {
         try {
@@ -127,6 +162,57 @@ export const SettingsPage = () => {
                 </CardContent>
             </Card>
 
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="flex items-center gap-2">
+                                <Key className="h-5 w-5" />
+                                {t('settings.apiKeys.title')}
+                            </CardTitle>
+                            <CardDescription>
+                                {t('settings.apiKeys.subtitle')}
+                            </CardDescription>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCreateKeyDialogOpen(true)}
+                            disabled={isLoadingKeys}
+                        >
+                            {t('settings.apiKeys.createKey')}
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingKeys ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-20 w-full" />
+                            <Skeleton className="h-20 w-full" />
+                        </div>
+                    ) : apiKeys && apiKeys.length > 0 ? (
+                        <div className="space-y-3">
+                            {apiKeys.map((key) => (
+                                <ApiKeyItem
+                                    key={key.id}
+                                    apiKey={key}
+                                    onRevoke={handleRevokeApiKey}
+                                    isRevoking={isRevokingKey}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center">
+                            <Key className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                            <p className="mb-1 text-sm font-medium">
+                                {t('settings.apiKeys.noKeys')}
+                            </p>
+                            <p className="text-xs">{t('settings.apiKeys.noKeysDescription')}</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             <Card className="border-destructive/50">
                 <CardHeader>
                     <CardTitle className="text-destructive flex items-center gap-2">
@@ -147,6 +233,13 @@ export const SettingsPage = () => {
                     </div>
                 </CardContent>
             </Card>
+
+            <CreateApiKeyDialog
+                open={createKeyDialogOpen}
+                onOpenChange={setCreateKeyDialogOpen}
+                onSubmit={handleCreateApiKey}
+                isLoading={isCreatingKey}
+            />
         </div>
     )
 }

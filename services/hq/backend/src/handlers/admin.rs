@@ -4,11 +4,11 @@ use axum::{
     extract::{Path, Query, State},
 };
 use hq_core::{CoreError, Service};
-use hq_types::hq::{
-    AuthUserDto, PaginatedResponseDto, PlatformStatsDto, RejectVerificationDto, UpdateUserRoleDto, UserId,
-    VerificationRequest, VerificationRequestId, VerificationStatus,
-};
 use hq_types::hq::settings::PartialUserSettings;
+use hq_types::hq::{
+    AuthUserDto, PaginatedResponseDto, PlatformStatsDto, RejectVerificationDto, UpdateUserRoleDto,
+    UserId, VerificationRequest, VerificationRequestId, VerificationStatus,
+};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -494,5 +494,7 @@ pub async fn get_platform_stats(
         .get_global_unique_users()
         .await
         .map_err(|e| map_error(CoreError::MetricsError(e)))?;
-    Ok(Json(PlatformStatsDto { global_unique_users }))
+    Ok(Json(PlatformStatsDto {
+        global_unique_users,
+    }))
 }

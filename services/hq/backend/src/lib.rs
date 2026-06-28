@@ -1,6 +1,7 @@
 use axum::{
-    routing::{delete, get, post},
     Extension, Router,
+    extract::DefaultBodyLimit,
+    routing::{delete, get, post},
 };
 use hq_core::{PlaybackEvent, Service};
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 pub mod handlers;
+pub mod mcp;
 pub mod middleware;
 
 use handlers::admin;
@@ -25,6 +27,7 @@ use handlers::playback;
 use handlers::settings;
 use handlers::stats;
 use handlers::tap;
+use handlers::user_api_key;
 use handlers::users;
 
 #[derive(OpenApi)]
@@ -183,8 +186,10 @@ pub fn app(
     stats_tx: broadcast::Sender<()>,
 ) -> Router {
     let state = Arc::new(service.clone());
+    let mcp_service = state.clone();
+    let mcp_event_tx = event_tx.clone();
 
-    Router::new()
+    let rest = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/api/v1/auth/login", get(auth::login_handler))
         .route("/api/v1/auth/callback", get(auth::callback_handler))
@@ -205,6 +210,14 @@ pub fn app(
         .route(
             "/api/v1/users/me/settings/effective",
             get(users::get_effective_settings),
+        )
+        .route(
+            "/api/v1/users/me/api-keys",
+            post(user_api_key::create_key).get(user_api_key::list_keys),
+        )
+        .route(
+            "/api/v1/users/me/api-keys/:key_id",
+            axum::routing::patch(user_api_key::update_key).delete(user_api_key::revoke_key),
         )
         .route(
             "/api/v1/guilds/:guild_id/settings",
@@ -262,10 +275,7 @@ pub fn app(
             "/api/v1/admin/taps/:id/cache/entry",
             delete(cache::delete_tap_cache_entry),
         )
-        .route(
-            "/api/v1/admin/stats",
-            get(admin::get_platform_stats),
-        )
+        .route("/api/v1/admin/stats", get(admin::get_platform_stats))
         .route(
             "/api/v1/notifications/unread-count",
             get(notification::get_unread_count),
@@ -348,6 +358,9 @@ pub fn app(
         .layer(TraceLayer::new_for_http())
         .layer(middleware::metrics::MetricsLayer::new())
         .layer(CorsLayer::permissive())
-        .with_state(state)
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
+        .with_state(state);
+
+    rest.merge(mcp::mcp_routes(mcp_service, mcp_event_tx))
 }
 pub mod rpc;

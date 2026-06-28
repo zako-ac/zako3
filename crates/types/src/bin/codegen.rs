@@ -27,6 +27,11 @@ fn main() {
     generator.add_schema::<UpdateApiKeyDto>("UpdateApiKeyDto");
     generator.add_schema::<ApiKeyDto>("ApiKeyDto");
     generator.add_schema::<ApiKeyResponseDto>("ApiKeyResponseDto");
+    generator.add_schema::<UserApiKeyExpiry>("UserApiKeyExpiry");
+    generator.add_schema::<CreateUserApiKeyDto>("CreateUserApiKeyDto");
+    generator.add_schema::<UpdateUserApiKeyDto>("UpdateUserApiKeyDto");
+    generator.add_schema::<UserApiKeyDto>("UserApiKeyDto");
+    generator.add_schema::<UserApiKeyResponseDto>("UserApiKeyResponseDto");
     generator.add_schema::<NotificationDto>("NotificationDto");
     generator.add_schema::<CreateNotificationDto>("CreateNotificationDto");
 
@@ -108,10 +113,11 @@ fn main() {
         "export interface PaginatedResponseDto<T> {\n  data: T[];\n  meta: PaginationMetaDto;\n}\n",
     );
 
-    // The output path is ../packages/zako3-data/src/generated/hq.ts relative to the workspace root.
-    // We can find the workspace root by looking at CARGO_MANIFEST_DIR and going up one level.
+    // Output to <workspace root>/packages/zako3-data/src/generated/hq.ts.
+    // CARGO_MANIFEST_DIR is <root>/crates/types, so go up two levels to the root.
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let mut path = PathBuf::from(manifest_dir);
+    path.push("..");
     path.push("..");
     path.push("packages");
     path.push("zako3-data");
