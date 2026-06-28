@@ -10671,6 +10671,7 @@ dependencies = [
  "async-trait",
  "dashmap 6.1.0",
  "opentelemetry",
+ "redis 0.27.6",
  "serde",
  "serde_json",
  "serenity",

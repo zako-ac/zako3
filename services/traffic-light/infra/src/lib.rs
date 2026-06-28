@@ -7,7 +7,7 @@ use jsonrpsee::http_client::HttpClientBuilder;
 use opentelemetry::global;
 use tl_protocol::{AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineRpcClient};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_tl_core::{AeDispatcher, AeId, DiscordToken, SessionRoute, TlError, WorkerId, ZakoState};
 
@@ -182,6 +182,33 @@ impl AeRegistry {
 
         let url = normalize_url(&listen_addr);
 
+        // Heartbeat fast-path: if this AE already has a live client registered for the same
+        // address, reuse it instead of tearing down and rebuilding the HTTP client every
+        // 15s cycle. The rebuild (remove -> await state lock -> reinsert) opened a brief
+        // window where a concurrent dispatch saw NoSuchAe / a fresh-connect error, which
+        // sync_sessions/reconcile could misread as a dead session and kick the bot.
+        if !evict_sessions
+            && self.clients.contains_key(&(worker_id, AeId(1)))
+            && self.addr_to_worker.get(&url).map(|e| *e) == Some(worker_id)
+        {
+            // Defensive: make sure the worker still advertises this ae_id.
+            {
+                let mut state = self.state.write().await;
+                if let Some(worker) = state.workers.get_mut(&worker_id) {
+                    if !worker.connected_ae_ids.contains(&1) {
+                        worker.connected_ae_ids.push(1);
+                    }
+                }
+            }
+            debug!(
+                worker_id = worker_id.0,
+                ae_id = 1,
+                listen_addr = %listen_addr,
+                "AE heartbeat"
+            );
+            return Ok(());
+        }
+
         // Build the HTTP client to communicate with the AE
         let http_client = HttpClientBuilder::default()
             .request_timeout(std::time::Duration::from_secs(15))
@@ -239,12 +266,24 @@ impl AeRegistry {
             }
         }
 
-        info!(
-            worker_id = worker_id.0,
-            ae_id = ae_id.0,
-            listen_addr = %listen_addr,
-            "AE registered"
-        );
+        if evict_sessions {
+            // Fresh register() — a real (re)start of this AE.
+            info!(
+                worker_id = worker_id.0,
+                ae_id = ae_id.0,
+                listen_addr = %listen_addr,
+                "AE registered"
+            );
+        } else {
+            // Heartbeat that had to rebuild the client (TL had no live client for it).
+            // Noteworthy because it means the previous client was missing.
+            info!(
+                worker_id = worker_id.0,
+                ae_id = ae_id.0,
+                listen_addr = %listen_addr,
+                "AE client re-established (heartbeat)"
+            );
+        }
 
         Ok(())
     }

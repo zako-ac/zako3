@@ -9,7 +9,7 @@ async-trait = "0.1.89"
 dashmap = "6.1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
-serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
 tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
 songbird.workspace = true
@@ -18,3 +18,5 @@ zako3-audio-engine-core.path = "../core"
 zako3-types.workspace = true
 opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
+redis = { version = "0.27", features = ["tokio-comp"] }
+sha2 = "0.10"
