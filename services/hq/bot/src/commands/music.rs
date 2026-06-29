@@ -1,3 +1,5 @@
+use std::hash::{BuildHasher, Hasher, RandomState};
+
 use crate::{Context, Error, ui, util};
 use hq_core::CoreError;
 use hq_types::{
@@ -183,6 +185,12 @@ const CONGRATS: &[&str] = &[
     "쟤네 둘이 이제서야 결혼하네",
 ];
 
+const CONGRATS_TWISTED: &[&str] = &[
+    "우리 결혼식은 불타는 곳에서 하는 거 어때요?",
+    "뜨겁고 웅장한 결혼생활 되세요",
+    "왜 신랑이 드레스를 입고 있죠?",
+];
+
 /// Play the wedding song (easter egg).
 #[poise::command(
     slash_command,
@@ -196,12 +204,17 @@ pub async fn wedding(
     #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
     #[channel_types("Voice")]
     channel: Option<serenity::GuildChannel>,
+    #[description = "Play twisted wedding?"]
+    #[description_localized("ko", "뒤틀린 결혼행진곡")]
+    twisted: Option<bool>,
 ) -> Result<(), Error> {
     let (guild_id, channel_id) = resolve_play_channel(ctx, channel).await?;
     let tap_id = resolve_tap_id(ctx, "wedding").await?;
     let queue_name = QueueName::from(MUSIC_QUEUE.to_string());
     let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
 
+    let twisted = twisted.unwrap_or_else(|| RandomState::new().build_hasher().finish() % 4 == 0);
+    let ars = if twisted { "c" } else { "wedding" };
     ctx.data()
         .service
         .audio_engine
@@ -210,7 +223,7 @@ pub async fn wedding(
             channel_id,
             queue_name,
             tap_id,
-            AudioRequestString::from("wedding".to_string()),
+            AudioRequestString::from(ars.to_string()),
             Volume::from(1.0f32),
             discord_user_id,
         )
@@ -219,9 +232,12 @@ pub async fn wedding(
     let idx = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos() as usize)
-        .unwrap_or(0)
-        % CONGRATS.len();
-    let msg = CONGRATS[idx];
+        .unwrap_or(0);
+    let msg = if twisted {
+        CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
+    } else {
+        CONGRATS[idx % CONGRATS.len()]
+    };
     ctx.say(msg).await?;
     Ok(())
 }
