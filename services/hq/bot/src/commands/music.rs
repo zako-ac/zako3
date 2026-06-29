@@ -185,7 +185,11 @@ const CONGRATS: &[&str] = &[
     "쟤네 둘이 이제서야 결혼하네",
 ];
 
-const CONGRATS_TWISTED: &[&str] = &["쟤네 둘이 이제서야 파혼하네"];
+const CONGRATS_TWISTED: &[&str] = &[
+    "우리 결혼식은 불타는 곳에서 하는 거 어때요?",
+    "뜨겁고 웅장한 결혼생활 되세요",
+    "왜 신랑이 드레스를 입고 있죠?",
+];
 
 /// Play the wedding song (easter egg).
 #[poise::command(
@@ -228,9 +232,12 @@ pub async fn wedding(
     let idx = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos() as usize)
-        .unwrap_or(0)
-        % CONGRATS.len();
-    let msg = CONGRATS[idx];
+        .unwrap_or(0);
+    let msg = if twisted {
+        CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
+    } else {
+        CONGRATS[idx % CONGRATS.len()]
+    };
     ctx.say(msg).await?;
     Ok(())
 }
