@@ -10675,6 +10675,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
+ "sha2",
  "songbird",
  "tokio",
  "tracing",
@@ -10873,7 +10874,6 @@ dependencies = [
  "opentelemetry",
  "opus",
  "parking_lot 0.12.5",
- "protofish2",
  "rustls 0.23.40",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
@@ -10901,12 +10901,13 @@ name = "zako3-taphub-transport-client"
 version = "0.1.0"
 dependencies = [
  "opus",
- "protofish2",
+ "protofish3",
  "rcgen 0.13.2",
  "rmp-serde",
  "rustls 0.23.40",
  "rustls-pemfile 2.2.0",
  "serde",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "zako3-taphub-transport-lib",
@@ -10919,7 +10920,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "protofish2",
  "rcgen 0.13.2",
  "rmp-serde",
  "rustls 0.23.40",
@@ -10936,7 +10936,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "protofish2",
+ "protofish3",
  "rcgen 0.13.2",
  "rmp-serde",
  "rustls 0.23.40",

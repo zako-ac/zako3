@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use bytes::Bytes;
-use protofish2::Timestamp;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
-use zako3_taphub_transport_server::TapHubBridgeHandler;
+use zako3_taphub_transport_server::{TapHubBridgeHandler, Timestamp};
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
     CachedAudioRequest, TapHubError,

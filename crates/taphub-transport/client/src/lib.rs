@@ -1,7 +1,7 @@
-use protofish2::compression::CompressionType;
-use protofish2::config::{ProtofishConfig, ReconnectConfig};
-use protofish2::connection::{ClientConfig, ProtofishClient, ReconnectingConnection};
-use protofish2::mani::transfer::jitter::OpusJitterBuffer;
+mod jitter;
+
+use protofish3::xfer::XferRecv;
+use protofish3::{Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode};
 use rustls::pki_types::CertificateDer;
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,14 +10,14 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 
+use jitter::OpusJitterBuffer;
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
 use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
 
 pub struct TransportClient {
-    conn: Arc<Mutex<ReconnectingConnection>>,
+    conn: Arc<ReconnectingClient>,
 }
 
 impl TransportClient {
@@ -33,18 +33,12 @@ impl TransportClient {
             .next()
             .ok_or_else(|| format!("No addresses resolved for '{}'", server_addr))?;
 
-        let mut protofish_config = ProtofishConfig::default();
-        protofish_config.handshake_timeout = Duration::from_secs(10);
-        protofish_config.mani_config.backpressure_credit_batch_size = 10;
+        let mut config = ClientConfig::new(bind_addr);
+        config.root_certificates = root_certificates;
+        config.handshake_timeout = Duration::from_secs(10);
+        config.protofish.xfer_credit_update_batch_size = Some(10);
 
-        let config = ClientConfig {
-            bind_address: bind_addr,
-            root_certificates,
-            supported_compression_types: vec![CompressionType::None],
-            keepalive_range: Duration::from_secs(1)..Duration::from_secs(30),
-            protofish_config,
-        };
-        let client = Arc::new(ProtofishClient::bind(config).map_err(|e| e.to_string())?);
+        let client = Arc::new(Client::bind(config).map_err(|e| e.to_string())?);
 
         let reconnect_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
@@ -53,7 +47,7 @@ impl TransportClient {
             max_retries: None,
         };
 
-        let conn = ReconnectingConnection::connect(
+        let conn = ReconnectingClient::connect(
             client,
             server_addr,
             server_name,
@@ -64,24 +58,25 @@ impl TransportClient {
         .map_err(|e| e.to_string())?;
 
         Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
+            conn: Arc::new(conn),
         })
     }
 
     async fn execute_request(&self, req: TapHubRequest) -> Result<TapHubResponse, TapHubError> {
-        let mut stream = {
-            let mut lock = self.conn.lock().await;
-            lock.open_mani().await.map_err(|e| TapHubError::Internal(e.to_string()))?
-        };
-
-        let payload = rmp_serde::to_vec(&req).map_err(|e| TapHubError::Internal(e.to_string()))?;
-        stream
-            .send_payload(payload.into())
+        let (sender, mut receiver) = self
+            .conn
+            .open_chan()
             .await
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
-        let resp_payload = stream
-            .recv_payload()
+        let payload = rmp_serde::to_vec(&req).map_err(|e| TapHubError::Internal(e.to_string()))?;
+        sender
+            .send_msg(payload)
+            .await
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
+
+        let resp_payload = receiver
+            .recv_msg()
             .await
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
         let resp: TapHubResponse =
@@ -91,21 +86,22 @@ impl TransportClient {
     }
 
     pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, TapHubError> {
-        let mut stream = {
-            let mut lock = self.conn.lock().await;
-            lock.open_mani().await.map_err(|e| TapHubError::Internal(e.to_string()))?
-        };
+        let (sender, mut receiver) = self
+            .conn
+            .open_chan()
+            .await
+            .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
         let req_clone = req.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
-        stream
-            .send_payload(payload.into())
+        sender
+            .send_msg(payload)
             .await
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
 
-        let resp_payload = stream
-            .recv_payload()
+        let resp_payload = receiver
+            .recv_msg()
             .await
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
         let resp: TapHubResponse =
@@ -113,31 +109,44 @@ impl TransportClient {
 
         match resp {
             TapHubResponse::AudioReady(meta) => {
-                let transfer = stream
-                    .accept_transfer()
-                    .await
-                    .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
-                let unreliable_recv = match transfer {
-                    protofish2::ManiTransferRecvStreams::UnreliableOnly { unreliable } => {
-                        unreliable
-                    }
-                    _ => {
-                        return Err(TapHubError::Internal(
-                            "Expected UnreliableOnly transfer".to_string(),
-                        ));
-                    }
-                };
-
                 let (tx, rx) = mpsc::channel(100);
-
-                let mut jitter =
-                    OpusJitterBuffer::new(unreliable_recv, 48000, opus::Channels::Stereo, 20, 100)
-                        .map_err(|e| TapHubError::Internal(e.to_string()))?;
-
                 let conn_clone = Arc::clone(&self.conn);
 
                 tokio::spawn(async move {
+                    // Keep the sender alive for the duration of the transfer so the
+                    // chan isn't half-closed before the unreliable xfer completes.
+                    let _sender = sender;
+
+                    let xfer = match receiver.accept_xfer().await {
+                        Ok(x) => x,
+                        Err(e) => {
+                            tracing::error!("accept_xfer failed: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let single = match xfer {
+                        XferRecv::Single(s) if s.mode() == XferMode::Unrel => s,
+                        _ => {
+                            tracing::error!("Expected Unrel single transfer");
+                            return;
+                        }
+                    };
+
+                    let mut jitter = match OpusJitterBuffer::new(
+                        single,
+                        48000,
+                        opus::Channels::Stereo,
+                        20,
+                        100,
+                    ) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            tracing::error!("Failed to create jitter buffer: {:?}", e);
+                            return;
+                        }
+                    };
+
                     loop {
                         match jitter.yield_pcm().await {
                             Ok(Some(pcm)) => {
@@ -209,26 +218,23 @@ impl TransportClient {
     }
 }
 
-async fn send_invalidate_cache(conn: Arc<Mutex<ReconnectingConnection>>, req: CachedAudioRequest) {
-    let mut stream = {
-        let mut lock = conn.lock().await;
-        match lock.open_mani().await {
-            Ok(s) => s,
-            Err(_) => {
-                tracing::warn!("send_invalidate_cache: failed to open stream");
-                return;
-            }
+async fn send_invalidate_cache(conn: Arc<ReconnectingClient>, req: CachedAudioRequest) {
+    let (sender, mut receiver) = match conn.open_chan().await {
+        Ok(c) => c,
+        Err(_) => {
+            tracing::warn!("send_invalidate_cache: failed to open chan");
+            return;
         }
     };
     let Ok(payload) = rmp_serde::to_vec(&TapHubRequest::InvalidateCache(req)) else {
         tracing::warn!("send_invalidate_cache: failed to serialize request");
         return;
     };
-    if stream.send_payload(payload.into()).await.is_err() {
+    if sender.send_msg(payload).await.is_err() {
         tracing::warn!("send_invalidate_cache: failed to send payload");
         return;
     }
-    if let Err(e) = stream.recv_payload().await {
+    if let Err(e) = receiver.recv_msg().await {
         tracing::warn!("send_invalidate_cache: failed to receive response: {:?}", e);
     }
 }
