@@ -3,13 +3,13 @@ use std::time::Instant;
 
 use bytes::Bytes;
 use opentelemetry::{KeyValue, global};
-use protofish2::Timestamp;
 use sha2::Digest;
 use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_preload_cache::NextFrame;
 use zako3_types::{AudioMetaResponse, CachedAudioRequest, TapHubError};
+use zako3_taphub_transport_server::Timestamp;
 use zakofish_taphub::ZakofishError;
 
 use crate::hub::TapHub;
@@ -270,8 +270,10 @@ pub(crate) async fn handle_request_audio_inner(
 
     let (tx, rx) = mpsc::channel(100);
     tokio::spawn(async move {
-        while let Some(chunk) = unrel.recv().await {
-            if let Err(e) = tx.send(chunk).await {
+        // `unrel` (zakofish) yields the protofish2 timestamp; re-wrap it in the
+        // transport's own `Timestamp` for the pf3 transfer.
+        while let Some((ts, bytes)) = unrel.recv().await {
+            if let Err(e) = tx.send((Timestamp(ts.0), bytes)).await {
                 tracing::warn!(%e, "Failed to send audio chunk to channel");
                 return;
             }

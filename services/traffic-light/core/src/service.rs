@@ -290,6 +290,10 @@ impl TlService {
             }
             Ok(RouterResult::Session(success)) => {
                 let route = success.route;
+                let is_leave = matches!(
+                    request.command,
+                    AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave)
+                );
                 info!(
                     cmd = cmd_name,
                     worker_id = route.worker_id.0,
@@ -302,9 +306,33 @@ impl TlService {
                 match self.dispatcher.send(route, request).await {
                     Ok(response) => {
                         // SessionCommand routing never modifies state (new_state_on_success
-                        // is always state.clone()), so no write-back needed. Performing a
-                        // full state replacement here would cause the same TOCTOU overwrite
-                        // of concurrent Join commits.
+                        // is always state.clone()), so no full write-back is needed. But two
+                        // outcomes leave the cached route orphaned, which `sync_sessions` would
+                        // otherwise flag as NotJoined for ~3 minutes before pruning:
+                        //   1. A successful Leave — the AE dropped the session, so must TL.
+                        //   2. A NotJoined error — the AE has no such session; the cache is
+                        //      stale (e.g. the bot was kicked / left out-of-band).
+                        // Evict the route immediately in both cases. Targeted remove only —
+                        // a full state replacement would TOCTOU-clobber concurrent Join commits.
+                        let evict = (is_leave
+                            && matches!(response, AudioEngineCommandResponse::Ok))
+                            || matches!(
+                                response,
+                                AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
+                            );
+                        if evict {
+                            let mut state = self.state.write().await;
+                            if state.sessions.remove(&route).is_some() {
+                                info!(
+                                    cmd = cmd_name,
+                                    worker_id = route.worker_id.0,
+                                    ae_id = route.ae_id.0,
+                                    total_sessions = state.sessions.len(),
+                                    "session evicted from cache after session command"
+                                );
+                            }
+                            self.sync_failures.lock().unwrap().remove(&route);
+                        }
                         if matches!(response, AudioEngineCommandResponse::Error(_)) {
                             warn!(
                                 cmd = cmd_name,
@@ -1084,6 +1112,99 @@ mod tests {
             state.read().await.sessions.len(),
             1,
             "interleaved success resets strikes, so no eviction"
+        );
+    }
+
+    fn leave_request(s: SessionInfo) -> AudioEngineCommandRequest {
+        AudioEngineCommandRequest {
+            session: Some(s),
+            command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::Leave),
+            headers: std::collections::HashMap::new(),
+            idempotency_key: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_leave_evicts_cached_session() {
+        // A successful Leave must remove the route from TL's cache immediately, so
+        // sync_sessions never flags the now-departed bot as NotJoined.
+        let s = session(1, 100);
+        let state = state_with_session(s);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        let svc = TlService::new(state.clone(), dispatcher);
+        let resp = svc.execute(leave_request(s)).await;
+
+        assert!(matches!(resp, AudioEngineCommandResponse::Ok));
+        assert_eq!(
+            state.read().await.sessions.len(),
+            0,
+            "successful Leave must evict the cached session"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_session_command_notjoined_evicts_stale_session() {
+        // The AE has no such session (stale cache, e.g. bot kicked out-of-band). A NotJoined
+        // response to a session command must prune the orphaned route, not wait 3 sync strikes.
+        let s = session(1, 100);
+        let state = state_with_session(s);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| {
+                Ok(AudioEngineCommandResponse::Error(AudioEngineError::NotJoined))
+            }),
+        });
+
+        let req = AudioEngineCommandRequest {
+            session: Some(s),
+            command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::GetSessionState),
+            headers: std::collections::HashMap::new(),
+            idempotency_key: None,
+        };
+        let svc = TlService::new(state.clone(), dispatcher);
+        let resp = svc.execute(req).await;
+
+        assert!(matches!(
+            resp,
+            AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
+        ));
+        assert_eq!(
+            state.read().await.sessions.len(),
+            0,
+            "NotJoined for a session command must evict the stale route"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_non_leave_success_keeps_session() {
+        // A successful non-Leave session command must NOT evict — the bot is still serving.
+        let s = session(1, 100);
+        let state = state_with_session(s);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        let req = AudioEngineCommandRequest {
+            session: Some(s),
+            command: AudioEngineCommand::SessionCommand(AudioEngineSessionCommand::NextMusic),
+            headers: std::collections::HashMap::new(),
+            idempotency_key: None,
+        };
+        let svc = TlService::new(state.clone(), dispatcher);
+        let _ = svc.execute(req).await;
+
+        assert_eq!(
+            state.read().await.sessions.len(),
+            1,
+            "a successful non-Leave command must keep the session"
         );
     }
 
