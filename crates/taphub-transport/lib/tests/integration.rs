@@ -1,4 +1,3 @@
-use protofish2::Timestamp;
 use rcgen::generate_simple_self_signed;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
@@ -9,7 +8,7 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 use zako3_taphub_transport_client::TransportClient;
-use zako3_taphub_transport_server::{TapHubBridgeHandler, TransportServer};
+use zako3_taphub_transport_server::{TapHubBridgeHandler, Timestamp, TransportServer};
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequest,
     CachedAudioRequest, TapHubError,
