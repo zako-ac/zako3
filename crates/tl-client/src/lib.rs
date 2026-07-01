@@ -240,6 +240,13 @@ impl TlClient {
             .map_err(Self::map_err)
     }
 
+    pub async fn list_bot_ids(&self) -> Result<Vec<String>, TlClientError> {
+        self.client
+            .list_bot_ids()
+            .await
+            .map_err(Self::map_err)
+    }
+
     pub async fn report_guilds(
         &self,
         token: String,

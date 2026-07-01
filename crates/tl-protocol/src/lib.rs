@@ -45,6 +45,9 @@ pub trait TrafficLightRpc {
     #[method(name = "get_sessions_in_guild")]
     async fn get_sessions_in_guild(&self, guild_id: GuildId) -> jsonrpsee::core::RpcResult<Vec<SessionState>>;
 
+    #[method(name = "list_bot_ids")]
+    async fn list_bot_ids(&self) -> jsonrpsee::core::RpcResult<Vec<String>>;
+
     #[method(name = "report_guilds")]
     async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> jsonrpsee::core::RpcResult<()>;
 

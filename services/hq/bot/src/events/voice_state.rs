@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dashmap::DashSet;
+use tokio::sync::RwLock;
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     AudioRequestString, ChannelId, GuildId, QueueName,
@@ -21,6 +23,10 @@ pub struct VoiceStateHandler {
     /// Tracks (guild_id, channel_id) pairs where a join is currently in-flight.
     /// Prevents concurrent voice state events from each firing a separate join RPC.
     pub joining: Arc<DashSet<(u64, u64)>>,
+    /// The set of all Zako worker-bot Discord user ids, sourced from Traffic-Light's
+    /// registry (see `TlClient::list_bot_ids`) and refreshed periodically. Used to
+    /// detect whether *any* Zako bot (not just this master process) is in a channel.
+    pub zako_bot_ids: Arc<RwLock<HashSet<serenity::UserId>>>,
 }
 
 struct ChannelSnapshot {
@@ -29,11 +35,12 @@ struct ChannelSnapshot {
     channel_id: ChannelId,
     guild_id: GuildId,
     real_user_count: usize,
-    /// Whether our bot is physically connected to this channel, read from Discord's own voice
-    /// state (the serenity cache) rather than a Traffic-Light round-trip. TL's session view is
-    /// eventually-consistent and its `GetSessionState` round-trip can transiently fail, which
-    /// used to read as "bot absent" and fire a redundant rejoin; Discord's gateway state is the
-    /// authority for physical presence.
+    /// Whether *any* Zako bot (this master or a worker bot from TL's pool) is physically
+    /// connected to this channel, read from Discord's own voice state (the serenity cache)
+    /// rather than a Traffic-Light round-trip. The master never joins VC itself — worker bots
+    /// do — so presence is matched against the full Zako bot id set (see `zako_bot_ids`).
+    /// TL's session view is eventually-consistent and its `GetSessionState` round-trip can
+    /// transiently fail; Discord's gateway state is the authority for physical presence.
     bot_is_present: bool,
 }
 
@@ -125,6 +132,12 @@ impl EventHandler for VoiceStateHandler {
                 }
             }
 
+            let zako_bot_ids = {
+                let mut ids = self.zako_bot_ids.read().await.clone();
+                ids.insert(ctx.cache.current_user().id);
+                ids
+            };
+
             if let Err(e) = handle_auto_leave_rejoin(
                 &self.service,
                 &ctx,
@@ -132,6 +145,7 @@ impl EventHandler for VoiceStateHandler {
                 guild_id,
                 affected_channels(old_ch, new_ch),
                 &self.joining,
+                &zako_bot_ids,
             )
             .await
             {
@@ -284,12 +298,13 @@ async fn handle_auto_leave_rejoin(
     guild_id: u64,
     channels: Vec<serenity::ChannelId>,
     joining: &Arc<DashSet<(u64, u64)>>,
+    zako_bot_ids: &HashSet<serenity::UserId>,
 ) -> CoreResult<()> {
     if channels.is_empty() {
         return Ok(());
     }
 
-    let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels);
+    let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels, zako_bot_ids);
 
     for snap in snapshots {
         act_on_snapshot(service, ctx, snap, joining).await;
@@ -303,8 +318,8 @@ fn extract_snapshots(
     guild_id_typed: serenity::GuildId,
     guild_id: u64,
     channels: &[serenity::ChannelId],
+    zako_bot_ids: &HashSet<serenity::UserId>,
 ) -> Vec<ChannelSnapshot> {
-    let bot_user_id = ctx.cache.current_user().id;
     let guild = ctx.cache.guild(guild_id_typed);
     match guild {
         None => vec![],
@@ -312,11 +327,9 @@ fn extract_snapshots(
             .iter()
             .map(|&serenity_ch| {
                 let real_user_count = count_real_users(&g, serenity_ch);
-                let bot_is_present = g
-                    .voice_states
-                    .get(&bot_user_id)
-                    .and_then(|vs| vs.channel_id)
-                    == Some(serenity_ch);
+                let bot_is_present = g.voice_states.values().any(|vs| {
+                    vs.channel_id == Some(serenity_ch) && zako_bot_ids.contains(&vs.user_id)
+                });
                 let channel_id = ChannelId::from(serenity_ch.get());
                 tracing::info!(
                     "Channel {serenity_ch} has {real_user_count} real users, bot_present={bot_is_present} (guild {guild_id})"

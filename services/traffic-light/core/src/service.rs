@@ -388,6 +388,16 @@ impl TlService {
         results
     }
 
+    pub async fn list_bot_ids(&self) -> Vec<String> {
+        let state = self.state.read().await;
+        state
+            .workers
+            .values()
+            .map(|w| w.bot_client_id.0.clone())
+            .filter(|id| !id.is_empty())
+            .collect()
+    }
+
     pub async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) {
         let mut state = self.state.write().await;
         if let Some(worker) = state

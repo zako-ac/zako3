@@ -189,4 +189,8 @@ impl AudioEngineService {
             .await
             .map_err(map_tl_err)
     }
+
+    pub async fn list_bot_ids(&self) -> CoreResult<Vec<String>> {
+        self.client.list_bot_ids().await.map_err(map_tl_err)
+    }
 }
