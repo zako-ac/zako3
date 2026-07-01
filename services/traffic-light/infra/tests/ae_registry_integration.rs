@@ -231,6 +231,95 @@ async fn re_register_same_addr_keeps_worker_id_and_clears_sessions() {
     assert_eq!(w1_connected, 0, "worker_id=1 should have no connected AEs");
 }
 
+/// Regression for the bot-token collision: the round-robin cursor can point at a token whose
+/// worker already has a live AE (e.g. after AE restarts from changing addresses pushed the cursor
+/// past the pool size). Plain `cursor % len` would hand that live token to the new AE, so two
+/// engines log in as the same bot and Discord drops one — you see N-1 bots online. pick_free_token
+/// must skip in-use tokens and assign a free one instead.
+#[tokio::test]
+async fn register_skips_token_already_live_on_another_ae() {
+    let token_a = "token-worker-0";
+    let token_b = "token-worker-1";
+    let state = make_state_with_two_tokens(token_a, token_b);
+    let tokens = vec![
+        DiscordToken(token_a.to_string()),
+        DiscordToken(token_b.to_string()),
+    ];
+
+    // Simulate worker_id=0 already serving a live AE; its token must not be handed out again.
+    {
+        let mut s = state.write().await;
+        s.workers.get_mut(&WorkerId(0)).unwrap().connected_ae_ids = vec![1];
+    }
+
+    let registry = Arc::new(AeRegistry::new(state.clone(), tokens).await.unwrap());
+
+    let server = Server::builder().build("127.0.0.1:0").await.unwrap();
+    let addr = server.local_addr().unwrap();
+    let listen_addr = format!("http://{}", addr);
+    tokio::spawn(async move { server.start(MockAeHandler.into_rpc()).stopped().await });
+
+    // The cursor starts at 0 → points at token_a (worker_id=0), which is already in use.
+    // The fix must skip it and assign the free token_b (worker_id=1).
+    let assigned = registry.register(listen_addr).await.unwrap();
+    assert_eq!(
+        assigned, token_b,
+        "registration must skip the live token_a and assign the free token_b"
+    );
+}
+
+/// Regression for the worker_id=0,1,1,2 collision (worker 3 never assigned): AE pods advertise
+/// their StatefulSet hostname (`zako3-audio-engine-<ordinal>`), and the ordinal must deterministically
+/// pin the worker. Registration order, restarts, and pool state must not change the mapping, and two
+/// distinct pods must never share a token.
+#[tokio::test]
+async fn statefulset_ordinal_pins_worker_and_never_collides() {
+    let tokens: Vec<DiscordToken> = (0..4).map(|i| DiscordToken(format!("token-{i}"))).collect();
+
+    let mut workers: rustc_hash::FxHashMap<WorkerId, Worker> = Default::default();
+    for i in 0..4u16 {
+        workers.insert(WorkerId(i), Worker {
+            worker_id: WorkerId(i),
+            bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+            discord_token: DiscordToken(format!("token-{i}")),
+            connected_ae_ids: vec![],
+            permissions: WorkerPermissions::new(),
+            ae_cursor: 0,
+        });
+    }
+    let state = Arc::new(RwLock::new(ZakoState {
+        workers,
+        sessions: Default::default(),
+        worker_cursor: 0,
+    }));
+
+    let registry = Arc::new(AeRegistry::new(state.clone(), tokens).await.unwrap());
+
+    // register() only builds the HTTP client and updates state — no network call — so pod-style
+    // hostnames need no live server. Register out of order, with a restart of pod-0 mixed in.
+    let sequence = [(3usize, "token-3"), (0, "token-0"), (2, "token-2"), (1, "token-1"), (0, "token-0")];
+    for (pod, expected) in sequence {
+        let addr = format!(
+            "http://zako3-audio-engine-{pod}.zako3-audio-engine.ns.svc.cluster.local:8090"
+        );
+        let assigned = registry.register(addr).await.unwrap();
+        assert_eq!(
+            assigned, expected,
+            "pod-{pod} must always map to {expected} regardless of order/restart"
+        );
+    }
+
+    // Every worker 0..=3 has exactly one connected AE — no collision, no empty slot.
+    let s = state.read().await;
+    for i in 0..4u16 {
+        assert_eq!(
+            s.workers.get(&WorkerId(i)).unwrap().connected_ae_ids,
+            vec![1],
+            "worker {i} must have exactly one AE"
+        );
+    }
+}
+
 /// Heartbeats refresh the HTTP client but must NOT evict active sessions. Without the
 /// evict_sessions guard, heartbeats would wipe sessions every ~15s, causing reconcile to
 /// see discord=1/cache=0 and send dangling kicks while the AE is perfectly healthy.
