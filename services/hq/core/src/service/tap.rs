@@ -535,7 +535,7 @@ impl TapService {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0), err)]
+    #[tracing::instrument(skip(self), level = "debug", fields(tap_id = %tap_id.0), err)]
     pub async fn get_tap(&self, tap_id: TapId) -> CoreResult<Option<Tap>> {
         self.tap_repo.find_by_id(tap_id).await
     }
