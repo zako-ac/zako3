@@ -78,6 +78,26 @@ pub enum AudioEngineCommand {
     FetchDiscordVoiceState,
 }
 
+impl AudioEngineCommand {
+    pub fn operation(&self) -> &'static str {
+        match self {
+            AudioEngineCommand::Join => "join",
+            AudioEngineCommand::FetchDiscordVoiceState => "fetch_discord_voice_state",
+            AudioEngineCommand::SessionCommand(sc) => match sc {
+                AudioEngineSessionCommand::Leave => "leave",
+                AudioEngineSessionCommand::Play(_) => "play",
+                AudioEngineSessionCommand::Stop(_) => "stop",
+                AudioEngineSessionCommand::StopMany(_) => "stop_many",
+                AudioEngineSessionCommand::SetVolume { .. } => "set_volume",
+                AudioEngineSessionCommand::NextMusic => "next_music",
+                AudioEngineSessionCommand::Pause(_) => "pause",
+                AudioEngineSessionCommand::Resume(_) => "resume",
+                AudioEngineSessionCommand::GetSessionState => "get_session_state",
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AudioEngineSessionCommand {
     Leave,

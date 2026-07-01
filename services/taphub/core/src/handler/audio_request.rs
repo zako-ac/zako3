@@ -270,7 +270,7 @@ pub(crate) async fn handle_request_audio_inner(
 
     let (tx, rx) = mpsc::channel(100);
     tokio::spawn(async move {
-        // `unrel` (zakofish) yields the protofish2 timestamp; re-wrap it in the
+        // `unrel` (zakofish) yields zakofish's `Timestamp`; re-wrap it in the
         // transport's own `Timestamp` for the pf3 transfer.
         while let Some((ts, bytes)) = unrel.recv().await {
             if let Err(e) = tx.send((Timestamp(ts.0), bytes)).await {

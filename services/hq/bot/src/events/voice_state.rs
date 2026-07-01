@@ -9,6 +9,7 @@ use hq_types::{
 use poise::serenity_prelude as serenity;
 use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
 use tokio::sync::broadcast;
+use tracing::Instrument as _;
 use zako3_states::VoiceStateService;
 
 use crate::commands::voice::bot_join_and_announce;
@@ -77,46 +78,76 @@ impl EventHandler for VoiceStateHandler {
         let guild_id = guild_id_typed.get();
         let discord_user_id = new.user_id.to_string();
 
-        update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
-
-        if is_bot(&ctx, guild_id_typed, new.user_id) {
-            return;
-        }
-
-        let _ = self.event_tx.send(PlaybackEvent::VoiceStateChanged);
-
         let old_ch = old.as_ref().and_then(|o| o.channel_id);
         let new_ch = new.channel_id;
 
-        let events = join_leave_events(old_ch, new_ch);
-        if !events.is_empty() {
-            let display_name =
-                get_display_name(&ctx, guild_id_typed, new.user_id, &discord_user_id);
-            if let Err(e) = announce_join_leave(
+        let span = tracing::info_span!(
+            parent: None,
+            "vc.voice_state_update",
+            otel.name = %format!("vc.{}", transition_kind(old_ch, new_ch)),
+            guild_id,
+            user_id = %discord_user_id,
+            old_channel = ?old_ch.map(|c| c.get()),
+            new_channel = ?new_ch.map(|c| c.get()),
+        );
+
+        async move {
+            update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
+
+            if is_bot(&ctx, guild_id_typed, new.user_id) {
+                return;
+            }
+
+            let _ = self.event_tx.send(PlaybackEvent::VoiceStateChanged);
+
+            let events = join_leave_events(old_ch, new_ch);
+            if !events.is_empty() {
+                let display_name =
+                    get_display_name(&ctx, guild_id_typed, new.user_id, &discord_user_id);
+                if let Err(e) = announce_join_leave(
+                    &self.service,
+                    GuildId::from(guild_id),
+                    DiscordUserId::from(discord_user_id.clone()),
+                    display_name,
+                    events,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to play join/leave announcement for {discord_user_id}: {e}"
+                    );
+                }
+            }
+
+            if let Err(e) = handle_auto_leave_rejoin(
                 &self.service,
-                GuildId::from(guild_id),
-                DiscordUserId::from(discord_user_id.clone()),
-                display_name,
-                events,
+                &ctx,
+                guild_id_typed,
+                guild_id,
+                affected_channels(old_ch, new_ch),
+                &self.joining,
             )
             .await
             {
-                tracing::warn!("Failed to play join/leave announcement for {discord_user_id}: {e}");
+                tracing::warn!("Auto-leave/rejoin error for guild {guild_id}: {e}");
             }
         }
+        .instrument(span)
+        .await;
+    }
+}
 
-        if let Err(e) = handle_auto_leave_rejoin(
-            &self.service,
-            &ctx,
-            guild_id_typed,
-            guild_id,
-            affected_channels(old_ch, new_ch),
-            &self.joining,
-        )
-        .await
-        {
-            tracing::warn!("Auto-leave/rejoin error for guild {guild_id}: {e}");
-        }
+/// Classifies a voice state transition for span naming: `join`, `leave`, `move`,
+/// or `update` (same-channel change such as mute/deafen).
+fn transition_kind(
+    old_ch: Option<serenity::ChannelId>,
+    new_ch: Option<serenity::ChannelId>,
+) -> &'static str {
+    match (old_ch, new_ch) {
+        (None, Some(_)) => "join",
+        (Some(_), None) => "leave",
+        (Some(old), Some(new)) if old != new => "move",
+        _ => "update",
     }
 }
 

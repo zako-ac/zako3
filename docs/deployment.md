@@ -230,8 +230,7 @@ Source: `services/taphub/core/.env.example`
 | `ZK_TH_REDIS_URL` | | `redis://redis:6379` | Redis connection (set by compose) |
 | `ZK_TH_HQ_RPC_URL` | | `http://hq:50052` | HQ gRPC URL (set by compose) |
 | `ZK_TH_TRANSPORT_BIND_ADDR` | | `0.0.0.0:4000` | Taphub transport bind address |
-| `ZK_TH_ZAKOFISH_BIND_ADDR` | | `0.0.0.0:4001` | Zakofish protocol bind address (pf2) |
-| `ZK_TH_ZAKOFISH_BIND_ADDR_PF3` | | — | Optional pf3 (protofish3) bind address. When set, the Hub also accepts pf3 taps on this address using the same TLS cert/key as pf2 |
+| `ZK_TH_ZAKOFISH_BIND_ADDR` | | `0.0.0.0:1028` | Zakofish (protofish3) tap listener bind address |
 | `ZK_TH_CACHE_RPC_URL` | | `http://cache:4100` | Base URL of the cache server (replaces direct PVC access) |
 | `ZK_TH_CACHE_RPC_ADMIN_TOKEN` | | — | Token to authenticate against the cache server (must match `ZK_CACHE_ADMIN_TOKEN`). Empty disables auth |
 | `ZK_TH_REQUEST_TIMEOUT_MS` | | `13000` | Request timeout in milliseconds |

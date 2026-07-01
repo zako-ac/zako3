@@ -6,14 +6,13 @@
 //! pf2 counterpart).
 
 use bytes::Bytes;
-use protofish2::{Timestamp, TransferMode};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use zako3_types::AudioRequestString;
 use zako3_types::hq::TapId;
-use zakofish::ZakofishTapPf3;
+use zakofish::{Timestamp, TransferMode, ZakofishTapPf3};
 use zakofish::tap::TapHandler;
 use zakofish::types::message::{
     AttachedMetadata, AudioMetadataSuccessMessage, AudioRequestFailureMessage,
@@ -123,13 +122,13 @@ async fn test_zakofish_flow_pf3() {
         tap_connected: tap_connected_tx,
     });
 
-    let hub = Arc::new(ZakofishHub::new(None, Some(server_config), hub_handler).unwrap());
+    let hub = Arc::new(ZakofishHub::new(server_config, hub_handler).unwrap());
     let hub_clone = hub.clone();
     tokio::spawn(async move {
         let _ = hub_clone.run().await;
     });
 
-    let local_addr = hub.local_addr_pf3().expect("pf3 bound").unwrap();
+    let local_addr = hub.local_addr().unwrap();
 
     let mut client_config = protofish3::ClientConfig::new("127.0.0.1:0".parse().unwrap());
     client_config.root_certificates = cert_chain;

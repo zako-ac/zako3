@@ -30,8 +30,8 @@ impl AudioEngineRpcServer for AeTransportHandler {
         req: AudioEngineCommandRequest,
     ) -> RpcResult<AudioEngineCommandResponse> {
         let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
-        let cmd = command_name(&req.command);
-        let span = tracing::info_span!("ae.execute", command = cmd);
+        let cmd = req.command.operation();
+        let span = tracing::info_span!("ae.execute", otel.name = %format!("ae.{cmd}"), command = cmd);
         let _ = span.set_parent(parent_cx);
 
         let response = self.handle_command(req).instrument(span).await;
@@ -167,24 +167,6 @@ impl AeTransportHandler {
                 }
             }
         }
-    }
-}
-
-fn command_name(cmd: &AudioEngineCommand) -> &'static str {
-    match cmd {
-        AudioEngineCommand::Join => "join",
-        AudioEngineCommand::FetchDiscordVoiceState => "fetch_discord_voice_state",
-        AudioEngineCommand::SessionCommand(sc) => match sc {
-            AudioEngineSessionCommand::Leave => "leave",
-            AudioEngineSessionCommand::Play(_) => "play",
-            AudioEngineSessionCommand::Stop(_) => "stop",
-            AudioEngineSessionCommand::StopMany(_) => "stop_many",
-            AudioEngineSessionCommand::SetVolume { .. } => "set_volume",
-            AudioEngineSessionCommand::NextMusic => "next_music",
-            AudioEngineSessionCommand::Pause(_) => "pause",
-            AudioEngineSessionCommand::Resume(_) => "resume",
-            AudioEngineSessionCommand::GetSessionState => "get_session_state",
-        },
     }
 }
 

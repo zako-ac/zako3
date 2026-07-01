@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use protofish2::{Timestamp, TransferMode};
 use std::sync::{Arc, OnceLock};
+use zakofish::{Timestamp, TransferMode};
 use tokio::sync::mpsc;
 
 /// Opaque handle for pushing encoded Opus frames to the Hub.

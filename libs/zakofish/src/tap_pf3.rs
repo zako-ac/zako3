@@ -1,8 +1,6 @@
-//! pf3 tap-side implementation. Mirrors [`crate::tap::ZakofishTapPf2`] but uses
-//! the protofish3 chan/xfer API. Shares the same `TapHandler` trait so a single
-//! handler impl works for both transports.
+//! pf3 tap-side implementation. Uses the protofish3 chan/xfer API and the
+//! [`crate::tap::TapHandler`] trait.
 
-use protofish2::TransferMode;
 use protofish3::{
     ChanReceiver, ChanSender, Client, ClientConfig, ReconnectConfig, ReconnectingClient, XferMode,
 };
@@ -13,6 +11,7 @@ use std::time::Duration;
 use crate::error::{Result, ZakofishError};
 use crate::tap::TapHandler;
 use crate::tap_streams::encode_pf3_chunk;
+use crate::types::TransferMode;
 use crate::types::message::{HubToTapMessage, TapClientHello, TapToHubMessage};
 
 pub struct ZakofishTapPf3 {

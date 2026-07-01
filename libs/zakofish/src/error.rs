@@ -2,12 +2,6 @@ use std::fmt::Debug;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ZakofishError {
-    #[error("Protofish2 connection error: {0}")]
-    ProtofishConnectionError(#[from] protofish2::connection::ProtofishConnectionError),
-    #[error("Protofish2 mani stream error: {0}")]
-    ProtofishManiStreamError(#[from] protofish2::mani::stream::ManiStreamError),
-    #[error("Protofish2 transfer send error: {0}")]
-    ProtofishTransferSendError(#[from] protofish2::mani::transfer::send::TransferSendError),
     #[error("Protofish3 error: {0}")]
     Protofish3Error(#[from] protofish3::Error),
     #[error("Serialization error: {0}")]

@@ -43,18 +43,10 @@ impl TlService {
     }
 
     pub async fn execute(&self, request: AudioEngineCommandRequest) -> AudioEngineCommandResponse {
-        let cmd_name = match &request.command {
-            AudioEngineCommand::Join => "Join",
-            AudioEngineCommand::SessionCommand(c) => match c {
-                AudioEngineSessionCommand::Leave => "Leave",
-                AudioEngineSessionCommand::GetSessionState => "GetSessionState",
-                _ => "SessionCommand",
-            },
-            AudioEngineCommand::FetchDiscordVoiceState => "FetchDiscordVoiceState",
-        };
+        let cmd_name = request.command.operation();
 
         let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
-        let span = tracing::info_span!("tl.execute", cmd = cmd_name);
+        let span = tracing::info_span!("tl.execute", otel.name = %format!("tl.{cmd_name}"), cmd = cmd_name);
         let _ = span.set_parent(parent_cx);
         let _span_guard = span.enter();
 
