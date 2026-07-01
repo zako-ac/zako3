@@ -182,6 +182,7 @@ clickstack:
   image: clickhouse/clickstack-all-in-one:latest
   otlpAuthToken: ""     # bearer token the collector uses to ingest (OTLP_AUTH_TOKEN)
   apiKey: ""            # HYPERDX_API_KEY
+  appUrl: ""            # HYPERDX_APP_URL — external base URL for login/OAuth redirects (e.g. https://hyperdx.zako.ac); empty = image default (localhost)
   existingSecret:
     name: ""
     otlpTokenKey: "otlp-auth-token"

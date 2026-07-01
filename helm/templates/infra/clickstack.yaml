@@ -48,6 +48,10 @@ spec:
             - name: opamp
               containerPort: 4320
           env:
+            {{- with .Values.clickstack.appUrl }}
+            - name: HYPERDX_APP_URL
+              value: {{ . | quote }}
+            {{- end }}
             - name: OTLP_AUTH_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
