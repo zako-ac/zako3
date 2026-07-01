@@ -160,8 +160,9 @@ redis:
 nats:
   image: nats:2-alpine
 
-# --- OpenObserve ---
+# --- OpenObserve (disabled — kept for reference, scaled to 0) ---
 openobserve:
+  replicas: 0
   nodeAffinity: {}
   image: public.ecr.aws/zinclabs/openobserve:latest
   otelCollectorImage: otel/opentelemetry-collector-contrib:latest
@@ -172,4 +173,17 @@ openobserve:
     emailKey: "root-user-email"
     passwordKey: "root-user-password"
     basicAuthKey: "basic-auth"
+  storageSize: "20Gi"
+
+# --- ClickStack (ClickHouse + HyperDX all-in-one; observability backend) ---
+clickstack:
+  nodeAffinity: {}
+  replicas: 1
+  image: clickhouse/clickstack-all-in-one:latest
+  otlpAuthToken: ""     # bearer token the collector uses to ingest (OTLP_AUTH_TOKEN)
+  apiKey: ""            # HYPERDX_API_KEY
+  existingSecret:
+    name: ""
+    otlpTokenKey: "otlp-auth-token"
+    apiKeyKey: "hyperdx-api-key"
   storageSize: "20Gi"

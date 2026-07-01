@@ -44,3 +44,32 @@ hq:
 Supported per-service keys: `hq`, `taphub`, `metricsSync`, `cache`, and `audioEngine`.
 
 When `nodeAffinity` is empty (`{}`), no `affinity:` block is emitted for that pod.
+
+## Observability
+
+The observability backend is **ClickStack** (ClickHouse + HyperDX, deployed via the
+`clickhouse/clickstack-all-in-one` image). All services send OTLP to the shared
+`-otel-collector` gateway (`OTLP_ENDPOINT` → `-otel-collector:4317`), which exports to ClickStack
+over OTLP HTTP (`-clickstack:4318`) using an ingestion bearer token.
+
+```yaml
+clickstack:
+  replicas: 1
+  otlpAuthToken: "<ingestion token>"   # OTLP_AUTH_TOKEN — collector authenticates with this
+  apiKey: "<hyperdx api key>"          # HYPERDX_API_KEY
+  storageSize: "20Gi"
+  # or reference a pre-existing Secret:
+  existingSecret:
+    name: ""
+    otlpTokenKey: "otlp-auth-token"
+    apiKeyKey: "hyperdx-api-key"
+```
+
+Access the HyperDX UI via port-forward:
+
+```bash
+kubectl port-forward svc/<release>-clickstack 8080:8080
+```
+
+**OpenObserve** is retained in the chart but turned off by default (`openobserve.replicas: 0`).
+Its StatefulSet, PVC, and Service still render, so no pod runs until the replica count is raised.
