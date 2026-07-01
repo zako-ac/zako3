@@ -73,7 +73,22 @@ affinity:
 OTLP endpoint URL
 */}}
 {{- define "zako3.otlpEndpoint" -}}
-http://{{ include "zako3.fullname" . }}-otel-collector:4317
+http://{{ include "zako3.fullname" . }}-clickstack:4317
+{{- end }}
+
+{{/*
+OTLP auth header env — ingestion token for direct-to-ClickStack export.
+CLICKSTACK_OTLP_TOKEN must be defined first so k8s $(VAR) interpolation resolves.
+*/}}
+{{- define "zako3.otlpAuthEnv" -}}
+- name: CLICKSTACK_OTLP_TOKEN
+  valueFrom:
+    {{- include "zako3.secretKeyRef" (dict
+        "secretName" (printf "%s-clickstack-secret" (include "zako3.fullname" .))
+        "existingName" .Values.clickstack.existingSecret.name
+        "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 6 }}
+- name: OTEL_EXPORTER_OTLP_HEADERS
+  value: "authorization=$(CLICKSTACK_OTLP_TOKEN)"
 {{- end }}
 
 {{/*

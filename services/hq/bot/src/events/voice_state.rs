@@ -29,6 +29,12 @@ struct ChannelSnapshot {
     channel_id: ChannelId,
     guild_id: GuildId,
     real_user_count: usize,
+    /// Whether our bot is physically connected to this channel, read from Discord's own voice
+    /// state (the serenity cache) rather than a Traffic-Light round-trip. TL's session view is
+    /// eventually-consistent and its `GetSessionState` round-trip can transiently fail, which
+    /// used to read as "bot absent" and fire a redundant rejoin; Discord's gateway state is the
+    /// authority for physical presence.
+    bot_is_present: bool,
 }
 
 #[async_trait]
@@ -283,20 +289,10 @@ async fn handle_auto_leave_rejoin(
         return Ok(());
     }
 
-    let sessions = service
-        .audio_engine
-        .get_sessions_in_guild(GuildId::from(guild_id))
-        .await
-        .map(|s| s.into_iter().map(|s| s.channel_id).collect::<Vec<_>>())
-        .map_err(|e| {
-            tracing::warn!("Failed to fetch audio sessions for guild {guild_id}: {e}");
-            e
-        })?;
-
     let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels);
 
     for snap in snapshots {
-        act_on_snapshot(service, ctx, &sessions, snap, joining).await;
+        act_on_snapshot(service, ctx, snap, joining).await;
     }
 
     Ok(())
@@ -308,6 +304,7 @@ fn extract_snapshots(
     guild_id: u64,
     channels: &[serenity::ChannelId],
 ) -> Vec<ChannelSnapshot> {
+    let bot_user_id = ctx.cache.current_user().id;
     let guild = ctx.cache.guild(guild_id_typed);
     match guild {
         None => vec![],
@@ -315,9 +312,14 @@ fn extract_snapshots(
             .iter()
             .map(|&serenity_ch| {
                 let real_user_count = count_real_users(&g, serenity_ch);
+                let bot_is_present = g
+                    .voice_states
+                    .get(&bot_user_id)
+                    .and_then(|vs| vs.channel_id)
+                    == Some(serenity_ch);
                 let channel_id = ChannelId::from(serenity_ch.get());
                 tracing::info!(
-                    "Channel {serenity_ch} has {real_user_count} real users (guild {guild_id})"
+                    "Channel {serenity_ch} has {real_user_count} real users, bot_present={bot_is_present} (guild {guild_id})"
                 );
                 ChannelSnapshot {
                     serenity_channel_id: serenity_ch,
@@ -325,6 +327,7 @@ fn extract_snapshots(
                     channel_id,
                     guild_id: GuildId::from(guild_id),
                     real_user_count,
+                    bot_is_present,
                 }
             })
             .collect(),
@@ -334,7 +337,6 @@ fn extract_snapshots(
 async fn act_on_snapshot(
     service: &Service,
     ctx: &Context,
-    sessions: &[ChannelId],
     snap: ChannelSnapshot,
     joining: &Arc<DashSet<(u64, u64)>>,
 ) {
@@ -353,7 +355,7 @@ async fn act_on_snapshot(
         return;
     }
 
-    let bot_is_present = sessions.contains(&snap.channel_id);
+    let bot_is_present = snap.bot_is_present;
 
     if snap.real_user_count == 0 && bot_is_present {
         tracing::info!(

@@ -152,7 +152,6 @@ async fn main() -> anyhow::Result<()> {
                 discord_token: token.clone(),
                 connected_ae_ids: vec![],
                 permissions: WorkerPermissions::new(),
-                ae_cursor: 0,
             };
             (worker_id, worker)
         })
@@ -161,7 +160,6 @@ async fn main() -> anyhow::Result<()> {
     let initial_state = ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     };
 
     // Build AE registry (now HTTP-based, AEs register themselves)

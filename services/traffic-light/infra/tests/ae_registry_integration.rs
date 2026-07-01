@@ -16,14 +16,12 @@ fn make_state_with_token(token: &str) -> Arc<RwLock<ZakoState>> {
         discord_token: DiscordToken(token.to_string()),
         connected_ae_ids: vec![],
         permissions: WorkerPermissions::new(),
-        ae_cursor: 0,
     };
     let mut workers: rustc_hash::FxHashMap<WorkerId, Worker> = Default::default();
     workers.insert(WorkerId(0), worker);
     Arc::new(RwLock::new(ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     }))
 }
 
@@ -35,7 +33,6 @@ fn make_state_with_two_tokens(token_a: &str, token_b: &str) -> Arc<RwLock<ZakoSt
         discord_token: DiscordToken(token_a.to_string()),
         connected_ae_ids: vec![],
         permissions: WorkerPermissions::new(),
-        ae_cursor: 0,
     });
     workers.insert(WorkerId(1), Worker {
         worker_id: WorkerId(1),
@@ -43,12 +40,10 @@ fn make_state_with_two_tokens(token_a: &str, token_b: &str) -> Arc<RwLock<ZakoSt
         discord_token: DiscordToken(token_b.to_string()),
         connected_ae_ids: vec![],
         permissions: WorkerPermissions::new(),
-        ae_cursor: 0,
     });
     Arc::new(RwLock::new(ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     }))
 }
 
@@ -284,13 +279,11 @@ async fn statefulset_ordinal_pins_worker_and_never_collides() {
             discord_token: DiscordToken(format!("token-{i}")),
             connected_ae_ids: vec![],
             permissions: WorkerPermissions::new(),
-            ae_cursor: 0,
         });
     }
     let state = Arc::new(RwLock::new(ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     }));
 
     let registry = Arc::new(AeRegistry::new(state.clone(), tokens).await.unwrap());

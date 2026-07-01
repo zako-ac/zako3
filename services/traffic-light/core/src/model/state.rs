@@ -16,14 +16,12 @@ pub struct Worker {
     pub discord_token: DiscordToken,
     pub connected_ae_ids: Vec<u16>,
     pub permissions: WorkerPermissions,
-    pub ae_cursor: u16,
 }
 
 #[derive(Clone, Debug)]
 pub struct ZakoState {
     pub workers: FxHashMap<WorkerId, Worker>,
     pub sessions: FxHashMap<SessionRoute, SessionInfo>,
-    pub worker_cursor: u16,
 }
 
 impl ZakoState {

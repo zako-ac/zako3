@@ -12,7 +12,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_types::{GuildId, SessionState};
 
 use crate::{
-    router, AeDispatcher, AeId, RouterError, RouterResult, SessionRoute, StateChangeEvent,
+    router, AeDispatcher, RouterError, RouterResult, SessionRoute, StateChangeEvent,
     ZakoState,
 };
 
@@ -109,85 +109,15 @@ impl TlService {
                 }
             }
             Err(RouterError::NoAvailableWorker) => {
-                // No eligible worker via normal routing — try every known AE as a last resort.
-                let all_routes: Vec<SessionRoute> = {
-                    let state = self.state.read().await;
-                    state
-                        .workers
-                        .iter()
-                        .flat_map(|(worker_id, worker)| {
-                            worker.connected_ae_ids.iter().map(|&ae_id| SessionRoute {
-                                worker_id: *worker_id,
-                                ae_id: AeId(ae_id),
-                            })
-                        })
-                        .collect()
-                };
-
+                // Deterministic routing already considered every eligible worker (the HRW
+                // ranking walks the whole set). A genuine NoAvailableWorker therefore means
+                // no worker is eligible for this guild — there is no safe fallback. The old
+                // "try every AE as a last resort" branch is intentionally gone: spraying a
+                // Join across unrelated bots is exactly what let a second physical bot join
+                // one channel.
                 warn!(
                     guild_id = ?request.session.map(|s| s.guild_id),
-                    fallback_route_count = all_routes.len(),
-                    "no eligible worker for guild; trying all AEs as fallback"
-                );
-
-                for route in all_routes {
-                    match self.dispatcher.send(route, request.clone()).await {
-                        Ok(resp)
-                            if matches!(
-                                &resp,
-                                AudioEngineCommandResponse::Ok
-                                    | AudioEngineCommandResponse::Error(
-                                        AudioEngineError::AlreadyJoined
-                                    )
-                            ) =>
-                        {
-                            info!(
-                                worker_id = route.worker_id.0,
-                                ae_id = route.ae_id.0,
-                                already_joined = matches!(
-                                    &resp,
-                                    AudioEngineCommandResponse::Error(
-                                        AudioEngineError::AlreadyJoined
-                                    )
-                                ),
-                                "fallback Join succeeded"
-                            );
-                            if let Some(session_info) = request.session {
-                                let mut state = self.state.write().await;
-                                state.sessions.insert(route, session_info);
-                                info!(
-                                    worker_id = route.worker_id.0,
-                                    ae_id = route.ae_id.0,
-                                    guild_id = ?session_info.guild_id,
-                                    channel_id = ?session_info.channel_id,
-                                    total_sessions = state.sessions.len(),
-                                    "session committed (fallback)"
-                                );
-                            }
-                            return AudioEngineCommandResponse::Ok;
-                        }
-                        Ok(err_resp) => {
-                            warn!(
-                                worker_id = route.worker_id.0,
-                                ae_id = route.ae_id.0,
-                                response = ?err_resp,
-                                "AE rejected fallback Join, trying next"
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                worker_id = route.worker_id.0,
-                                ae_id = route.ae_id.0,
-                                error = %e,
-                                "dispatch error on fallback Join, trying next"
-                            );
-                        }
-                    }
-                }
-
-                error!(
-                    guild_id = ?request.session.map(|s| s.guild_id),
-                    "all AEs failed on fallback Join"
+                    "no eligible worker for guild; rejecting Join"
                 );
                 AudioEngineCommandResponse::Error(AudioEngineError::InternalError(
                     "No available worker for this guild".into(),
@@ -229,19 +159,6 @@ impl TlService {
                             if let Some(session_info) = request.session {
                                 let mut state = self.state.write().await;
                                 state.sessions.insert(candidate.route, session_info);
-                                // Carry over round-robin cursor advances from the routing decision.
-                                state.worker_cursor = candidate.new_state_on_success.worker_cursor;
-                                if let Some(worker) =
-                                    state.workers.get_mut(&candidate.route.worker_id)
-                                {
-                                    if let Some(new_worker) = candidate
-                                        .new_state_on_success
-                                        .workers
-                                        .get(&candidate.route.worker_id)
-                                    {
-                                        worker.ae_cursor = new_worker.ae_cursor;
-                                    }
-                                }
                                 info!(
                                     worker_id = candidate.route.worker_id.0,
                                     ae_id = candidate.route.ae_id.0,
@@ -297,9 +214,9 @@ impl TlService {
 
                 match self.dispatcher.send(route, request).await {
                     Ok(response) => {
-                        // SessionCommand routing never modifies state (new_state_on_success
-                        // is always state.clone()), so no full write-back is needed. But two
-                        // outcomes leave the cached route orphaned, which `sync_sessions` would
+                        // SessionCommand routing never allocates a route, so no write-back is
+                        // needed on success. But two outcomes leave the cached route orphaned,
+                        // which `sync_sessions` would
                         // otherwise flag as NotJoined for ~3 minutes before pruning:
                         //   1. A successful Leave — the AE dropped the session, so must TL.
                         //   2. A NotJoined error — the AE has no such session; the cache is
@@ -860,7 +777,6 @@ mod tests {
         Arc::new(RwLock::new(ZakoState {
             workers: FxHashMap::default(),
             sessions: Default::default(),
-            worker_cursor: 0,
         }))
     }
 
@@ -874,13 +790,11 @@ mod tests {
                 discord_token: DiscordToken(String::new()),
                 connected_ae_ids: vec![1],
                 permissions: WorkerPermissions::new(),
-                ae_cursor: 0,
             },
         );
         Arc::new(RwLock::new(ZakoState {
             workers,
             sessions: Default::default(),
-            worker_cursor: 0,
         }))
     }
 
@@ -896,13 +810,11 @@ mod tests {
                 discord_token: DiscordToken(String::new()),
                 connected_ae_ids: vec![1],
                 permissions: WorkerPermissions::new(),
-                ae_cursor: 0,
             },
         );
         Arc::new(RwLock::new(ZakoState {
             workers,
             sessions,
-            worker_cursor: 0,
         }))
     }
 
@@ -1223,14 +1135,12 @@ mod tests {
                     discord_token: DiscordToken(String::new()),
                     connected_ae_ids: vec![1],
                     permissions: WorkerPermissions::new(),
-                    ae_cursor: 0,
                 },
             );
         }
         Arc::new(RwLock::new(ZakoState {
             workers,
             sessions,
-            worker_cursor: 0,
         }))
     }
 
@@ -1279,6 +1189,97 @@ mod tests {
             calls.lock().unwrap().len(),
             0,
             "no calls when no duplicates"
+        );
+    }
+
+    fn state_with_permitted_workers(n: u16, guild: u64) -> Arc<RwLock<ZakoState>> {
+        let mut workers = FxHashMap::default();
+        for id in 0..n {
+            let permissions = WorkerPermissions::new();
+            permissions.add_allowed_guild(GuildId::from(guild));
+            workers.insert(
+                WorkerId(id),
+                Worker {
+                    worker_id: WorkerId(id),
+                    bot_client_id: zako3_types::hq::DiscordUserId(String::new()),
+                    discord_token: DiscordToken(String::new()),
+                    connected_ae_ids: vec![1],
+                    permissions,
+                },
+            );
+        }
+        Arc::new(RwLock::new(ZakoState {
+            workers,
+            sessions: Default::default(),
+        }))
+    }
+
+    fn join_request(s: SessionInfo) -> AudioEngineCommandRequest {
+        AudioEngineCommandRequest {
+            session: Some(s),
+            command: AudioEngineCommand::Join,
+            headers: std::collections::HashMap::new(),
+            idempotency_key: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_join_already_joined_commits_single_route() {
+        // The AE reports AlreadyJoined (the bot is already in the channel). TL must treat that
+        // as success, commit exactly one route, and a second identical Join must not allocate a
+        // new worker — no second physical bot can appear.
+        let s = session(1, 100);
+        let state = state_with_permitted_workers(4, 1);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| {
+                Ok(AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined))
+            }),
+        });
+
+        let svc = TlService::new(state.clone(), dispatcher);
+        let r1 = svc.execute(join_request(s)).await;
+        assert!(matches!(r1, AudioEngineCommandResponse::Ok));
+        let route_after_first = {
+            let st = state.read().await;
+            assert_eq!(st.sessions.len(), 1, "exactly one route committed");
+            *st.sessions.keys().next().unwrap()
+        };
+
+        let r2 = svc.execute(join_request(s)).await;
+        assert!(matches!(r2, AudioEngineCommandResponse::Ok));
+        let st = state.read().await;
+        assert_eq!(st.sessions.len(), 1, "re-Join must not add a second route");
+        assert!(
+            st.sessions.contains_key(&route_after_first),
+            "re-Join must resolve to the same route (idempotent)"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_join_no_permitted_worker_is_rejected_without_fallback() {
+        // No worker permitted for the guild. With the all-AE fallback removed, this must be a
+        // clean error — never a spray of Joins across unrelated bots.
+        let s = session(1, 100);
+        let state = state_with_connected_ae(); // worker exists but has no guild permission
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::Ok)),
+        });
+
+        let svc = TlService::new(state.clone(), dispatcher);
+        let resp = svc.execute(join_request(s)).await;
+
+        assert!(matches!(
+            resp,
+            AudioEngineCommandResponse::Error(AudioEngineError::InternalError(_))
+        ));
+        assert_eq!(
+            state.read().await.sessions.len(),
+            0,
+            "rejected Join must not commit any session"
         );
     }
 }
