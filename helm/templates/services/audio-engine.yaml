@@ -80,6 +80,7 @@ spec:
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: METRICS_PORT
               value: "9090"
             - name: DISCORD_TOKEN

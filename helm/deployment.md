@@ -48,9 +48,10 @@ When `nodeAffinity` is empty (`{}`), no `affinity:` block is emitted for that po
 ## Observability
 
 The observability backend is **ClickStack** (ClickHouse + HyperDX, deployed via the
-`clickhouse/clickstack-all-in-one` image). All services send OTLP to the shared
-`-otel-collector` gateway (`OTLP_ENDPOINT` → `-otel-collector:4317`), which exports to ClickStack
-over OTLP HTTP (`-clickstack:4318`) using an ingestion bearer token.
+`clickhouse/clickstack-all-in-one` image). All services send OTLP directly to ClickStack over
+OTLP gRPC (`OTLP_ENDPOINT` → `-clickstack:4317`), attaching the ingestion bearer token via
+`OTEL_EXPORTER_OTLP_HEADERS` (`authorization=<token>`). The `-otel-collector` gateway is
+retained in the chart but no longer on the hot path.
 
 ```yaml
 clickstack:

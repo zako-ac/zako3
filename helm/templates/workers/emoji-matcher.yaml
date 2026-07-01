@@ -39,6 +39,7 @@ spec:
                     "key" .Values.postgres.existingSecret.databaseUrlKey) | nindent 16 }}
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: WORKER_CONCURRENCY
               value: {{ .Values.emojiMatcher.workerConcurrency | quote }}
             - name: MATCH_HAMMING_THRESHOLD

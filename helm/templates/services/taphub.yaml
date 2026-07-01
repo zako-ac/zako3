@@ -68,6 +68,7 @@ spec:
               value: {{ .Values.taphub.connectionLeaseTtlSecs | quote }}
             - name: ZK_TH_OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: ZK_TH_METRICS_PORT
               value: {{ .Values.taphub.metricsPort | quote }}
             - name: TOKIO_CONSOLE_BIND
