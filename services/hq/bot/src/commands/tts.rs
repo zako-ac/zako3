@@ -48,6 +48,7 @@ pub async fn speak(
     message: String,
     #[description = "TTS voice to use (defaults to your current voice setting)"]
     #[description_localized("ko", "사용할 TTS 음성 (기본값: 현재 설정된 음성)")]
+    #[autocomplete = "autocomplete_provider"]
     voice: Option<String>,
 ) -> Result<(), Error> {
     // Extract non-Send guild data before the first await.
@@ -284,6 +285,54 @@ pub async fn skip(
     Ok(())
 }
 
+async fn autocomplete_provider(
+    ctx: Context<'_>,
+    partial: &str,
+) -> Vec<String> {
+    let service = &ctx.data().service;
+    let discord_id = ctx.author().id.to_string();
+
+    let user_id = match service
+        .tap
+        .get_user_by_discord_id(&discord_id)
+        .await
+    {
+        Ok(Some(u)) => Some(u.id),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::error!("Failed to get user for autocomplete: {:?}", e);
+            return vec![];
+        }
+    };
+
+    let taps = match service
+        .tap
+        .list_all_paginated(
+            user_id,
+            None,
+            None,
+            Some(partial.to_string()),
+            None,
+            Some(true),
+            None,
+            Some(25),
+        )
+        .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("Failed to list taps for autocomplete: {:?}", e);
+            return vec![];
+        }
+    };
+
+    taps.data
+        .iter()
+        .map(|t| t.tap.name.to_string())
+        .take(25)
+        .collect()
+}
+
 /// Change your TTS voice.
 #[poise::command(
     slash_command,
@@ -295,6 +344,7 @@ pub async fn voice(
     ctx: Context<'_>,
     #[description = "The voice provider to use"]
     #[description_localized("ko", "사용할 음성 제공자")]
+    #[autocomplete = "autocomplete_provider"]
     provider: Option<String>,
     #[description = "Where to save this preference (default: All Guilds)"]
     #[description_localized("ko", "설정을 저장할 범위 (기본값: 모든 서버)")]
