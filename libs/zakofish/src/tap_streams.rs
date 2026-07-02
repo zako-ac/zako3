@@ -1,22 +1,22 @@
 //! Transport-agnostic chunk recv wrappers.
 //!
-//! The hub returns `RelChunkStream` / `UnrelChunkStream` regardless of whether
-//! the underlying tap connection is pf2 or pf3. Internally:
+//! The hub returns `RelChunkStream` / `UnrelChunkStream` for a pf3 tap
+//! connection. Internally:
 //!
-//! - **pf2 Dual / pf3 Dual**: separate reliable + unreliable streams are
-//!   bridged independently into the two wrappers.
-//! - **pf2 UnrelOnly / pf3 Unrel**: only the unreliable wrapper is produced.
+//! - **pf3 Dual**: separate reliable + unreliable streams are bridged
+//!   independently into the two wrappers.
+//! - **pf3 Unrel**: only the unreliable wrapper is produced.
 //!
 //! pf3 chunks carry no timestamp in the proto layer — the zakofish sender
 //! prefixes each chunk with 8 big-endian bytes (`u64` milliseconds via
 //! [`encode_pf3_chunk`]); the receive pumps strip and parse the prefix.
 
 use bytes::Bytes;
-use protofish2::Timestamp;
-use protofish2::mani::transfer::recv::{TransferReliableRecvStream, TransferUnreliableRecvStream};
 use protofish3::XferMode;
 use protofish3::xfer::{DualRecvXfer, RecvXfer, XferRecv};
 use tokio::sync::{mpsc, oneshot};
+
+use crate::types::Timestamp;
 
 const CHANNEL_BUFFER: usize = 100;
 
@@ -38,34 +38,6 @@ impl UnrelChunkStream {
     pub async fn recv(&mut self) -> Option<(Timestamp, Bytes)> {
         self.rx.recv().await
     }
-}
-
-/// Bridge a pf2 reliable recv stream into a `RelChunkStream`.
-pub fn bridge_pf2_rel(mut rel: TransferReliableRecvStream) -> RelChunkStream {
-    let (tx, rx) = mpsc::channel::<Bytes>(CHANNEL_BUFFER);
-    tokio::spawn(async move {
-        while let Some(chunks) = rel.recv().await {
-            for chunk in chunks {
-                if tx.send(chunk.content).await.is_err() {
-                    return;
-                }
-            }
-        }
-    });
-    RelChunkStream { rx }
-}
-
-/// Bridge a pf2 unreliable recv stream into an `UnrelChunkStream`.
-pub fn bridge_pf2_unrel(mut unrel: TransferUnreliableRecvStream) -> UnrelChunkStream {
-    let (tx, rx) = mpsc::channel::<(Timestamp, Bytes)>(CHANNEL_BUFFER);
-    tokio::spawn(async move {
-        while let Some(chunk) = unrel.recv().await {
-            if tx.send((chunk.timestamp, chunk.content)).await.is_err() {
-                return;
-            }
-        }
-    });
-    UnrelChunkStream { rx }
 }
 
 /// Prefix `data` with an 8-byte big-endian timestamp. Used by the pf3 tap

@@ -8,7 +8,7 @@ use tracing_subscriber::{
     EnvFilter, Layer, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-fn build_metadata(headers_env: Option<String>) -> MetadataMap {
+pub(crate) fn build_metadata(headers_env: Option<String>) -> MetadataMap {
     let mut metadata = MetadataMap::new();
     if let Some(headers_str) = headers_env {
         for pair in headers_str.split(',') {

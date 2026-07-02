@@ -8,12 +8,7 @@ use std::{
 use parking_lot::Mutex;
 use tokio::sync::watch;
 use zako3_types::{OnlineTapState, OnlineTapStates, hq::TapId};
-use zakofish_taphub::{
-    ZakofishError,
-    create_server_config,
-    create_server_config_pf3,
-    hub::ZakofishHub,
-};
+use zakofish_taphub::{ZakofishError, create_server_config, hub::ZakofishHub};
 
 use zako3_preload_cache::AudioCache;
 
@@ -54,7 +49,6 @@ impl TapHub {
     pub async fn new(
         app: App,
         bind_address: &str,
-        bind_address_pf3: Option<&str>,
         cert_file: impl AsRef<Path>,
         key_file: impl AsRef<Path>,
         audio_cache: Arc<dyn AudioCache>,
@@ -72,17 +66,6 @@ impl TapHub {
             &key_file,
         )?;
 
-        let server_config_pf3 = bind_address_pf3
-            .map(|addr| {
-                let parsed = addr.parse().map_err(|_| {
-                    ZakofishError::ProtocolError(
-                        "Invalid pf3 bind address is provided".to_string(),
-                    )
-                })?;
-                create_server_config_pf3(parsed, &cert_file, &key_file)
-            })
-            .transpose()?;
-
         let connections: ConnectionRegistry = Arc::new(Mutex::new(HashMap::new()));
 
         let handler = TapHubConnectionHandler {
@@ -92,8 +75,7 @@ impl TapHub {
             connections: Arc::clone(&connections),
         };
 
-        let zf_hub =
-            ZakofishHub::new(Some(server_config), server_config_pf3, Arc::new(handler))?;
+        let zf_hub = ZakofishHub::new(server_config, Arc::new(handler))?;
 
         Ok(Self {
             zf_hub,

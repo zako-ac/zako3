@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dashmap::DashSet;
+use tokio::sync::RwLock;
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     AudioRequestString, ChannelId, GuildId, QueueName,
@@ -9,6 +11,7 @@ use hq_types::{
 use poise::serenity_prelude as serenity;
 use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
 use tokio::sync::broadcast;
+use tracing::Instrument as _;
 use zako3_states::VoiceStateService;
 
 use crate::commands::voice::bot_join_and_announce;
@@ -20,6 +23,10 @@ pub struct VoiceStateHandler {
     /// Tracks (guild_id, channel_id) pairs where a join is currently in-flight.
     /// Prevents concurrent voice state events from each firing a separate join RPC.
     pub joining: Arc<DashSet<(u64, u64)>>,
+    /// The set of all Zako worker-bot Discord user ids, sourced from Traffic-Light's
+    /// registry (see `TlClient::list_bot_ids`) and refreshed periodically. Used to
+    /// detect whether *any* Zako bot (not just this master process) is in a channel.
+    pub zako_bot_ids: Arc<RwLock<HashSet<serenity::UserId>>>,
 }
 
 struct ChannelSnapshot {
@@ -28,6 +35,13 @@ struct ChannelSnapshot {
     channel_id: ChannelId,
     guild_id: GuildId,
     real_user_count: usize,
+    /// Whether *any* Zako bot (this master or a worker bot from TL's pool) is physically
+    /// connected to this channel, read from Discord's own voice state (the serenity cache)
+    /// rather than a Traffic-Light round-trip. The master never joins VC itself — worker bots
+    /// do — so presence is matched against the full Zako bot id set (see `zako_bot_ids`).
+    /// TL's session view is eventually-consistent and its `GetSessionState` round-trip can
+    /// transiently fail; Discord's gateway state is the authority for physical presence.
+    bot_is_present: bool,
 }
 
 #[async_trait]
@@ -77,46 +91,83 @@ impl EventHandler for VoiceStateHandler {
         let guild_id = guild_id_typed.get();
         let discord_user_id = new.user_id.to_string();
 
-        update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
-
-        if is_bot(&ctx, guild_id_typed, new.user_id) {
-            return;
-        }
-
-        let _ = self.event_tx.send(PlaybackEvent::VoiceStateChanged);
-
         let old_ch = old.as_ref().and_then(|o| o.channel_id);
         let new_ch = new.channel_id;
 
-        let events = join_leave_events(old_ch, new_ch);
-        if !events.is_empty() {
-            let display_name =
-                get_display_name(&ctx, guild_id_typed, new.user_id, &discord_user_id);
-            if let Err(e) = announce_join_leave(
+        let span = tracing::info_span!(
+            parent: None,
+            "vc.voice_state_update",
+            otel.name = %format!("vc.{}", transition_kind(old_ch, new_ch)),
+            guild_id,
+            user_id = %discord_user_id,
+            old_channel = ?old_ch.map(|c| c.get()),
+            new_channel = ?new_ch.map(|c| c.get()),
+        );
+
+        async move {
+            update_tracking(&self.voice_state_service, &ctx, guild_id_typed, &new).await;
+
+            if is_bot(&ctx, guild_id_typed, new.user_id) {
+                return;
+            }
+
+            let _ = self.event_tx.send(PlaybackEvent::VoiceStateChanged);
+
+            let events = join_leave_events(old_ch, new_ch);
+            if !events.is_empty() {
+                let display_name =
+                    get_display_name(&ctx, guild_id_typed, new.user_id, &discord_user_id);
+                if let Err(e) = announce_join_leave(
+                    &self.service,
+                    GuildId::from(guild_id),
+                    DiscordUserId::from(discord_user_id.clone()),
+                    display_name,
+                    events,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to play join/leave announcement for {discord_user_id}: {e}"
+                    );
+                }
+            }
+
+            let zako_bot_ids = {
+                let mut ids = self.zako_bot_ids.read().await.clone();
+                ids.insert(ctx.cache.current_user().id);
+                ids
+            };
+
+            if let Err(e) = handle_auto_leave_rejoin(
                 &self.service,
-                GuildId::from(guild_id),
-                DiscordUserId::from(discord_user_id.clone()),
-                display_name,
-                events,
+                &ctx,
+                guild_id_typed,
+                guild_id,
+                affected_channels(old_ch, new_ch),
+                &self.joining,
+                &zako_bot_ids,
             )
             .await
             {
-                tracing::warn!("Failed to play join/leave announcement for {discord_user_id}: {e}");
+                tracing::warn!("Auto-leave/rejoin error for guild {guild_id}: {e}");
             }
         }
+        .instrument(span)
+        .await;
+    }
+}
 
-        if let Err(e) = handle_auto_leave_rejoin(
-            &self.service,
-            &ctx,
-            guild_id_typed,
-            guild_id,
-            affected_channels(old_ch, new_ch),
-            &self.joining,
-        )
-        .await
-        {
-            tracing::warn!("Auto-leave/rejoin error for guild {guild_id}: {e}");
-        }
+/// Classifies a voice state transition for span naming: `join`, `leave`, `move`,
+/// or `update` (same-channel change such as mute/deafen).
+fn transition_kind(
+    old_ch: Option<serenity::ChannelId>,
+    new_ch: Option<serenity::ChannelId>,
+) -> &'static str {
+    match (old_ch, new_ch) {
+        (None, Some(_)) => "join",
+        (Some(_), None) => "leave",
+        (Some(old), Some(new)) if old != new => "move",
+        _ => "update",
     }
 }
 
@@ -247,25 +298,16 @@ async fn handle_auto_leave_rejoin(
     guild_id: u64,
     channels: Vec<serenity::ChannelId>,
     joining: &Arc<DashSet<(u64, u64)>>,
+    zako_bot_ids: &HashSet<serenity::UserId>,
 ) -> CoreResult<()> {
     if channels.is_empty() {
         return Ok(());
     }
 
-    let sessions = service
-        .audio_engine
-        .get_sessions_in_guild(GuildId::from(guild_id))
-        .await
-        .map(|s| s.into_iter().map(|s| s.channel_id).collect::<Vec<_>>())
-        .map_err(|e| {
-            tracing::warn!("Failed to fetch audio sessions for guild {guild_id}: {e}");
-            e
-        })?;
-
-    let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels);
+    let snapshots = extract_snapshots(ctx, guild_id_typed, guild_id, &channels, zako_bot_ids);
 
     for snap in snapshots {
-        act_on_snapshot(service, ctx, &sessions, snap, joining).await;
+        act_on_snapshot(service, ctx, snap, joining).await;
     }
 
     Ok(())
@@ -276,6 +318,7 @@ fn extract_snapshots(
     guild_id_typed: serenity::GuildId,
     guild_id: u64,
     channels: &[serenity::ChannelId],
+    zako_bot_ids: &HashSet<serenity::UserId>,
 ) -> Vec<ChannelSnapshot> {
     let guild = ctx.cache.guild(guild_id_typed);
     match guild {
@@ -284,9 +327,12 @@ fn extract_snapshots(
             .iter()
             .map(|&serenity_ch| {
                 let real_user_count = count_real_users(&g, serenity_ch);
+                let bot_is_present = g.voice_states.values().any(|vs| {
+                    vs.channel_id == Some(serenity_ch) && zako_bot_ids.contains(&vs.user_id)
+                });
                 let channel_id = ChannelId::from(serenity_ch.get());
                 tracing::info!(
-                    "Channel {serenity_ch} has {real_user_count} real users (guild {guild_id})"
+                    "Channel {serenity_ch} has {real_user_count} real users, bot_present={bot_is_present} (guild {guild_id})"
                 );
                 ChannelSnapshot {
                     serenity_channel_id: serenity_ch,
@@ -294,6 +340,7 @@ fn extract_snapshots(
                     channel_id,
                     guild_id: GuildId::from(guild_id),
                     real_user_count,
+                    bot_is_present,
                 }
             })
             .collect(),
@@ -303,7 +350,6 @@ fn extract_snapshots(
 async fn act_on_snapshot(
     service: &Service,
     ctx: &Context,
-    sessions: &[ChannelId],
     snap: ChannelSnapshot,
     joining: &Arc<DashSet<(u64, u64)>>,
 ) {
@@ -322,7 +368,7 @@ async fn act_on_snapshot(
         return;
     }
 
-    let bot_is_present = sessions.contains(&snap.channel_id);
+    let bot_is_present = snap.bot_is_present;
 
     if snap.real_user_count == 0 && bot_is_present {
         tracing::info!(

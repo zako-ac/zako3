@@ -4,12 +4,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use protofish2::compression::CompressionType;
-use protofish2::config::ProtofishConfig;
-use protofish2::connection::ClientConfig as Pf2ClientConfig;
 use tokio::sync::mpsc;
 use zakofish::config::load_certs;
-use zakofish::tap::ZakofishTapPf2;
 use zakofish::tap_pf3::ZakofishTapPf3;
 use zakofish::types::message::TapClientHello;
 use zakofish::types::model::TapId;
@@ -19,12 +15,11 @@ use crate::handler::TapHandler;
 use crate::source::AudioSource;
 use crate::stream::AudioStreamSender;
 
-/// Transport selection for [`TapBuilder`]. Defaults to [`Transport::Pf2`] for
-/// backwards-compatibility with existing taps. Switch to [`Transport::Pf3`] for
-/// taps connecting to a pf3-enabled hub port.
+/// Transport selection for [`TapBuilder`]. protofish3 is the only supported
+/// transport; the enum is retained for source compatibility with taps that
+/// call `.transport(Transport::Protofish3)`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Transport {
-    Protofish2,
     #[default]
     Protofish3,
 }
@@ -106,15 +101,9 @@ impl TapBuilder {
     /// Connect to the Hub and block until the connection is permanently lost.
     /// Reconnection with exponential backoff is handled internally by zakofish.
     pub async fn run(self, handler: Arc<dyn TapHandler>) -> Result<(), SdkError> {
-        let hub_addr = self.hub_addr.as_deref().unwrap_or_else(|| {
-            if self.transport == Transport::Protofish3 {
-                "api.zako.ac:1028"
-            } else {
-                "api.zako.ac:7060"
-            }
-        });
+        let hub_addr = self.hub_addr.as_deref().unwrap_or("api.zako.ac:1028");
 
-        // Append default port 7060 if no port is present
+        // Append default pf3 port 1028 if no port is present
         let hub_addr = if hub_addr
             .rsplit_once(':')
             .map(|(_, p)| p.parse::<u16>().is_ok())
@@ -122,12 +111,7 @@ impl TapBuilder {
         {
             hub_addr.to_string()
         } else {
-            let default_port = if self.transport == Transport::Protofish3 {
-                1028
-            } else {
-                7060
-            };
-            format!("{}:{}", hub_addr, default_port)
+            format!("{}:1028", hub_addr)
         };
 
         // Extract host as TLS server_name (SNI); resolve domain to SocketAddr
@@ -172,38 +156,17 @@ impl TapBuilder {
 
         let bridge = Arc::new(HandlerBridge(handler));
 
-        match self.transport {
-            Transport::Protofish2 => {
-                let mut protofish_config = ProtofishConfig::default();
-                protofish_config.handshake_timeout = Duration::from_secs(10);
+        let mut client_config =
+            protofish3::ClientConfig::new("0.0.0.0:0".parse().map_err(SdkError::AddrParse)?);
+        client_config.root_certificates = root_certificates;
+        client_config.protofish = zakofish::default_protofish3_config();
+        client_config.handshake_timeout = Duration::from_secs(10);
 
-                let client_config = Pf2ClientConfig {
-                    bind_address: "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
-                    root_certificates,
-                    supported_compression_types: vec![CompressionType::None],
-                    keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
-                    protofish_config,
-                };
+        let zf_tap = ZakofishTapPf3::new(client_config)?;
+        zf_tap
+            .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
+            .await?;
 
-                let zf_tap = ZakofishTapPf2::new(client_config)?;
-                zf_tap
-                    .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
-                    .await?;
-            }
-            Transport::Protofish3 => {
-                let mut client_config = protofish3::ClientConfig::new(
-                    "0.0.0.0:0".parse().map_err(SdkError::AddrParse)?,
-                );
-                client_config.root_certificates = root_certificates;
-                client_config.protofish = zakofish::default_protofish3_config();
-                client_config.handshake_timeout = Duration::from_secs(10);
-
-                let zf_tap = ZakofishTapPf3::new(client_config)?;
-                zf_tap
-                    .connect_and_run(socket_addr, server_name.as_str(), hello, bridge)
-                    .await?;
-            }
-        }
         Ok(())
     }
 }
@@ -233,8 +196,8 @@ impl zakofish::tap::TapHandler for HandlerBridge {
     ) -> std::result::Result<
         (
             zakofish::types::message::AudioRequestSuccessMessage,
-            mpsc::Receiver<(protofish2::Timestamp, bytes::Bytes)>,
-            protofish2::TransferMode,
+            mpsc::Receiver<(zakofish::Timestamp, bytes::Bytes)>,
+            zakofish::TransferMode,
         ),
         zakofish::types::message::AudioRequestFailureMessage,
     > {
@@ -253,7 +216,7 @@ impl zakofish::tap::TapHandler for HandlerBridge {
                 let mode = transfer_mode
                     .get()
                     .copied()
-                    .unwrap_or(protofish2::TransferMode::Dual);
+                    .unwrap_or(zakofish::TransferMode::Dual);
                 (success, rx, mode)
             })
             .map_err(|e| e.into_wire())

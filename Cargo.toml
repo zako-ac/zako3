@@ -66,7 +66,6 @@ anyhow = "1.0"
 mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
-protofish2 = { version = "0.6.7", features = ["opus", "jitter"] }
 protofish3 = { git = "https://github.com/zako-ac/protofish3-rs" }
 async-nats = "0.45.0"
 dashmap = "6"
@@ -95,10 +94,3 @@ opt-level = 0
 
 [patch.crates-io.zod_gen]
 path = "vendor/zod_gen"
-
-#[patch.crates-io.protofish2]
-#path = "/home/allen/projects/protofish2-rs"
-
-[patch.crates-io.protofish2]
-git = "https://github.com/mincomk/protofish2-rs"
-branch = "main"

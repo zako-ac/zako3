@@ -4,19 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use protofish2::Timestamp;
-use protofish2::TransferMode;
-use protofish2::compression::CompressionType;
-use protofish2::connection::ClientConfig;
 use rustls::pki_types::CertificateDer;
 use uuid::Uuid;
 
-use zakofish::tap::{TapHandler, ZakofishTap};
-use zakofish::types::model::{AudioCachePolicy, AudioCacheType, AudioRequestString, TapId};
 use zakofish::types::message::{
     AttachedMetadata, AudioMetadataSuccessMessage, AudioRequestFailureMessage,
     AudioRequestSuccessMessage, TapClientHello,
 };
+use zakofish::types::model::{AudioCachePolicy, AudioCacheType, AudioRequestString, TapId};
+use zakofish::{TapHandler, Timestamp, TransferMode, ZakofishTapPf3, default_protofish3_config};
 
 struct SimpleTapHandler;
 
@@ -90,15 +86,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::read("hub.crt").expect("Please run the hub example first so it generates hub.crt");
     let cert_chain = vec![CertificateDer::from(cert_bytes)];
 
-    let client_config = ClientConfig {
-        bind_address: "127.0.0.1:0".parse()?,
-        root_certificates: cert_chain,
-        supported_compression_types: vec![CompressionType::None],
-        keepalive_range: Duration::from_secs(1)..Duration::from_secs(10),
-        protofish_config: Default::default(),
-    };
+    let mut client_config = protofish3::ClientConfig::new("127.0.0.1:0".parse()?);
+    client_config.root_certificates = cert_chain;
+    client_config.protofish = default_protofish3_config();
 
-    let tap = ZakofishTap::new(client_config)?;
+    let tap = ZakofishTapPf3::new(client_config)?;
 
     let hello_info = TapClientHello {
         tap_id: TapId(Uuid::new_v4().to_string()),

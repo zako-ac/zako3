@@ -87,7 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tap_hub = TapHub::new(
         app.clone(),
         &config.zakofish_bind_addr,
-        config.zakofish_bind_addr_pf3.as_deref(),
         &config.zakofish_cert_file,
         &config.zakofish_key_file,
         audio_cache,

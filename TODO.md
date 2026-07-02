@@ -3,6 +3,8 @@
 refer hq todo
 
 # Do Now
+- [ ] Add persistence to joined VCs
+
 - [x] URGENT: TapHub Memopry Leak, Steaming support
 
 - [x] cache remove

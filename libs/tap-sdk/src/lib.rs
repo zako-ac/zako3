@@ -13,8 +13,8 @@ pub(crate) mod healthcheck;
 pub use builder::{tap, TapBuilder, Transport};
 pub use error::{SdkError, TapError};
 pub use handler::TapHandler;
-pub use protofish2::TransferMode;
 pub use source::AudioSource;
+pub use zakofish::{Timestamp, TransferMode};
 pub use stream::AudioStreamSender;
 
 // Re-export message types for SDK users

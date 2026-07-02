@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handler = Arc::new(SimpleHubHandler { tap_connected_tx });
 
     // Instantiate the Hub
-    let hub = Arc::new(ZakofishHub::new(Some(server_config), None, handler)?);
+    let hub = Arc::new(ZakofishHub::new(server_config, handler)?);
     println!("Hub: Listening on {}", hub.local_addr()?);
 
     // Run the hub in the background

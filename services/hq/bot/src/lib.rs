@@ -44,6 +44,38 @@ async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
+/// Periodically refreshes the set of Zako worker-bot Discord user ids from
+/// Traffic-Light's registry. Used by the voice-state auto-leave logic to detect
+/// whether *any* Zako bot occupies a channel. On fetch failure the last-known set
+/// is retained (never cleared) so a transient TL outage can't cause spurious leaves.
+fn spawn_zako_bot_id_refresh(
+    service: Arc<Service>,
+    zako_bot_ids: Arc<tokio::sync::RwLock<std::collections::HashSet<serenity::UserId>>>,
+) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            match service.audio_engine.list_bot_ids().await {
+                Ok(ids) => {
+                    let parsed: std::collections::HashSet<serenity::UserId> = ids
+                        .iter()
+                        .filter_map(|id| id.parse::<u64>().ok())
+                        .map(serenity::UserId::new)
+                        .collect();
+                    if parsed.is_empty() {
+                        tracing::warn!("list_bot_ids returned no usable ids; keeping previous set");
+                    } else {
+                        *zako_bot_ids.write().await = parsed;
+                    }
+                }
+                Err(e) => tracing::warn!("Failed to refresh Zako bot ids from TL: {e}"),
+            }
+        }
+    });
+}
+
 pub async fn run(
     service: Service,
     resolver_slot: DiscordNameResolverSlot,
@@ -57,11 +89,15 @@ pub async fn run(
         | GatewayIntents::MESSAGE_CONTENT
         | GatewayIntents::GUILDS;
 
+    let zako_bot_ids = Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
+    spawn_zako_bot_id_refresh(Arc::new(service.clone()), zako_bot_ids.clone());
+
     let voice_handler = events::VoiceStateHandler {
         voice_state_service: service.voice_state.clone(),
         service: Arc::new(service.clone()),
         event_tx,
         joining: Arc::new(dashmap::DashSet::new()),
+        zako_bot_ids,
     };
 
     let message_handler = events::MessageCreateHandler {

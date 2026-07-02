@@ -20,3 +20,4 @@ dotenvy.workspace = true
 envy.workspace = true
 anyhow.workspace = true
 zako3-types.workspace = true
+base64 = "0.22.1"

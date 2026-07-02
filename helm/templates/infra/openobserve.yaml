@@ -33,22 +33,23 @@ data:
             endpoint: 0.0.0.0:4318
 
     exporters:
-      otlp_http/openobserve:
-        endpoint: "http://{{ $fullname }}-openobserve:5080/api/default"
+      otlphttp/clickstack:
+        endpoint: "http://{{ $fullname }}-clickstack:4318"
         headers:
-          Authorization: "Basic ${env:OO_BASIC_AUTH}"
+          authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
+        compression: gzip
 
     service:
       pipelines:
         traces:
           receivers: [otlp]
-          exporters: [otlp_http/openobserve]
+          exporters: [otlphttp/clickstack]
         metrics:
           receivers: [otlp]
-          exporters: [otlp_http/openobserve]
+          exporters: [otlphttp/clickstack]
         logs:
           receivers: [otlp]
-          exporters: [otlp_http/openobserve]
+          exporters: [otlphttp/clickstack]
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -59,7 +60,7 @@ metadata:
     app.kubernetes.io/component: openobserve
 spec:
   serviceName: {{ $fullname }}-openobserve
-  replicas: 1
+  replicas: {{ .Values.openobserve.replicas }}
   selector:
     matchLabels:
       {{- include "zako3.selectorLabels" (dict "component" "openobserve" "Release" .Release) | nindent 6 }}
@@ -143,12 +144,12 @@ spec:
             - name: otlp-http
               containerPort: 4318
           env:
-            - name: OO_BASIC_AUTH
+            - name: CLICKSTACK_OTLP_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
-                    "secretName" (printf "%s-openobserve-secret" $fullname)
-                    "existingName" .Values.openobserve.existingSecret.name
-                    "key" .Values.openobserve.existingSecret.basicAuthKey) | nindent 16 }}
+                    "secretName" (printf "%s-clickstack-secret" $fullname)
+                    "existingName" .Values.clickstack.existingSecret.name
+                    "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 16 }}
           volumeMounts:
             - name: config
               mountPath: /etc/otel-config.yaml

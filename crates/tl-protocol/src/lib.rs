@@ -45,6 +45,9 @@ pub trait TrafficLightRpc {
     #[method(name = "get_sessions_in_guild")]
     async fn get_sessions_in_guild(&self, guild_id: GuildId) -> jsonrpsee::core::RpcResult<Vec<SessionState>>;
 
+    #[method(name = "list_bot_ids")]
+    async fn list_bot_ids(&self) -> jsonrpsee::core::RpcResult<Vec<String>>;
+
     #[method(name = "report_guilds")]
     async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> jsonrpsee::core::RpcResult<()>;
 
@@ -76,6 +79,26 @@ pub enum AudioEngineCommand {
     Join,
     SessionCommand(AudioEngineSessionCommand),
     FetchDiscordVoiceState,
+}
+
+impl AudioEngineCommand {
+    pub fn operation(&self) -> &'static str {
+        match self {
+            AudioEngineCommand::Join => "join",
+            AudioEngineCommand::FetchDiscordVoiceState => "fetch_discord_voice_state",
+            AudioEngineCommand::SessionCommand(sc) => match sc {
+                AudioEngineSessionCommand::Leave => "leave",
+                AudioEngineSessionCommand::Play(_) => "play",
+                AudioEngineSessionCommand::Stop(_) => "stop",
+                AudioEngineSessionCommand::StopMany(_) => "stop_many",
+                AudioEngineSessionCommand::SetVolume { .. } => "set_volume",
+                AudioEngineSessionCommand::NextMusic => "next_music",
+                AudioEngineSessionCommand::Pause(_) => "pause",
+                AudioEngineSessionCommand::Resume(_) => "resume",
+                AudioEngineSessionCommand::GetSessionState => "get_session_state",
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

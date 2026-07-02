@@ -42,6 +42,16 @@ fn default_rpc_addr() -> SocketAddr {
     "0.0.0.0:7070".parse().unwrap()
 }
 
+/// Derives a Discord bot's client (== user) id from its token. A bot token's
+/// first `.`-separated segment is the base64url-encoded ASCII user id.
+fn client_id_from_token(token: &str) -> Option<String> {
+    use base64::Engine as _;
+    let first = token.split('.').next()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(first).ok()?;
+    let s = String::from_utf8(bytes).ok()?;
+    (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then_some(s)
+}
+
 impl AppConfig {
     fn load() -> Self {
         dotenvy::dotenv().ok();
@@ -73,6 +83,10 @@ impl TrafficLightRpcServer for TrafficLightServiceImpl {
 
     async fn get_sessions_in_guild(&self, guild_id: GuildId) -> RpcResult<Vec<SessionState>> {
         Ok(self.tl.get_sessions_in_guild(guild_id).await)
+    }
+
+    async fn list_bot_ids(&self) -> RpcResult<Vec<String>> {
+        Ok(self.tl.list_bot_ids().await)
     }
 
     async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> RpcResult<()> {
@@ -146,13 +160,16 @@ async fn main() -> anyhow::Result<()> {
         .enumerate()
         .map(|(i, token)| {
             let worker_id = WorkerId(i as u16);
+            let bot_client_id = client_id_from_token(&token.0).unwrap_or_else(|| {
+                tracing::warn!("Could not derive bot client id from token for {worker_id:?}");
+                String::new()
+            });
             let worker = Worker {
                 worker_id,
-                bot_client_id: DiscordUserId(String::new()),
+                bot_client_id: DiscordUserId(bot_client_id),
                 discord_token: token.clone(),
                 connected_ae_ids: vec![],
                 permissions: WorkerPermissions::new(),
-                ae_cursor: 0,
             };
             (worker_id, worker)
         })
@@ -161,7 +178,6 @@ async fn main() -> anyhow::Result<()> {
     let initial_state = ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     };
 
     // Build AE registry (now HTTP-based, AEs register themselves)
@@ -214,4 +230,23 @@ async fn main() -> anyhow::Result<()> {
     handle.stopped().await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine as _;
+
+    #[test]
+    fn derives_client_id_from_token() {
+        let first = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode("123456789");
+        let token = format!("{first}.abcdef.ghijkl");
+        assert_eq!(client_id_from_token(&token), Some("123456789".to_string()));
+    }
+
+    #[test]
+    fn rejects_garbage_token() {
+        assert_eq!(client_id_from_token("not-base64!.x.y"), None);
+        assert_eq!(client_id_from_token(""), None);
+    }
 }

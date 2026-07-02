@@ -55,6 +55,7 @@ spec:
               value: {{ .Values.hq.discordRedirectUri | quote }}
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
             - name: MAPPER_CACHE_REFRESH_SECS

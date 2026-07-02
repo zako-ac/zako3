@@ -32,11 +32,6 @@ spec:
             - name: zakofish
               protocol: UDP
               containerPort: {{ .Values.ports.taphubZakofish }}
-            {{- if .Values.taphub.enablePf3 }}
-            - name: zakofish-pf3
-              protocol: UDP
-              containerPort: {{ .Values.ports.taphubZakofishPf3 }}
-            {{- end }}
             - name: metrics
               containerPort: {{ .Values.taphub.metricsPort | int }}
             - name: tokio-console
@@ -50,10 +45,6 @@ spec:
               value: "0.0.0.0:{{ .Values.ports.taphubTransport }}"
             - name: ZK_TH_ZAKOFISH_BIND_ADDR
               value: "0.0.0.0:{{ .Values.ports.taphubZakofish }}"
-            {{- if .Values.taphub.enablePf3 }}
-            - name: ZK_TH_ZAKOFISH_BIND_ADDR_PF3
-              value: "0.0.0.0:{{ .Values.ports.taphubZakofishPf3 }}"
-            {{- end }}
             - name: ZK_TH_ZAKOFISH_CERT_FILE
               value: "/certs/zakofish/{{ .Values.taphub.zakofishTlsCertFilename }}"
             - name: ZK_TH_ZAKOFISH_KEY_FILE
@@ -77,6 +68,7 @@ spec:
               value: {{ .Values.taphub.connectionLeaseTtlSecs | quote }}
             - name: ZK_TH_OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: ZK_TH_METRICS_PORT
               value: {{ .Values.taphub.metricsPort | quote }}
             - name: TOKIO_CONSOLE_BIND
@@ -167,9 +159,3 @@ spec:
       protocol: UDP
       port: {{ .Values.ports.taphubZakofish }}
       targetPort: {{ .Values.ports.taphubZakofish }}
-    {{- if .Values.taphub.enablePf3 }}
-    - name: zakofish-pf3
-      protocol: UDP
-      port: {{ .Values.ports.taphubZakofishPf3 }}
-      targetPort: {{ .Values.ports.taphubZakofishPf3 }}
-    {{- end }}

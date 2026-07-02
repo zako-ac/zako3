@@ -42,6 +42,7 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             {{- if .Values.cache.adminTokenSecret.name }}
             - name: ZK_CACHE_ADMIN_TOKEN
               valueFrom:

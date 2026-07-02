@@ -1,0 +1,103 @@
+{{- $fullname := include "zako3.fullname" . -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-clickstack-data
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.clickstack.storageSize }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-clickstack
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickstack
+spec:
+  serviceName: {{ $fullname }}-clickstack
+  replicas: {{ .Values.clickstack.replicas }}
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "clickstack" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "clickstack" "Release" .Release) | nindent 8 }}
+    spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.clickstack.nodeAffinity) | nindent 6 }}
+      containers:
+        - name: clickstack
+          image: {{ .Values.clickstack.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: ui
+              containerPort: 8080
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: opamp
+              containerPort: 4320
+          env:
+            {{- with .Values.clickstack.appUrl }}
+            - name: HYPERDX_APP_URL
+              value: {{ . | quote }}
+            {{- end }}
+            - name: OTLP_AUTH_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-clickstack-secret" $fullname)
+                    "existingName" .Values.clickstack.existingSecret.name
+                    "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 16 }}
+            - name: HYPERDX_API_KEY
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-clickstack-secret" $fullname)
+                    "existingName" .Values.clickstack.existingSecret.name
+                    "key" .Values.clickstack.existingSecret.apiKeyKey) | nindent 16 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+              subPath: clickhouse
+            - name: data
+              mountPath: /var/log/clickhouse-server
+              subPath: clickhouse-logs
+            - name: data
+              mountPath: /data/db
+              subPath: mongo
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-clickstack-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-clickstack
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "clickstack" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: ui
+      port: 8080
+      targetPort: 8080
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: opamp
+      port: 4320
+      targetPort: 4320

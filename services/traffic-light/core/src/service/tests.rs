@@ -42,14 +42,12 @@ fn state_with_connected_ae() -> Arc<RwLock<ZakoState>> {
         discord_token: tac(String::new()), // Placeholder for DiscordToken
         connected_ae_ids: vec![1],
         permissions: WorkerPermissions::new(),
-        ae_cursor: 0,
     };
     let mut workers: rustc_hash::FxHashMap<WorkerId, Worker> = Default::default();
     workers.insert(WorkerId(0), worker);
     Arc::new(RwLock::new(ZakoState {
         workers,
         sessions: Default::default(),
-        worker_cursor: 0,
     }))
 }
 

@@ -18,6 +18,7 @@ pub enum RegistrationError {
     TokenNotFound,
     InvalidListenAddress(String),
     HttpClientBuild(String),
+    OrdinalOutOfRange { ordinal: usize, pool: usize },
 }
 
 impl std::fmt::Display for RegistrationError {
@@ -26,6 +27,12 @@ impl std::fmt::Display for RegistrationError {
             Self::TokenNotFound => write!(f, "Token not found in state"),
             Self::InvalidListenAddress(msg) => write!(f, "Invalid listen address: {}", msg),
             Self::HttpClientBuild(e) => write!(f, "Failed to build HTTP client: {}", e),
+            Self::OrdinalOutOfRange { ordinal, pool } => write!(
+                f,
+                "AE pod ordinal {} has no matching token (pool size {}); \
+                 DISCORD_TOKENS must have at least as many tokens as AE replicas",
+                ordinal, pool
+            ),
         }
     }
 }
@@ -36,6 +43,26 @@ fn normalize_url(addr: &str) -> String {
     } else {
         format!("http://{}", addr)
     }
+}
+
+/// Extract the StatefulSet pod ordinal from an AE's advertised address.
+///
+/// AEs advertise their pod hostname, e.g.
+/// `http://zako3-audio-engine-3.zako3-audio-engine.<ns>.svc.cluster.local:8090` → `3`.
+/// That ordinal is a permanent, unique-per-pod identity, so using it as the worker index makes
+/// the AE→worker mapping a pure function of pod identity — collision-free by construction and
+/// stable across any restart, independent of registration order or timing.
+///
+/// Returns `None` for addresses with no trailing ordinal (e.g. `http://127.0.0.1:8090` in local
+/// dev or tests), signalling the caller to fall back to dynamic assignment.
+fn worker_ordinal(addr: &str) -> Option<usize> {
+    let host = addr
+        .strip_prefix("http://")
+        .or_else(|| addr.strip_prefix("https://"))
+        .unwrap_or(addr);
+    // First DNS label is the pod hostname; the segment after its final '-' is the ordinal.
+    let label = host.split(['.', ':', '/']).next()?;
+    label.rsplit_once('-')?.1.parse::<usize>().ok()
 }
 
 /// Validate a listen address format before registration.
@@ -122,29 +149,70 @@ impl AeRegistry {
         self.state.clone()
     }
 
-    /// Pick the next token from the pool using round-robin.
-    fn pick_next_token(&self) -> DiscordToken {
-        let idx = self
+    /// Pick a token whose worker currently has no connected AE ("free"), scanning the pool in
+    /// round-robin order from the cursor. Falls back to plain round-robin only when every worker
+    /// is already serving an AE (pool oversubscribed), so registration degrades gracefully
+    /// instead of silently handing out a token that is already live on another engine.
+    ///
+    /// Plain round-robin (`cursor % len`) is unsafe here: once the cursor passes the pool size —
+    /// which any AE restart from a new listen_addr causes — it wraps onto a token still held by a
+    /// live engine, so two AEs log in as the same bot and Discord drops one of them.
+    async fn pick_free_token(&self) -> DiscordToken {
+        let n = self.token_pool.len();
+        let start = self
             .token_cursor
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        self.token_pool[idx % self.token_pool.len()].clone()
+
+        // Tokens whose worker already has a live AE attached.
+        let in_use: Vec<DiscordToken> = {
+            let state = self.state.read().await;
+            state
+                .workers
+                .values()
+                .filter(|w| !w.connected_ae_ids.is_empty())
+                .map(|w| w.discord_token.clone())
+                .collect()
+        };
+
+        for offset in 0..n {
+            let token = &self.token_pool[(start + offset) % n];
+            if !in_use.iter().any(|t| t == token) {
+                return token.clone();
+            }
+        }
+
+        self.token_pool[start % n].clone()
     }
 
-    /// Register an AE that advertises itself at listen_addr. Picks the next token from the pool.
-    /// Returns the assigned token. Evicts stale entries and updates state.
+    /// Register an AE that advertises itself at listen_addr. Returns the assigned token.
+    /// Evicts stale entries and updates state.
     ///
-    /// If this address was previously registered, the same worker_id (and thus the same bot token)
-    /// is reused instead of round-robining to a new one. This prevents worker_id drift on AE
-    /// restart, which would otherwise leave stale sessions cached under the old worker_id.
+    /// Worker assignment is derived from the pod's StatefulSet ordinal (parsed from the advertised
+    /// hostname): pod `-N` always maps to `WorkerId(N)` / `token_pool[N]`. Because this is a pure
+    /// function of pod identity, it is collision-free and identical across every restart — no two
+    /// AEs can ever be handed the same bot token, and no worker slot is skipped. This replaces the
+    /// earlier round-robin/sticky-map scheme, whose order-dependence let two pods collide on one
+    /// token (leaving a worker with no AE) in a way no restart could clear.
+    ///
+    /// Addresses without an ordinal (local dev / tests, e.g. `127.0.0.1:PORT`) fall back to the
+    /// address-sticky + free-token assignment, which is safe there since a single AE runs.
     pub async fn register(&self, listen_addr: String) -> Result<String, RegistrationError> {
         // Validate address before consuming a token from the pool
         validate_listen_addr(&listen_addr)?;
 
         let url = normalize_url(&listen_addr);
 
-        // If this address already has a stable worker assignment, reuse its token rather than
-        // round-robining to a different worker_id on every restart.
-        let token = if let Some(worker_id) = self.addr_to_worker.get(&url).map(|e| *e) {
+        let token = if let Some(ordinal) = worker_ordinal(&url) {
+            // Production: pod ordinal is the authoritative worker index.
+            self.token_pool
+                .get(ordinal)
+                .cloned()
+                .ok_or(RegistrationError::OrdinalOutOfRange {
+                    ordinal,
+                    pool: self.token_pool.len(),
+                })?
+        } else if let Some(worker_id) = self.addr_to_worker.get(&url).map(|e| *e) {
+            // Dev fallback: keep the address sticky so a restart doesn't drift to a new worker.
             let state = self.state.read().await;
             state
                 .workers
@@ -152,7 +220,7 @@ impl AeRegistry {
                 .map(|w| w.discord_token.clone())
                 .ok_or(RegistrationError::TokenNotFound)?
         } else {
-            self.pick_next_token()
+            self.pick_free_token().await
         };
 
         self.register_with_token(token.clone(), listen_addr, true).await?;
