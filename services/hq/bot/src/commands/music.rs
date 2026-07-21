@@ -242,19 +242,16 @@ pub async fn wedding(
     Ok(())
 }
 
-const CONGRATS_RESURRECTION: &[&str] = &[
-    "왜 하객이 상복을 입고 있죠?",
-
-];
+const CONGRATS_RESURRECTION: &[&str] = &["왜 하객이 상복을 입고 있죠?"];
 
 /// Play resurrection song (easter egg).
 #[poise::command(
     slash_command,
     name_localized("ko", "부활"),
     description_localized("en-US", "Play the resurrection song"),
-    description_localized("ko", "부활 행진곡 재생"),
+    description_localized("ko", "부활 행진곡 재생")
 )]
-pub async fn recurrection(
+pub async fn resurrection(
     ctx: Context<'_>,
     #[description = "Voice channel to play in (default: your current channel)"]
     #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
