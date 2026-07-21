@@ -242,6 +242,54 @@ pub async fn wedding(
     Ok(())
 }
 
+const CONGRATS_RESURRECTION: &[&str] = &[
+    "왜 하객이 상복을 입고 있죠?",
+
+];
+
+/// Play resurrection song (easter egg).
+#[poise::command(
+    slash_command,
+    name_localized("ko", "부활"),
+    description_localized("en-US", "Play the resurrection song"),
+    description_localized("ko", "부활 행진곡 재생"),
+)]
+pub async fn recurrection(
+    ctx: Context<'_>,
+    #[description = "Voice channel to play in (default: your current channel)"]
+    #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let (guild_id, channel_id) = resolve_play_channel(ctx, channel).await?;
+    let tap_id = resolve_tap_id(ctx, "wedding").await?;
+    let queue_name = QueueName::from(MUSIC_QUEUE.to_string());
+    let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
+
+    let ars = "r";
+    ctx.data()
+        .service
+        .audio_engine
+        .play(
+            guild_id,
+            channel_id,
+            queue_name,
+            tap_id,
+            AudioRequestString::from(ars.to_string()),
+            Volume::from(1.0f32),
+            discord_user_id,
+        )
+        .await?;
+
+    let idx = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as usize)
+        .unwrap_or(0);
+    let msg = CONGRATS_RESURRECTION[idx % CONGRATS_RESURRECTION.len()];
+    ctx.say(msg).await?;
+    Ok(())
+}
+
 /// Stop playback.
 #[poise::command(
     slash_command,
