@@ -123,7 +123,7 @@ impl TapService {
         let rows = self
             .tap_metrics
             .get_latest_rows(&tap_ids)
-            .await
+            .await?;
             .unwrap_or_default();
 
         let user = &user;
