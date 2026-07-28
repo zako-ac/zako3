@@ -45,6 +45,62 @@ Supported per-service keys: `hq`, `taphub`, `metricsSync`, `cache`, and `audioEn
 
 When `nodeAffinity` is empty (`{}`), no `affinity:` block is emitted for that pod.
 
+## Storage
+
+`storageClass` at the top level is the default for every PVC the chart creates. Each service
+that owns a volume — `postgres`, `timescale`, `cache`, `clickstack`, `openobserve` — exposes the
+same `persistence` block, and any field set there wins over the global default:
+
+```yaml
+storageClass: "standard"      # global default
+
+clickstack:
+  persistence:
+    name: ""                  # PVC name override (default: <release>-clickstack-data)
+    existingClaim: ""         # use a PVC managed outside the chart; the chart creates none
+    storageClass: "fast-ssd"  # overrides the global storageClass
+    size: "20Gi"
+    accessModes: []           # overrides the component default
+    annotations: {}
+    volumeName: ""            # bind to a specific PV
+```
+
+- `storageClass: "-"` (global or per-service) renders `storageClassName: ""`, which disables
+  dynamic provisioning and binds only pre-provisioned volumes.
+- `existingClaim` makes the chart skip PVC creation entirely and mount that claim instead — use it
+  when the volume is provisioned by another chart or by hand.
+- Default accessMode is `ReadWriteOnce` everywhere except the cache volume, which is `ReadWriteMany`.
+- The cache volume belongs to `cache.persistence`; its default name stays `<release>-taphub-cache`
+  so existing volumes keep binding. The legacy size keys (`postgres.storageSize`,
+  `taphub.cacheStorageSize`, …) are still honoured as a fallback when `persistence.size` is unset.
+
+## External Postgres / TimescaleDB
+
+Set `enabled: false` to skip the bundled StatefulSet, PVC, and Service and point the services at an
+external database. Supply the connection URL one of two ways:
+
+```yaml
+postgres:
+  enabled: false
+  externalUrl: "postgres://user:pass@db.example.com:5432/zako3"
+```
+
+or reference a Secret you manage, in which case `externalUrl` is not needed and the chart creates no
+Secret at all:
+
+```yaml
+postgres:
+  enabled: false
+  existingSecret:
+    name: "pg-credentials"
+    databaseUrlKey: "database-url"
+```
+
+`timescale` works identically (`timescale.enabled`, `timescale.externalUrl`). Rendering fails with an
+explicit message if `enabled: false` is set without either a URL or an existing Secret. `DATABASE_URL`
+(HQ, emoji-matcher) and `TIMESCALE_DATABASE_URL` (HQ, metrics-sync) resolve through the same
+Secret reference either way, so no service config changes.
+
 ## Observability
 
 The observability backend is **ClickStack** (ClickHouse + HyperDX, deployed via the
@@ -58,7 +114,8 @@ clickstack:
   replicas: 1
   otlpAuthToken: "<ingestion token>"   # OTLP_AUTH_TOKEN — collector authenticates with this
   apiKey: "<hyperdx api key>"          # HYPERDX_API_KEY
-  storageSize: "20Gi"
+  persistence:
+    size: "20Gi"
   # or reference a pre-existing Secret:
   existingSecret:
     name: ""

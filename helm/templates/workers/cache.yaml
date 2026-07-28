@@ -1,4 +1,5 @@
 {{- $fullname := include "zako3.fullname" . }}
+{{- $pvc := dict "root" . "persistence" .Values.cache.persistence "default" "taphub-cache" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -68,7 +69,7 @@ spec:
       volumes:
         - name: cache
           persistentVolumeClaim:
-            claimName: {{ $fullname }}-taphub-cache
+            claimName: {{ include "zako3.pvcName" $pvc }}
 ---
 apiVersion: v1
 kind: Service

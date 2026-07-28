@@ -1,15 +1,1 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "zako3.fullname" . }}-taphub-cache
-  labels:
-    {{- include "zako3.labels" . | nindent 4 }}
-spec:
-  {{- if .Values.storageClass }}
-  storageClassName: {{ .Values.storageClass | quote }}
-  {{- end }}
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: {{ .Values.taphub.cacheStorageSize }}
+{{- include "zako3.pvc" (dict "root" . "persistence" .Values.cache.persistence "default" "taphub-cache" "size" .Values.taphub.cacheStorageSize "accessMode" "ReadWriteMany") }}

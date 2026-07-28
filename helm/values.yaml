@@ -10,10 +10,26 @@ telemetry:
 # Global nodeAffinity applied to all pods unless overridden per-service
 nodeAffinity: {}
 
+# Default storageClass for every PVC. Each service can override it under its own
+# `persistence.storageClass`. Use "-" (at either level) to render an empty class,
+# which binds only pre-provisioned volumes.
 storageClass: ""
+
+# Every service with a volume exposes the same `persistence` block:
+#   name: ""            # PVC name override (default: <release>-<component>)
+#   existingClaim: ""   # use a PVC managed outside the chart; none is created
+#   storageClass: ""    # overrides the global storageClass ("-" = empty class)
+#   size: "10Gi"
+#   accessModes: []     # overrides the component default
+#   annotations: {}
+#   volumeName: ""      # bind to a specific PV
 
 # --- Postgres ---
 postgres:
+  # false = do not deploy the bundled Postgres; point the services at an external
+  # one via externalUrl below or via existingSecret.name + databaseUrlKey.
+  enabled: true
+  externalUrl: ""
   nodeAffinity: {}
   user: zako3
   password: ""
@@ -22,10 +38,20 @@ postgres:
     name: ""
     key: "password"
     databaseUrlKey: "database-url"
-  storageSize: "10Gi"
+  persistence:
+    name: ""
+    existingClaim: ""
+    storageClass: ""
+    size: "10Gi"
+    accessModes: []
+    annotations: {}
+    volumeName: ""
 
 # --- TimescaleDB ---
 timescale:
+  # false = do not deploy the bundled TimescaleDB; see postgres.enabled above.
+  enabled: true
+  externalUrl: ""
   user: metrics
   password: ""
   db: metrics
@@ -33,7 +59,14 @@ timescale:
     name: ""
     key: "password"
     databaseUrlKey: "database-url"
-  storageSize: "20Gi"
+  persistence:
+    name: ""
+    existingClaim: ""
+    storageClass: ""
+    size: "20Gi"
+    accessModes: []
+    annotations: {}
+    volumeName: ""
 
 # --- HQ service ---
 hq:
@@ -77,7 +110,6 @@ taphub:
   transportTlsCertFilename: "transport-cert.pem"
   transportTlsKeyFilename: "transport-key.pem"
   transportTlsCaFilename: "ca-cert.pem"
-  cacheStorageSize: "5Gi"
   requestTimeoutMs: "13000"
   # TTL (seconds) for tap connection-state leases in Redis; refreshed by the hub
   # on a heartbeat (~ttl/3) so stale state from a crash expires within this window.
@@ -128,6 +160,15 @@ cache:
   adminTokenSecret:
     name: ""
     key: "cache-admin-token"
+  # Cache PVC. Default name stays "<release>-taphub-cache" so existing volumes keep binding.
+  persistence:
+    name: ""
+    existingClaim: ""
+    storageClass: ""
+    size: "5Gi"
+    accessModes: []          # default: [ReadWriteMany]
+    annotations: {}
+    volumeName: ""
 
 metricsSync:
   nodeAffinity: {}
@@ -173,7 +214,14 @@ openobserve:
     emailKey: "root-user-email"
     passwordKey: "root-user-password"
     basicAuthKey: "basic-auth"
-  storageSize: "20Gi"
+  persistence:
+    name: ""
+    existingClaim: ""
+    storageClass: ""
+    size: "20Gi"
+    accessModes: []
+    annotations: {}
+    volumeName: ""
 
 # --- ClickStack (ClickHouse + HyperDX all-in-one; observability backend) ---
 clickstack:
@@ -187,4 +235,11 @@ clickstack:
     name: ""
     otlpTokenKey: "otlp-auth-token"
     apiKeyKey: "hyperdx-api-key"
-  storageSize: "20Gi"
+  persistence:
+    name: ""
+    existingClaim: ""
+    storageClass: ""
+    size: "20Gi"
+    accessModes: []
+    annotations: {}
+    volumeName: ""

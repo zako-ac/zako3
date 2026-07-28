@@ -1,20 +1,7 @@
 {{- $fullname := include "zako3.fullname" . -}}
 {{- $secretName := ternary (printf "%s-openobserve-secret" $fullname) .Values.openobserve.existingSecret.name (not .Values.openobserve.existingSecret.name) -}}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ $fullname }}-openobserve-data
-  labels:
-    {{- include "zako3.labels" . | nindent 4 }}
-spec:
-  {{- if .Values.storageClass }}
-  storageClassName: {{ .Values.storageClass | quote }}
-  {{- end }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.openobserve.storageSize }}
+{{- $pvc := dict "root" . "persistence" .Values.openobserve.persistence "default" "openobserve-data" "size" .Values.openobserve.storageSize "accessMode" "ReadWriteOnce" -}}
+{{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -98,7 +85,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ $fullname }}-openobserve-data
+            claimName: {{ include "zako3.pvcName" $pvc }}
 ---
 apiVersion: v1
 kind: Service

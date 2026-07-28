@@ -70,6 +70,99 @@ affinity:
 {{- end }}
 
 {{/*
+PVC name for a component.
+existingClaim wins (claim is managed outside the chart), then an explicit name
+override, else "<fullname>-<default>".
+Usage: include "zako3.pvcName" (dict "root" . "persistence" .Values.cache.persistence "default" "taphub-cache")
+*/}}
+{{- define "zako3.pvcName" -}}
+{{- $p := .persistence | default dict -}}
+{{- if $p.existingClaim -}}
+{{ $p.existingClaim }}
+{{- else if $p.name -}}
+{{ $p.name }}
+{{- else -}}
+{{ include "zako3.fullname" .root }}-{{ .default }}
+{{- end -}}
+{{- end }}
+
+{{/*
+storageClassName line for a PVC — per-service value wins over the global one.
+"-" renders an empty class (binds only pre-provisioned volumes); empty renders nothing.
+*/}}
+{{- define "zako3.storageClassName" -}}
+{{- $p := .persistence | default dict -}}
+{{- $sc := $p.storageClass | default .root.Values.storageClass -}}
+{{- if eq $sc "-" -}}
+storageClassName: ""
+{{- else if $sc -}}
+storageClassName: {{ $sc | quote }}
+{{- end -}}
+{{- end }}
+
+{{/*
+PersistentVolumeClaim for a component. Renders nothing when persistence.existingClaim
+is set, since that claim is managed outside the chart.
+Usage: include "zako3.pvc" (dict "root" . "persistence" .Values.clickstack.persistence
+         "default" "clickstack-data" "size" "20Gi" "accessMode" "ReadWriteOnce")
+*/}}
+{{- define "zako3.pvc" -}}
+{{- $p := .persistence | default dict -}}
+{{- if not $p.existingClaim -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zako3.pvcName" . }}
+  labels:
+    {{- include "zako3.labels" .root | nindent 4 }}
+  {{- with $p.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with include "zako3.storageClassName" . }}
+  {{ . }}
+  {{- end }}
+  accessModes:
+    {{- if $p.accessModes }}
+    {{- toYaml $p.accessModes | nindent 4 }}
+    {{- else }}
+    - {{ .accessMode }}
+    {{- end }}
+  {{- with $p.volumeName }}
+  volumeName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.size | default .size }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Postgres connection URL — in-cluster StatefulSet, or the external URL when
+postgres.enabled is false.
+*/}}
+{{- define "zako3.postgresUrl" -}}
+{{- if .Values.postgres.enabled -}}
+postgres://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ include "zako3.fullname" . }}-postgres:5432/{{ .Values.postgres.db }}
+{{- else -}}
+{{ required "postgres.enabled=false requires either postgres.externalUrl or postgres.existingSecret.name" .Values.postgres.externalUrl }}
+{{- end -}}
+{{- end }}
+
+{{/*
+TimescaleDB connection URL — in-cluster StatefulSet, or the external URL when
+timescale.enabled is false.
+*/}}
+{{- define "zako3.timescaleUrl" -}}
+{{- if .Values.timescale.enabled -}}
+postgres://{{ .Values.timescale.user }}:{{ .Values.timescale.password }}@{{ include "zako3.fullname" . }}-timescale:5432/{{ .Values.timescale.db }}
+{{- else -}}
+{{ required "timescale.enabled=false requires either timescale.externalUrl or timescale.existingSecret.name" .Values.timescale.externalUrl }}
+{{- end -}}
+{{- end }}
+
+{{/*
 OTLP endpoint URL
 */}}
 {{- define "zako3.otlpEndpoint" -}}

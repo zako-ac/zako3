@@ -1,19 +1,6 @@
 {{- $fullname := include "zako3.fullname" . -}}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ $fullname }}-clickstack-data
-  labels:
-    {{- include "zako3.labels" . | nindent 4 }}
-spec:
-  {{- if .Values.storageClass }}
-  storageClassName: {{ .Values.storageClass | quote }}
-  {{- end }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.clickstack.storageSize }}
+{{- $pvc := dict "root" . "persistence" .Values.clickstack.persistence "default" "clickstack-data" "size" .Values.clickstack.storageSize "accessMode" "ReadWriteOnce" -}}
+{{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -77,7 +64,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ $fullname }}-clickstack-data
+            claimName: {{ include "zako3.pvcName" $pvc }}
 ---
 apiVersion: v1
 kind: Service
