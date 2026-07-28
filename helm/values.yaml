@@ -155,7 +155,11 @@ cache:
   nodeAffinity: {}
   cacheDir: "/cache"
   gcIntervalSeconds: "1800"
-  maxCacheBytes: "10737418240"
+  # Keep below `persistence.size` — the GDSF pass only evicts once the indexed
+  # total exceeds this, so a budget larger than the volume lets the disk fill first.
+  maxCacheBytes: "4294967296"
+  # Sidecar reads in flight while the index warms up at startup.
+  warmupConcurrency: "64"
   # Optional shared admin token between cache server and taphub. Leave name empty to disable auth.
   adminTokenSecret:
     name: ""

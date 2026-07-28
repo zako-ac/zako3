@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
 use tokio::sync::{mpsc, oneshot};
-use zako3_preload_cache::{AudioCache, FileAudioCache};
+use zako3_preload_cache::{AudioCache, CacheDb, DbEntry, FileAudioCache};
 use zako3_types::{
     AudioCachePolicy, AudioCacheType, AudioMetadata,
     cache::{AudioCacheItem, AudioCacheItemKey},
@@ -454,4 +454,230 @@ async fn entry_survives_cache_reopen() {
         serde_json::to_string(&entry.unwrap().metadatas).unwrap(),
         serde_json::to_string(&meta("track")).unwrap()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Background index warmup
+// ---------------------------------------------------------------------------
+
+/// Write a sidecar (and optionally a companion `.opus`) straight to disk without
+/// touching the index under test.
+async fn plant_sidecar(
+    json_path: &Path,
+    tap_id: &str,
+    key_str: &str,
+    created_at: i64,
+    is_downloading: bool,
+    with_opus: bool,
+) {
+    let opus_path = json_path.with_extension("opus");
+    if with_opus {
+        std::fs::write(&opus_path, b"not really opus").unwrap();
+    }
+    CacheDb::empty()
+        .insert(DbEntry {
+            tap_id: tap_id.to_string(),
+            cache_key: serde_json::to_string(&key(key_str)).unwrap(),
+            opus_path: with_opus.then(|| opus_path.to_string_lossy().into_owned()),
+            json_path: json_path.to_string_lossy().into_owned(),
+            expire_at: None,
+            use_count: 0,
+            last_used_at: None,
+            created_at,
+            gdsf_priority: 0.0,
+            is_downloading,
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn warm_indexes_every_sidecar() {
+    let dir = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp();
+
+    for i in 0..200 {
+        let json_path = dir.path().join(format!("e{i}.json"));
+        plant_sidecar(&json_path, "tap1", &format!("k{i}"), now - 100, false, true).await;
+    }
+
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+    assert!(
+        cache.get_entry(&tap("tap1"), &key("k7")).await.is_none(),
+        "index should start empty before warmup"
+    );
+
+    let stats = cache.warm(16).await.unwrap();
+    assert_eq!(stats.total, 200);
+    assert_eq!(stats.indexed, 200);
+    assert_eq!(stats.duplicates, 0);
+    assert_eq!(stats.parse_failures, 0);
+
+    for i in 0..200 {
+        assert!(
+            cache
+                .get_entry(&tap("tap1"), &key(&format!("k{i}")))
+                .await
+                .is_some(),
+            "k{i} should be indexed after warmup"
+        );
+    }
+}
+
+#[tokio::test]
+async fn warm_does_not_clobber_a_live_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp();
+
+    // An older sidecar for k1 sitting on disk, not yet scanned.
+    let stale_json = dir.path().join("stale.json");
+    plant_sidecar(&stale_json, "tap1", "k1", now - 86_400, false, true).await;
+
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+
+    // A request lands before the scan reaches that file and writes a fresh entry
+    // for the same key.
+    let live_json = dir.path().join("live.json");
+    plant_sidecar(&live_json, "tap1", "k1", now, false, true).await;
+    cache
+        .db()
+        .insert(DbEntry {
+            tap_id: "tap1".to_string(),
+            cache_key: serde_json::to_string(&key("k1")).unwrap(),
+            opus_path: Some(
+                live_json
+                    .with_extension("opus")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            json_path: live_json.to_string_lossy().into_owned(),
+            expire_at: None,
+            use_count: 0,
+            last_used_at: None,
+            created_at: now,
+            gdsf_priority: 0.0,
+            is_downloading: false,
+        })
+        .await
+        .unwrap();
+
+    cache.warm(8).await.unwrap();
+
+    let entry = cache
+        .db()
+        .get("tap1".to_string(), serde_json::to_string(&key("k1")).unwrap())
+        .await
+        .unwrap()
+        .expect("k1 should be indexed");
+    assert_eq!(
+        entry.json_path,
+        live_json.to_string_lossy(),
+        "the live write must survive the scan"
+    );
+    assert!(
+        live_json.exists() && live_json.with_extension("opus").exists(),
+        "the live entry's files must not be reclaimed"
+    );
+}
+
+#[tokio::test]
+async fn warm_keeps_newest_duplicate_and_reclaims_the_loser() {
+    let dir = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp();
+
+    let older = dir.path().join("older.json");
+    let newer = dir.path().join("newer.json");
+    plant_sidecar(&older, "tap1", "dup", now - 3600, false, true).await;
+    plant_sidecar(&newer, "tap1", "dup", now, false, true).await;
+
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+    let stats = cache.warm(4).await.unwrap();
+
+    assert_eq!(stats.indexed, 1, "one distinct key");
+    assert_eq!(stats.duplicates, 1);
+
+    let entry = cache
+        .db()
+        .get("tap1".to_string(), serde_json::to_string(&key("dup")).unwrap())
+        .await
+        .unwrap()
+        .expect("dup should be indexed");
+    assert_eq!(entry.json_path, newer.to_string_lossy(), "newest wins");
+
+    assert!(newer.exists() && newer.with_extension("opus").exists());
+    assert!(!older.exists(), "superseded sidecar should be reclaimed");
+    assert!(
+        !older.with_extension("opus").exists(),
+        "superseded opus should be reclaimed"
+    );
+}
+
+#[tokio::test]
+async fn warm_reclaims_sidecars_left_mid_download() {
+    let dir = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp();
+
+    let stale = dir.path().join("half-written.json");
+    plant_sidecar(&stale, "tap1", "partial", now - 60, true, true).await;
+    let good = dir.path().join("complete.json");
+    plant_sidecar(&good, "tap1", "done", now - 60, false, true).await;
+
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+    let stats = cache.warm(4).await.unwrap();
+
+    assert_eq!(stats.stale_downloads, 1);
+    assert_eq!(stats.indexed, 1);
+    assert!(
+        cache.get_entry(&tap("tap1"), &key("partial")).await.is_none(),
+        "a sidecar left is_downloading by a killed write must not be indexed"
+    );
+    assert!(!stale.exists(), "stale sidecar should be reclaimed");
+    assert!(!stale.with_extension("opus").exists());
+    assert!(good.exists(), "the complete entry is untouched");
+}
+
+#[tokio::test]
+async fn warm_on_empty_and_missing_dir_is_a_noop() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+    let stats = cache.warm(8).await.unwrap();
+    assert_eq!(stats.total, 0);
+    assert_eq!(stats.indexed, 0);
+}
+
+#[tokio::test]
+async fn warm_reports_progress() {
+    let dir = tempfile::tempdir().unwrap();
+    let now = chrono::Utc::now().timestamp();
+    for i in 0..50 {
+        let json_path = dir.path().join(format!("p{i}.json"));
+        plant_sidecar(&json_path, "tap1", &format!("p{i}"), now, false, false).await;
+    }
+
+    let cache = FileAudioCache::open_empty(dir.path().to_path_buf(), None)
+        .await
+        .unwrap();
+
+    let seen = std::sync::Mutex::new(Vec::new());
+    let stats = cache
+        .warm_with_progress(8, |scanned, total| {
+            seen.lock().unwrap().push((scanned, total));
+        })
+        .await
+        .unwrap();
+
+    let seen = seen.into_inner().unwrap();
+    assert_eq!(seen.first(), Some(&(0, 50)), "total is known up front");
+    assert_eq!(seen.last(), Some(&(50, 50)), "final progress is complete");
+    assert_eq!(stats.indexed, 50);
 }

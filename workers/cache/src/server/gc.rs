@@ -21,11 +21,14 @@ pub fn spawn(
     cache: Arc<FileAudioCache>,
     cache_dir: std::path::PathBuf,
     repo: Option<Arc<RedisCacheRepository>>,
+    warmup: Arc<crate::server::WarmupState>,
 ) {
     tokio::spawn(async move {
+        // Never evict against a half-built index: the GDSF pass would under-count
+        // the total size and the expiry pass would only see what has been scanned.
+        warmup.wait_ready().await;
         // Skew the first run by `interval / 4` so the server has time to warm up.
-        let warmup = cfg.interval / 4;
-        tokio::time::sleep(warmup).await;
+        tokio::time::sleep(cfg.interval / 4).await;
         let mut ticker = tokio::time::interval(cfg.interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {

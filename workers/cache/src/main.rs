@@ -44,12 +44,16 @@ async fn main() -> Result<()> {
             None
         };
 
+    // Opened without scanning: on a large cache that scan takes minutes, and doing
+    // it here would keep the listener closed long enough for the liveness probe to
+    // kill the pod. Warmed in the background below; until then, lookups miss.
     let cache = Arc::new(
-        FileAudioCache::open(config.cache_dir.clone(), None)
+        FileAudioCache::open_empty(config.cache_dir.clone(), None)
             .await
             .context("failed to open FileAudioCache")?,
     );
     let preload = Arc::new(AudioPreload::new(config.cache_dir.clone(), None));
+    let warmup = Arc::new(server::WarmupState::new());
 
     server::gc::spawn(
         server::gc::GcConfig {
@@ -60,18 +64,35 @@ async fn main() -> Result<()> {
         Arc::clone(&cache),
         config.cache_dir.clone(),
         cache_repo.clone(),
+        Arc::clone(&warmup),
     );
 
     let router = server::build(
         Arc::clone(&cache),
         Arc::clone(&preload),
         config.admin_token.clone(),
+        Arc::clone(&warmup),
     );
     let addr: std::net::SocketAddr = config.bind_addr.parse()?;
+    let listener = server::bind(addr).await?;
     telemetry.healthy();
 
+    tokio::spawn({
+        let cache = Arc::clone(&cache);
+        let warmup = Arc::clone(&warmup);
+        let concurrency = config.warmup_concurrency;
+        async move {
+            let progress = |scanned, total| warmup.record_progress(scanned, total);
+            match cache.warm_with_progress(concurrency, progress).await {
+                Ok(_) => {}
+                Err(e) => tracing::error!(%e, "cache index warmup failed; serving a partial index"),
+            }
+            warmup.mark_ready();
+        }
+    });
+
     tokio::select! {
-        res = server::serve(addr, router) => {
+        res = server::serve_on(listener, router) => {
             if let Err(e) = res {
                 tracing::error!(%e, "cache server exited with error");
                 return Err(e);

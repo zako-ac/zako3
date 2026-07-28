@@ -8,6 +8,8 @@ pub struct Config {
     pub redis_url: Option<String>,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
+    /// Sidecar reads in flight while the index warms up at startup.
+    pub warmup_concurrency: usize,
     pub gc: GcConfig,
 }
 
@@ -45,6 +47,12 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok());
 
+        let warmup_concurrency = env::var("ZK_CACHE_WARMUP_CONCURRENCY")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(zako3_preload_cache::DEFAULT_WARMUP_CONCURRENCY);
+
         let interval_secs = env::var("ZK_CACHE_GC_INTERVAL_SECONDS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
@@ -64,6 +72,7 @@ impl Config {
             redis_url,
             otlp_endpoint,
             metrics_port,
+            warmup_concurrency,
             gc: GcConfig {
                 interval: Duration::from_secs(interval_secs),
                 max_bytes,

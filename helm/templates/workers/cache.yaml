@@ -35,6 +35,8 @@ spec:
               value: {{ .Values.cache.cacheDir | quote }}
             - name: ZK_CACHE_GC_INTERVAL_SECONDS
               value: {{ .Values.cache.gcIntervalSeconds | quote }}
+            - name: ZK_CACHE_WARMUP_CONCURRENCY
+              value: {{ .Values.cache.warmupConcurrency | quote }}
             {{- if .Values.cache.maxCacheBytes }}
             - name: ZK_CACHE_MAX_BYTES
               value: {{ .Values.cache.maxCacheBytes | quote }}
@@ -54,6 +56,15 @@ spec:
           volumeMounts:
             - name: cache
               mountPath: {{ .Values.cache.cacheDir }}
+          # The index warms in the background, so the pod is Ready as soon as it
+          # binds and serves partial-index misses until the warmup finishes.
+          # GET /readyz reports warmup progress; it deliberately gates no probe.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /healthz

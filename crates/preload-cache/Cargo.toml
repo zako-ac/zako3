@@ -7,6 +7,7 @@ edition = "2024"
 async-trait.workspace = true
 bytes = "1.11"
 chrono.workspace = true
+futures-util = "0.3.33"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true }

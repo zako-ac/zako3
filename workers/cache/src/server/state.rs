@@ -16,6 +16,8 @@ pub struct AppState {
     /// concurrent `GET /stream` can find an in-progress preload for the same target.
     pub active_by_key: Arc<DashMap<String, u64>>,
     pub admin_token: Option<String>,
+    /// Progress of the background index warmup, surfaced by `GET /readyz`.
+    pub warmup: Arc<super::WarmupState>,
 }
 
 pub fn active_key(tap_id: &str, key_json: &str) -> String {

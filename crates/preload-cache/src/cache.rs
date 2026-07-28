@@ -18,7 +18,7 @@ use zako3_types::{
 };
 
 use crate::{
-    db::{CacheDb, MetaSidecar},
+    db::{CacheDb, MetaSidecar, WarmupStats},
     preload::PreloadReader,
     types::{CacheEntry, CacheEntryKind},
 };
@@ -86,13 +86,37 @@ pub struct FileAudioCache {
 impl FileAudioCache {
     /// Async constructor: scans `dir` for existing `.json` sidecars to build the index.
     pub async fn open(dir: PathBuf, max_file_bytes: Option<u64>) -> io::Result<Self> {
+        let cache = Self::open_empty(dir, max_file_bytes).await?;
+        cache.warm(crate::db::DEFAULT_WARMUP_CONCURRENCY).await?;
+        Ok(cache)
+    }
+
+    /// Constructor that skips the sidecar scan, so a server can bind its listener
+    /// before paying for it. Call [`FileAudioCache::warm`] afterwards to populate
+    /// the index; lookups miss until it finishes.
+    pub async fn open_empty(dir: PathBuf, max_file_bytes: Option<u64>) -> io::Result<Self> {
         fs::create_dir_all(&dir).await?;
-        let db = CacheDb::open(&dir).await?;
         Ok(Self {
             dir,
             max_file_bytes,
-            db: Arc::new(db),
+            db: Arc::new(CacheDb::empty()),
         })
+    }
+
+    /// Populate the index from disk. Safe to run while requests are being served.
+    pub async fn warm(&self, concurrency: usize) -> io::Result<WarmupStats> {
+        self.db.warm_from_dir(&self.dir, concurrency).await
+    }
+
+    /// [`FileAudioCache::warm`], reporting `(scanned, total)` as it goes.
+    pub async fn warm_with_progress(
+        &self,
+        concurrency: usize,
+        progress: impl Fn(usize, usize),
+    ) -> io::Result<WarmupStats> {
+        self.db
+            .warm_from_dir_with_progress(&self.dir, concurrency, progress)
+            .await
     }
 
     /// Expose the underlying `CacheDb` for external tools (e.g. cache-gc).
