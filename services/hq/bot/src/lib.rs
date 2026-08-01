@@ -127,6 +127,7 @@ pub async fn run(
                 commands::music::skip(),
                 commands::music::volume(),
                 commands::music::wedding(),
+                commands::music::resurrection(),
                 commands::queue::queue(),
                 commands::queue::clear(),
                 commands::queue::enqueue(),
