@@ -14,10 +14,13 @@ use std::sync::Arc;
 use zako3_metrics::{TapMetricsRow, TapMetricsService};
 use zako3_states::{TapHubStateService, TapNamesCacheService};
 
-/// Max taps enriched concurrently. Owner + latest-metrics lookups are now batched into
-/// one Postgres query each per listing (see `batch_owner_and_rows`), so a listing holds
-/// at most one sqlx connection regardless of tap count — this bound only caps the
-/// remaining per-tap Redis fan-out in `map_to_tap_dto`, not the sqlx pool.
+/// Max taps enriched concurrently. Owner + latest-metrics lookups are batched into
+/// one Postgres query each per listing (see `batch_owner_and_rows`), so on the happy
+/// path a listing holds at most one sqlx connection regardless of tap count — this
+/// bound only caps the remaining per-tap Redis fan-out in `map_to_tap_dto`, not the
+/// sqlx pool. Note: taps whose metrics row is missing from the batch map still fall
+/// back to a per-tap `get_latest_row` query inside `map_to_tap_dto`, so the
+/// single-connection guarantee only holds when every tap already has a metrics row.
 const ENRICH_CONCURRENCY: usize = 4;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -120,11 +123,10 @@ impl TapService {
         // Fetch them in one query (mirrors `batch_owner_and_rows`), then enrich concurrently
         // via `enrich_tap` — removing the previous per-tap `map_to_tap_dto(_, None)` N+1.
         let tap_ids: Vec<TapId> = taps.iter().map(|t| t.id.clone()).collect();
-        let rows = self
-            .tap_metrics
-            .get_latest_rows(&tap_ids)
-            .await
-            .unwrap_or_default();
+        // Propagate batch failures instead of silently falling back to an empty map:
+        // an empty map would make every tap take the per-tap `get_latest_row` fallback
+        // in `map_to_tap_dto`, reinstating the N+1 this batching was meant to remove.
+        let rows = self.tap_metrics.get_latest_rows(&tap_ids).await?;
 
         let user = &user;
         let tap_dtos: Vec<TapWithAccessDto> = stream::iter(taps)
@@ -132,7 +134,9 @@ impl TapService {
                 let row = rows.get(&tap.id).cloned();
                 async move { self.enrich_tap(tap, true, user, row).await }
             })
-            .buffer_unordered(ENRICH_CONCURRENCY)
+            // `.buffered` preserves the input order of `taps`; `buffer_unordered` yields
+            // in completion order, which would shuffle the listing for API/bot consumers.
+            .buffered(ENRICH_CONCURRENCY)
             .collect()
             .await;
 
@@ -894,5 +898,291 @@ mod access_tests {
         // no user, and user with unresolved discord id → allowed
         assert!(TapService::check_access_resolved(&t, &None, None));
         assert!(TapService::check_access_resolved(&t, &uid("other"), None));
+    }
+}
+
+#[cfg(test)]
+mod list_by_user_tests {
+    use super::TapService;
+    use crate::repo::audit_log::AuditLogWithActor;
+    use crate::repo::{AuditLogRepo, TapRepository, UserRepository};
+    use crate::service::audit_log::AuditLogService;
+    use async_trait::async_trait;
+    use hq_types::hq::audit_log::{AuditLog, CreateAuditLogDto};
+    use hq_types::hq::settings::PartialUserSettings;
+    use hq_types::hq::{Tap, TapId, TapName, User, UserId};
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+    use zako3_metrics::TapMetricsService;
+    use zako3_states::{
+        CacheRepository, CacheRepositoryRef, TapHubStateService, TapNamesCacheService,
+    };
+
+    /// In-memory `CacheRepository`. When `delayed_key` is set, any key containing that
+    /// substring sleeps before returning — used to make one tap's enrichment complete
+    /// later than the others, so an order test can tell `.buffered` (ordered) apart
+    /// from `.buffer_unordered` (completion order).
+    #[derive(Default)]
+    struct FakeCache {
+        store: Mutex<HashMap<String, String>>,
+        delayed_key: Option<String>,
+        delay: Duration,
+    }
+
+    impl FakeCache {
+        fn with_delay(marker: &str, delay: Duration) -> Self {
+            Self {
+                store: Mutex::new(HashMap::new()),
+                delayed_key: Some(marker.to_string()),
+                delay,
+            }
+        }
+
+        async fn maybe_delay(&self, key: &str) {
+            if let Some(marker) = &self.delayed_key
+                && key.contains(marker)
+            {
+                tokio::time::sleep(self.delay).await;
+            }
+        }
+    }
+
+    #[async_trait]
+    impl CacheRepository for FakeCache {
+        async fn get(&self, key: &str) -> Option<String> {
+            self.maybe_delay(key).await;
+            self.store.lock().unwrap().get(key).cloned()
+        }
+        async fn set(&self, key: &str, value: &str) {
+            self.store
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), value.to_string());
+        }
+        async fn set_ex(&self, key: &str, value: &str, _ttl_secs: u64) {
+            self.set(key, value).await;
+        }
+        async fn del(&self, key: &str) {
+            self.store.lock().unwrap().remove(key);
+        }
+        async fn incr(&self, _key: &str) -> zako3_states::Result<i64> {
+            Ok(0)
+        }
+        async fn decr(&self, _key: &str) -> zako3_states::Result<i64> {
+            Ok(0)
+        }
+        async fn incrby(&self, _key: &str, _amount: i64) -> zako3_states::Result<i64> {
+            Ok(0)
+        }
+        async fn pfadd(&self, _key: &str, _element: &str) -> zako3_states::Result<()> {
+            Ok(())
+        }
+        async fn pfcount(&self, _key: &str) -> zako3_states::Result<u64> {
+            Ok(0)
+        }
+        async fn pfcount_multi(&self, _keys: &[String]) -> zako3_states::Result<u64> {
+            Ok(0)
+        }
+        async fn sadd(&self, _key: &str, _member: &str) -> zako3_states::Result<()> {
+            Ok(())
+        }
+        async fn smembers(&self, _key: &str) -> zako3_states::Result<Vec<String>> {
+            Ok(vec![])
+        }
+        async fn hgetall(&self, _key: &str) -> zako3_states::Result<Vec<(String, String)>> {
+            Ok(vec![])
+        }
+        async fn hincrby(
+            &self,
+            _key: &str,
+            _field: &str,
+            _amount: i64,
+        ) -> zako3_states::Result<i64> {
+            Ok(0)
+        }
+        async fn hdel_key(&self, _key: &str) -> zako3_states::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// In-memory `TapRepository` returning a pre-arranged tap list.
+    #[derive(Clone)]
+    struct FakeTapRepo {
+        taps: Vec<Tap>,
+    }
+
+    #[async_trait]
+    impl TapRepository for FakeTapRepo {
+        async fn create(&self, tap: &Tap) -> crate::CoreResult<Tap> {
+            Ok(tap.clone())
+        }
+        async fn list_by_owner(&self, _owner_id: UserId) -> crate::CoreResult<Vec<Tap>> {
+            Ok(self.taps.clone())
+        }
+        async fn find_by_id(&self, _id: TapId) -> crate::CoreResult<Option<Tap>> {
+            Ok(None)
+        }
+        async fn find_by_name(&self, _name: &TapName) -> crate::CoreResult<Option<Tap>> {
+            Ok(None)
+        }
+        async fn update(&self, tap: &Tap) -> crate::CoreResult<Tap> {
+            Ok(tap.clone())
+        }
+        async fn delete(&self, _id: TapId) -> crate::CoreResult<()> {
+            Ok(())
+        }
+        async fn list_all(&self) -> crate::CoreResult<Vec<Tap>> {
+            Ok(self.taps.clone())
+        }
+        async fn find_by_ids(&self, _ids: Vec<TapId>) -> crate::CoreResult<Vec<Tap>> {
+            Ok(vec![])
+        }
+    }
+
+    /// In-memory `UserRepository` resolving any id to the configured owner.
+    #[derive(Clone)]
+    struct FakeUserRepo {
+        user: User,
+    }
+
+    #[async_trait]
+    impl UserRepository for FakeUserRepo {
+        async fn find_by_discord_id(&self, _discord_id: &str) -> crate::CoreResult<Option<User>> {
+            Ok(None)
+        }
+        async fn create(&self, user: &User) -> crate::CoreResult<User> {
+            Ok(user.clone())
+        }
+        async fn find_by_id(&self, _id: UserId) -> crate::CoreResult<Option<User>> {
+            Ok(Some(self.user.clone()))
+        }
+        async fn find_by_ids(&self, _ids: Vec<UserId>) -> crate::CoreResult<Vec<User>> {
+            Ok(vec![])
+        }
+        async fn list_all(
+            &self,
+            _page: u32,
+            _per_page: u32,
+        ) -> crate::CoreResult<(Vec<User>, u64)> {
+            Ok((vec![], 0))
+        }
+        async fn update_permissions(
+            &self,
+            _id: UserId,
+            _permissions: Vec<String>,
+        ) -> crate::CoreResult<User> {
+            Ok(self.user.clone())
+        }
+        async fn set_banned_status(&self, _id: UserId, _banned: bool) -> crate::CoreResult<User> {
+            Ok(self.user.clone())
+        }
+        async fn update_oauth_token(
+            &self,
+            _id: UserId,
+            _oauth_token: Option<String>,
+        ) -> crate::CoreResult<()> {
+            Ok(())
+        }
+        async fn get_settings(
+            &self,
+            _id: UserId,
+        ) -> crate::CoreResult<Option<PartialUserSettings>> {
+            Ok(None)
+        }
+        async fn save_settings(
+            &self,
+            _id: UserId,
+            settings: &PartialUserSettings,
+        ) -> crate::CoreResult<PartialUserSettings> {
+            Ok(settings.clone())
+        }
+    }
+
+    /// In-memory `AuditLogRepo` — `list_by_user` never touches the audit log.
+    #[derive(Clone, Default)]
+    struct FakeAuditLogRepo;
+
+    #[async_trait]
+    impl AuditLogRepo for FakeAuditLogRepo {
+        async fn create(&self, dto: &CreateAuditLogDto) -> crate::CoreResult<AuditLog> {
+            Ok(AuditLog {
+                id: dto.tap_id.clone(),
+                tap_id: dto.tap_id.clone(),
+                actor_id: dto.actor_id.clone(),
+                action_type: dto.action_type.clone(),
+                metadata: dto.metadata.clone(),
+                created_at: chrono::Utc::now(),
+            })
+        }
+        async fn find_by_tap_id(
+            &self,
+            _tap_id: String,
+            _page: i64,
+            _limit: i64,
+        ) -> crate::CoreResult<(Vec<AuditLogWithActor>, i64)> {
+            Ok((vec![], 0))
+        }
+    }
+
+    fn test_service(taps: Vec<Tap>, owner: User, cache: FakeCache) -> TapService {
+        let cache: CacheRepositoryRef = Arc::new(cache);
+        TapService::new(
+            Arc::new(FakeTapRepo { taps }),
+            Arc::new(FakeUserRepo { user: owner }),
+            AuditLogService::new(Arc::new(FakeAuditLogRepo)),
+            // No timescale pool → `get_latest_rows` returns an empty map, so every tap
+            // exercises the missing-row fallback inside `map_to_tap_dto`.
+            TapMetricsService::new(cache.clone(), None, None),
+            TapHubStateService::new(cache.clone()),
+            TapNamesCacheService::new(cache.clone()),
+        )
+    }
+
+    #[tokio::test]
+    async fn list_by_user_preserves_input_order() {
+        let owner = User::new("owner1", "discord-owner1".to_string(), "owner1".to_string());
+        let taps = vec![
+            Tap::new("tap-slow", "owner1", "Slow".to_string()),
+            Tap::new("tap-b", "owner1", "B".to_string()),
+            Tap::new("tap-c", "owner1", "C".to_string()),
+        ];
+        // "tap-slow" enriches slower than the others; `.buffered` must still yield the
+        // DTOs in the original repo order. (`buffer_unordered` would emit it last.)
+        let svc = test_service(
+            taps,
+            owner,
+            FakeCache::with_delay("tap-slow", Duration::from_millis(30)),
+        );
+        let resp = svc
+            .list_by_user(UserId("owner1".to_string()))
+            .await
+            .unwrap();
+        let ids: Vec<String> = resp.data.iter().map(|d| d.tap.id.clone()).collect();
+        assert_eq!(ids, vec!["tap-slow", "tap-b", "tap-c"]);
+        assert_eq!(resp.meta.total, 3);
+    }
+
+    #[tokio::test]
+    async fn list_by_user_zero_metrics_when_no_row() {
+        let owner = User::new("owner1", "discord-owner1".to_string(), "owner1".to_string());
+        let taps = vec![Tap::new("tap-a", "owner1", "A".to_string())];
+        let svc = test_service(taps, owner, FakeCache::default());
+        let resp = svc
+            .list_by_user(UserId("owner1".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(resp.meta.total, 1);
+        assert_eq!(resp.data.len(), 1);
+        let dto = &resp.data[0];
+        assert!(dto.has_access);
+        assert_eq!(dto.owner.username, "owner1");
+        // No metrics row and no Redis deltas → everything zeroes out.
+        assert_eq!(dto.tap.total_uses, 0);
+        assert_eq!(dto.tap.cache_hits, 0);
+        assert_eq!(dto.tap.stats.total_uses, 0);
+        assert_eq!(dto.tap.stats.cache_hits, 0);
+        assert_eq!(dto.tap.stats.unique_users, 0);
     }
 }
