@@ -109,11 +109,10 @@ impl TransportClient {
     /// One request/response exchange with a per-attempt timeout, isolated to a single
     /// pooled connection so a failure here never disturbs sibling requests on the other
     /// pooled connections. Recovery is scoped:
-    /// - **Timeout**: the request's own QUIC stream is already dropped when the future is
-    ///   cancelled; we do NOT reset the connection (that would tear down unrelated
-    ///   in-flight requests sharing it). We just retry on a fresh stream. Genuinely dead
-    ///   connections are caught by keepalive + `ReconnectingClient`'s auto-reconnect on
-    ///   the next `open_chan`.
+    /// - **Timeout**: the request's own QUIC stream is dropped when the future is
+    ///   cancelled, and we reset *this* pooled connection before retrying so a wedged
+    ///   connection (one that accepts the channel but never answers) is evicted from
+    ///   the pool instead of being reused forever. Sibling connections are untouched.
     /// - **Transport error**: reset only *this* pooled connection, then retry.
     ///
     /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
@@ -149,8 +148,12 @@ impl TransportClient {
                     tracing::warn!(
                         timeout_ms = self.request_timeout.as_millis() as u64,
                         attempt,
-                        "taphub request timed out; retrying on a fresh stream (connection left intact)"
+                        "taphub request timed out; resetting this pooled connection and retrying"
                     );
+                    // A connection that accepts a channel but never answers is wedged;
+                    // leaving it intact (as before) kept routing requests to a dead
+                    // connection forever. Reset it so the retry lands on a fresh one.
+                    conn.reset(RESET_CLOSE_CODE).await;
                 }
                 Err(_) => {
                     return Err(TapHubError::Internal(format!(

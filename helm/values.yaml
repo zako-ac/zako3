@@ -133,6 +133,10 @@ audioEngine:
     name: ""
     discordTokenKey: "discord-token"
     aeTokenKey: "ae-token"
+  # Per-attempt request timeout for AE → taphub transport calls (ms). Must be
+  # >= taphub.requestTimeoutMs (13s) or the AE gives up on requests the hub
+  # would still answer, making every slow tap look like a stall.
+  requestTimeoutMs: "13000"
 
 # --- Traffic Light ---
 trafficLight:
