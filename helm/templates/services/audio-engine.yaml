@@ -79,7 +79,7 @@ spec:
             - name: TAPHUB_TRANSPORT_CERT_FILE
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: TAPHUB_REQUEST_TIMEOUT_MS
-              value: "6000"
+              value: {{ .Values.audioEngine.requestTimeoutMs | default "13000" | quote }}
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
             {{- include "zako3.otlpAuthEnv" . | nindent 12 }}

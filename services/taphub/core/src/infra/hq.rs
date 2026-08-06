@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use std::time::Duration;
 use zako3_types::{
     ZakoError, ZakoResult,
     hq::{DiscordUserId, Tap, User, rpc::HqRpcClient},
@@ -22,6 +23,10 @@ impl RpcHqRepository {
 
         let http_client = HttpClientBuilder::default()
             .set_headers(headers)
+            // Explicit cap (default is 60s) so a stalled HQ never holds a tap
+            // request hostage; a slow HQ call fails fast and the request errors
+            // instead of piling up behind the jsonrpsee default timeout.
+            .request_timeout(Duration::from_secs(5))
             .build(url)
             .map_err(|e| ZakoError::Rpc(e.to_string()))?;
 
