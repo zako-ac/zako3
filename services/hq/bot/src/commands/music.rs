@@ -215,7 +215,14 @@ pub async fn wedding(
 
     let twisted = twisted.unwrap_or_else(|| RandomState::new().build_hasher().finish() % 4 == 0);
     let ars = if twisted { "c" } else { "wedding" };
-    ctx.data()
+
+    // Send "Loading…" immediately so the user sees a response while the engine works.
+    let reply_handle = ctx
+        .send(poise::CreateReply::default().content("로딩 중…"))
+        .await?;
+
+    let result = ctx
+        .data()
         .service
         .audio_engine
         .play(
@@ -227,18 +234,35 @@ pub async fn wedding(
             Volume::from(1.0f32),
             discord_user_id,
         )
-        .await?;
+        .await
+        .map_err(Error::from);
 
-    let idx = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as usize)
-        .unwrap_or(0);
-    let msg = if twisted {
-        CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
-    } else {
-        CONGRATS[idx % CONGRATS.len()]
-    };
-    ctx.say(msg).await?;
+    match result {
+        Ok(()) => {
+            let idx = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as usize)
+                .unwrap_or(0);
+            let msg = if twisted {
+                CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
+            } else {
+                CONGRATS[idx % CONGRATS.len()]
+            };
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content(msg))
+                .await?;
+        }
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("wedding command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
     Ok(())
 }
 
@@ -264,7 +288,14 @@ pub async fn resurrection(
     let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
 
     let ars = "r";
-    ctx.data()
+
+    // Send "Loading…" immediately so the user sees a response while the engine works.
+    let reply_handle = ctx
+        .send(poise::CreateReply::default().content("로딩 중…"))
+        .await?;
+
+    let result = ctx
+        .data()
         .service
         .audio_engine
         .play(
@@ -276,14 +307,31 @@ pub async fn resurrection(
             Volume::from(1.0f32),
             discord_user_id,
         )
-        .await?;
+        .await
+        .map_err(Error::from);
 
-    let idx = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as usize)
-        .unwrap_or(0);
-    let msg = CONGRATS_RESURRECTION[idx % CONGRATS_RESURRECTION.len()];
-    ctx.say(msg).await?;
+    match result {
+        Ok(()) => {
+            let idx = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as usize)
+                .unwrap_or(0);
+            let msg = CONGRATS_RESURRECTION[idx % CONGRATS_RESURRECTION.len()];
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content(msg))
+                .await?;
+        }
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("resurrection command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
     Ok(())
 }
 
