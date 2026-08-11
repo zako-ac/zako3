@@ -49,7 +49,6 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
 
     let mut cfg = protofish3::ServerConfig::new(bind_address, cert_chain, private_key);
     cfg.protofish = default_protofish3_config();
-    cfg.protofish.keepalive_timeout = None;
 
     Ok(cfg)
 }
