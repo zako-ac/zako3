@@ -146,7 +146,6 @@ trafficLight:
     name: ""
     discordTokensKey: "discord-tokens"
   metricsPort: "9090"
-  tokioConsolePort: "6669"
 
 # --- Web frontend ---
 web:
@@ -197,7 +196,6 @@ ports:
   # zakofish (protofish3) tap listener port.
   taphubZakofish: 1028
   tlRpc: 7070
-  tlAeTransport: 7071
   cache: 4100
   web: 80
 
