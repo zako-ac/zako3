@@ -11,6 +11,26 @@ image:
   pullPolicy: IfNotPresent
 ```
 
+### Pin an immutable tag for production
+
+`.github/workflows/docker-publish.yml` publishes two tags for every `main`
+build: `latest` and a **short-SHA immutable tag** (e.g. `a1b2c3d`, the commit
+`git rev-parse --short HEAD`). `latest` is a moving target — it does not tell you
+which binary version is running, which makes outage forensics and rollbacks
+hard (see the traffic-light RPC listener outage RCA).
+
+For reproducible, versioned deploys pin `tag` to the short-SHA tag instead:
+
+```yaml
+image:
+  registry: "ghcr.io/zako-ac"
+  tag: a1b2c3d
+  pullPolicy: IfNotPresent
+```
+
+Because the tag is immutable, the exact commit/version running is known, and
+rollback is just re-applying a previous tag. `latest` remains the dev default.
+
 ## nodeAffinity
 
 Node affinity rules can be set globally (applied to all pods) or overridden per service. The per-service value takes precedence over the global one; both empty means no constraint.

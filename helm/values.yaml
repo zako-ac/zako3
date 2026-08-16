@@ -1,5 +1,9 @@
 image:
   registry: ""
+  # Immutable tag is strongly preferred for reproducibility: docker-publish
+  # pushes a short-SHA tag (<commit sha>, e.g. "a1b2c3d") for every main build
+  # alongside "latest". Pin `tag` to that SHA so the deployed binary version is
+  # known and reproducible; "latest" makes rollbacks and version forensics hard.
   tag: latest
   pullPolicy: IfNotPresent
 
