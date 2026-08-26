@@ -94,3 +94,9 @@ opt-level = 0
 
 [patch.crates-io.zod_gen]
 path = "vendor/zod_gen"
+
+[patch."https://github.com/zako-ac/protofish3-rs"]
+# Local patch of the protofish3 dependency carrying the stall-free driver fix and
+# ReconnectingClient pooling (see protofish3-rs branch fix/driver-stall-pooling).
+# In production this resolves to the pushed commit/branch rev instead of a path.
+protofish3 = { path = "/home/attacca/protofish3-rs/protofish3" }
