@@ -260,7 +260,7 @@ impl SessionControl {
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
-    pub async fn next_music(&self) -> ZakoResult<()> {
+    pub async fn next_music(self: &Arc<Self>) -> ZakoResult<()> {
         let music_tracks = self
             .state_service
             .get_session(self.guild_id, self.channel_id)
@@ -563,10 +563,7 @@ pub fn create_session_control(
         // and any shared reconcile is still serialized by reconcile_guard.
         while let Some(track_id) = end_rx.recv().await {
             let sc = sc_clone.clone();
-            let sc = sc_clone.clone();
-            let permit = end_sem.clone();
             tokio::spawn(async move {
-                let _permit = permit.acquire_owned().await;
                 if let Err(e) = sc.handle_ended_track(track_id).await {
                     tracing::warn!(track_id = %track_id, error = %e, "Failed to handle ended track");
                 }
