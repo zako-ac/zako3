@@ -67,6 +67,7 @@ impl TransportClient {
             max_backoff: Duration::from_secs(5),
             backoff_multiplier: 2.0,
             max_retries: None,
+            pool_size: 1,
         };
 
         let mut conns = Vec::with_capacity(POOL_SIZE);
