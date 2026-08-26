@@ -66,7 +66,7 @@ anyhow = "1.0"
 mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
-protofish3 = { git = "https://github.com/zako-ac/protofish3-rs" }
+protofish3 = { git = "https://github.com/zako-ac/protofish3-rs", rev = "94f9f5dc6ed54028aa79c8455a931c24b6bfae50" }
 async-nats = "0.45.0"
 dashmap = "6"
 envy = "0.4"
@@ -94,9 +94,3 @@ opt-level = 0
 
 [patch.crates-io.zod_gen]
 path = "vendor/zod_gen"
-
-[patch."https://github.com/zako-ac/protofish3-rs"]
-# Local patch of the protofish3 dependency carrying the stall-free driver fix and
-# ReconnectingClient pooling (see protofish3-rs branch fix/driver-stall-pooling).
-# In production this resolves to the pushed commit/branch rev instead of a path.
-protofish3 = { path = "/home/attacca/protofish3-rs/protofish3" }
