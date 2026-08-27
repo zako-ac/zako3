@@ -297,7 +297,7 @@ mod tests {
             .map(|id| SessionRoute { worker_id: WorkerId(id), ae_id: AeId(1) })
             .find(|r| *r != top)
             .unwrap();
-        state.sessions.insert(other, session);
+        state.insert_session(other, session);
         assert_eq!(first_route(&state, 1, 100), other);
     }
 
@@ -307,7 +307,7 @@ mod tests {
         // must land on two different workers, deterministically.
         let mut state = state_with_workers(4, 1);
         let r1 = first_route(&state, 1, 100);
-        state.sessions.insert(
+        state.insert_session(
             r1,
             SessionInfo { guild_id: GuildId::from(1u64), channel_id: ChannelId::from(100u64) },
         );
