@@ -203,7 +203,7 @@ async fn re_register_same_addr_keeps_worker_id_and_clears_sessions() {
     // Inject a cached session under the assigned route to simulate an active session
     {
         let mut s = state.write().await;
-        s.sessions.insert(
+        s.insert_session(
             SessionRoute { worker_id: WorkerId(0), ae_id: AeId(1) },
             SessionInfo { guild_id: GuildId::from(42u64), channel_id: ChannelId::from(99u64) },
         );
@@ -334,7 +334,7 @@ async fn heartbeat_does_not_evict_sessions() {
     // Inject an active session (simulates a committed Join)
     {
         let mut s = state.write().await;
-        s.sessions.insert(
+        s.insert_session(
             SessionRoute { worker_id: WorkerId(0), ae_id: AeId(1) },
             SessionInfo { guild_id: GuildId::from(7u64), channel_id: ChannelId::from(8u64) },
         );
