@@ -22,6 +22,15 @@ use crate::{
 /// from evicting a healthy session and triggering a leave/rejoin.
 const TEARDOWN_THRESHOLD: u8 = 3;
 
+/// Number of consecutive reconcile cycles a cached session must be absent from the AE's live
+/// Discord voice state before TL prunes it. Reconcile runs every 60s, so N=2 ≈ 2 minutes of
+/// sustained absence. The AE's voice-state report is authoritative (it reads the AE's own
+/// Discord gateway), so once a session has been absent across several cycles it is definitively
+/// stale. The grace guards the narrow window between a Join being accepted by the AE (returns
+/// Ok) and the bot's voice connection becoming visible in the voice-state report — a fresh join
+/// must not be spuriously evicted.
+const RECONCILE_ABSENCE_THRESHOLD: u8 = 2;
+
 pub struct TlService {
     state: Arc<RwLock<ZakoState>>,
     dispatcher: Arc<dyn AeDispatcher>,
@@ -29,6 +38,12 @@ pub struct TlService {
     /// at once, so strikes are tracked per `(route, guild)` — one guild's repeated failures
     /// must not evict a healthy session the same bot holds in another guild.
     sync_failures: Mutex<FxHashMap<(SessionRoute, GuildId), u8>>,
+    /// Consecutive reconcile cycles a cached session has been absent from the AE's live Discord
+    /// voice state, per `(route, guild)`. Unlike `sync_failures` (which probes via
+    /// GetSessionState and can be fooled by a surviving stale AE SessionControl), this tracks
+    /// absence from the AE's authoritative voice-state report, so a stale cache entry that
+    /// `sync_sessions` would otherwise never evict still gets pruned.
+    reconcile_absent: Mutex<FxHashMap<(SessionRoute, GuildId), u8>>,
 }
 
 impl TlService {
@@ -37,6 +52,7 @@ impl TlService {
             state,
             dispatcher,
             sync_failures: Mutex::new(FxHashMap::default()),
+            reconcile_absent: Mutex::new(FxHashMap::default()),
         }
     }
 
@@ -546,6 +562,58 @@ impl TlService {
                             "reconcile: repaired moved session(s)"
                         );
                     }
+
+                    // Prune cached sessions the AE no longer reports as live Discord connections.
+                    // The AE's voice-state report is authoritative (it reads the AE's own Discord
+                    // gateway), so a cached session whose guild is absent is stale — typically a
+                    // bot that left or moved out-of-band while the AE's old SessionControl
+                    // survived. `sync_sessions` would never evict it (GetSessionState keeps
+                    // succeeding on the stale SessionControl), leaving the bot permanently
+                    // "already joined" in a guild it isn't actually in, so Join there becomes a
+                    // silent no-op. Require a few consecutive absences so an in-flight Join
+                    // (accepted by the AE but whose voice connection isn't visible yet) isn't
+                    // spuriously evicted — the next reconcile re-adopts it once it appears.
+                    let mut pruned = 0u32;
+                    {
+                        let mut state = self.state.write().await;
+                        let mut absent = self.reconcile_absent.lock().unwrap();
+                        for cached_info in &cached {
+                            if live_by_guild.contains_key(&cached_info.guild_id) {
+                                absent.remove(&(route, cached_info.guild_id));
+                                continue;
+                            }
+                            let n = {
+                                let e = absent.entry((route, cached_info.guild_id)).or_insert(0);
+                                *e = e.saturating_add(1);
+                                *e
+                            };
+                            if n >= RECONCILE_ABSENCE_THRESHOLD {
+                                if state.remove_session(&route, cached_info.guild_id) {
+                                    info!(
+                                        worker_id = route.worker_id.0,
+                                        ae_id = route.ae_id.0,
+                                        guild_id = ?cached_info.guild_id,
+                                        "reconcile: pruned stale session absent from AE live voice state"
+                                    );
+                                    pruned += 1;
+                                }
+                                absent.remove(&(route, cached_info.guild_id));
+                            }
+                        }
+                        // Drop counters for sessions no longer tracked at all so the map can't
+                        // grow without bound.
+                        let tracked: Vec<(SessionRoute, GuildId)> =
+                            cached.iter().map(|c| (route, c.guild_id)).collect();
+                        absent.retain(|(r, g), _| tracked.contains(&(*r, *g)));
+                    }
+                    if pruned > 0 {
+                        info!(
+                            worker_id = route.worker_id.0,
+                            ae_id = route.ae_id.0,
+                            pruned,
+                            "reconcile: pruned stale session(s)"
+                        );
+                    }
                 }
                 Ok(other) => {
                     warn!(
@@ -1016,6 +1084,53 @@ mod tests {
 
         TlService::new(state, dispatcher).reconcile().await;
         // Should complete without panic
+    }
+
+    #[tokio::test]
+    async fn reconcile_prunes_cached_session_absent_from_live() {
+        // A cached session whose guild the AE no longer reports as a live Discord connection is
+        // stale (the bot left/moved out-of-band, but the AE's old SessionControl survived, so
+        // `sync_sessions`' GetSessionState would keep succeeding and never evict it). Without a
+        // fix, TL keeps answering "already joined" in that guild and Join there is a permanent
+        // no-op. Reconcile must prune it. The absence must persist across
+        // RECONCILE_ABSENCE_THRESHOLD cycles so an in-flight Join isn't spuriously evicted.
+        let stale = session(1, 100);
+        let state = state_with_session(stale);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(|| Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![]))),
+        });
+        let service = TlService::new(state.clone(), dispatcher);
+
+        // A single absent cycle is not enough (guards the in-flight Join window).
+        service.reconcile().await;
+        assert!(
+            state
+                .read()
+                .await
+                .sessions_for_route(&route())
+                .contains(&stale),
+            "must not prune after a single absent cycle"
+        );
+
+        // Sustained absence across the threshold prunes the stale session.
+        for _ in 0..RECONCILE_ABSENCE_THRESHOLD {
+            service.reconcile().await;
+        }
+        assert!(
+            state.read().await.sessions_for_route(&route()).is_empty(),
+            "stale session pruned after sustained absence"
+        );
+
+        // Reconcile never sends Leave — pruning only drops the cache entry.
+        let call_list = calls.lock().unwrap();
+        assert!(
+            call_list
+                .iter()
+                .all(|c| matches!(c, MockCall::FetchDiscordVoiceState)),
+            "no Leave during reconcile"
+        );
     }
 
     #[tokio::test]
