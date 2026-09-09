@@ -1,6 +1,6 @@
 {{- $fullname := include "zako3.fullname" . -}}
 {{- $secretName := ternary (printf "%s-openobserve-secret" $fullname) .Values.openobserve.existingSecret.name (not .Values.openobserve.existingSecret.name) -}}
-{{- $pvc := dict "root" . "persistence" .Values.openobserve.persistence "default" "openobserve-data" "size" .Values.openobserve.storageSize "accessMode" "ReadWriteOnce" -}}
+{{- $pvc := dict "root" . "persistence" .Values.openobserve.persistence "default" "openobserve-data" "size" (.Values.openobserve.storageSize | default "20Gi") "accessMode" "ReadWriteOnce" -}}
 {{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: v1

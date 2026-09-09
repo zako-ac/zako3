@@ -1,5 +1,5 @@
 {{- if .Values.timescale.enabled }}
-{{- $pvc := dict "root" . "persistence" .Values.timescale.persistence "default" "timescale-data" "size" .Values.timescale.storageSize "accessMode" "ReadWriteOnce" }}
+{{- $pvc := dict "root" . "persistence" .Values.timescale.persistence "default" "timescale-data" "size" (.Values.timescale.storageSize | default "20Gi") "accessMode" "ReadWriteOnce" }}
 {{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: apps/v1

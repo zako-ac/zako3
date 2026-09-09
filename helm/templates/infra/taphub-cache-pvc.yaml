@@ -1,1 +1,1 @@
-{{- include "zako3.pvc" (dict "root" . "persistence" .Values.cache.persistence "default" "taphub-cache" "size" .Values.taphub.cacheStorageSize "accessMode" "ReadWriteMany") }}
+{{- include "zako3.pvc" (dict "root" . "persistence" .Values.cache.persistence "default" "taphub-cache" "size" (.Values.taphub.cacheStorageSize | default "5Gi") "accessMode" "ReadWriteMany") }}

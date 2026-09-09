@@ -1,5 +1,5 @@
 {{- $fullname := include "zako3.fullname" . -}}
-{{- $pvc := dict "root" . "persistence" .Values.clickstack.persistence "default" "clickstack-data" "size" .Values.clickstack.storageSize "accessMode" "ReadWriteOnce" -}}
+{{- $pvc := dict "root" . "persistence" .Values.clickstack.persistence "default" "clickstack-data" "size" (.Values.clickstack.storageSize | default "20Gi") "accessMode" "ReadWriteOnce" -}}
 {{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: apps/v1

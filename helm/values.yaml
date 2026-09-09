@@ -42,7 +42,7 @@ postgres:
     name: ""
     existingClaim: ""
     storageClass: ""
-    size: "10Gi"
+    size: ""
     accessModes: []
     annotations: {}
     volumeName: ""
@@ -63,7 +63,7 @@ timescale:
     name: ""
     existingClaim: ""
     storageClass: ""
-    size: "20Gi"
+    size: ""
     accessModes: []
     annotations: {}
     volumeName: ""
@@ -213,7 +213,7 @@ cache:
     name: ""
     existingClaim: ""
     storageClass: ""
-    size: "5Gi"
+    size: ""
     accessModes: []          # default: [ReadWriteMany]
     annotations: {}
     volumeName: ""
@@ -277,7 +277,7 @@ openobserve:
     name: ""
     existingClaim: ""
     storageClass: ""
-    size: "20Gi"
+    size: ""
     accessModes: []
     annotations: {}
     volumeName: ""
@@ -298,7 +298,7 @@ clickstack:
     name: ""
     existingClaim: ""
     storageClass: ""
-    size: "20Gi"
+    size: ""
     accessModes: []
     annotations: {}
     volumeName: ""

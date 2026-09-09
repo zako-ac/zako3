@@ -1,5 +1,5 @@
 {{- if .Values.postgres.enabled }}
-{{- $pvc := dict "root" . "persistence" .Values.postgres.persistence "default" "postgres-data" "size" .Values.postgres.storageSize "accessMode" "ReadWriteOnce" }}
+{{- $pvc := dict "root" . "persistence" .Values.postgres.persistence "default" "postgres-data" "size" (.Values.postgres.storageSize | default "10Gi") "accessMode" "ReadWriteOnce" }}
 {{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: apps/v1
