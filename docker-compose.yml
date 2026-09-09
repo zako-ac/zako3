@@ -77,6 +77,7 @@ services:
       NATS_URL: nats://nats:4222
       HQ_CACHE_RPC_URL: http://cache:4100
       HQ_CACHE_RPC_ADMIN_TOKEN: ${ZK_TH_CACHE_RPC_ADMIN_TOKEN:-}
+      HQ_CACHE_SINK_ID: ${HQ_CACHE_SINK_ID:-}
     ports:
       - "8080:8080"
       - "50052:50052"
@@ -139,10 +140,32 @@ services:
       ZK_CACHE_MAX_BYTES: ${ZK_CACHE_MAX_BYTES:-}
       ZK_CACHE_GC_INTERVAL_SECONDS: ${ZK_CACHE_GC_INTERVAL_SECONDS:-1800}
       ZK_CACHE_PRELOAD_SESSION_TTL_SECONDS: ${ZK_CACHE_PRELOAD_SESSION_TTL_SECONDS:-300}
+      ZK_CACHE_UDP_BIND_ADDR: ${ZK_CACHE_UDP_BIND_ADDR:-}
+      ZK_CACHE_UDP_INTERNAL_ADDR: ${ZK_CACHE_UDP_INTERNAL_ADDR:-cache:4101}
+      ZK_CACHE_SINK_ID: ${ZK_CACHE_SINK_ID:-cache}
+      ZK_CACHE_UDP_MAX_SESSIONS: ${ZK_CACHE_UDP_MAX_SESSIONS:-64}
       REDIS_URL: redis://redis:6379
       OTLP_ENDPOINT: http://otel-lgtm:4317
     ports:
       - "4100:4100"
+      - "4101:4101/udp"
+    depends_on:
+      - redis
+
+  ae-proxy:
+    build:
+      context: .
+      dockerfile: workers/ae-proxy/Dockerfile.dev
+    environment:
+      ZK_AEP_BIND_ADDR: "0.0.0.0:5000"
+      ZK_AEP_MAX_ROUTES: ${ZK_AEP_MAX_ROUTES:-4096}
+      ZK_AEP_MAX_PENDING: ${ZK_AEP_MAX_PENDING:-512}
+      ZK_AEP_ROUTE_IDLE_SECONDS: ${ZK_AEP_ROUTE_IDLE_SECONDS:-300}
+      REDIS_URL: redis://redis:6379
+      OTLP_ENDPOINT: http://otel-lgtm:4317
+      METRICS_PORT: "9095"
+    ports:
+      - "5000:5000/udp"
     depends_on:
       - redis
 

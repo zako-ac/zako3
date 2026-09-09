@@ -48,6 +48,7 @@ jobs:
              target/release/metrics-sync \
              target/release/traffic-light \
              target/release/zako3-emoji-matcher \
+             target/release/zako3-ae-proxy \
              dist/
 
       - name: Upload binaries
@@ -87,6 +88,9 @@ jobs:
             artifact: rust-binaries
           - name: emoji-matcher
             dockerfile: workers/emoji-matcher/Dockerfile
+            artifact: rust-binaries
+          - name: ae-proxy
+            dockerfile: workers/ae-proxy/Dockerfile
             artifact: rust-binaries
 
     steps:

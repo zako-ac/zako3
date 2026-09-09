@@ -9,8 +9,9 @@ use std::sync::atomic::Ordering;
 
 use bytes::Bytes;
 use tokio::sync::mpsc;
-use zako3_cache_client::CreatePreloadReq;
+use zako3_cache_client::{CreateIngestReq, CreatePreloadReq};
 use zako3_preload_cache::{AudioCache, PreloadId};
+use zako3_types::{AudioCachePolicy, AudioMetadata};
 
 use crate::server::state::{AppState, PreloadSession, active_key};
 
@@ -34,6 +35,9 @@ pub enum PreloadError {
     #[error("cache key is not serialisable: {0}")]
     BadCacheKey(String),
 
+    #[error("preload {0} was not opened as a UDP ingest")]
+    NotAnIngest(u64),
+
     #[error("failed to store preload {id}: {source}")]
     Store {
         id: u64,
@@ -47,13 +51,7 @@ pub enum PreloadError {
 /// The staging file exists from this moment, not from the first frame — which
 /// is why [`AppState::in_flight_paths`] has to protect it straight away.
 pub fn open_session(state: &AppState, req: CreatePreloadReq) -> Result<PreloadId, PreloadError> {
-    let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
-    let key_json = serde_json::to_string(&req.item.key)
-        .map_err(|e| PreloadError::BadCacheKey(e.to_string()))?;
-
-    let (sender, receiver) = mpsc::channel::<Bytes>(FRAME_CHANNEL_CAP);
-    let signal = state.preload.preload(preload_id, receiver);
-
+    let (preload_id, key_json, signal, sender) = stage(state, &req.item)?;
     let session = Arc::new(PreloadSession::new(
         preload_id,
         req.item.clone(),
@@ -63,13 +61,46 @@ pub fn open_session(state: &AppState, req: CreatePreloadReq) -> Result<PreloadId
         signal,
         sender,
     ));
-
-    state.sessions.insert(preload_id.0, session);
-    state
-        .active_by_key
-        .insert(active_key(&req.item.tap_id.0, &key_json), preload_id.0);
-
+    index(state, &req.item.tap_id.0, &key_json, session);
     Ok(preload_id)
+}
+
+/// Open a session for a UDP ingest, with its metadata still to come.
+///
+/// Identical to [`open_session`] except that it will not commit until
+/// [`finalize_ingest`] supplies the metadata the tap has not sent yet.
+pub fn open_ingest_session(
+    state: &AppState,
+    req: &CreateIngestReq,
+) -> Result<PreloadId, PreloadError> {
+    let (preload_id, key_json, signal, sender) = stage(state, &req.item)?;
+    let session = Arc::new(PreloadSession::new_pending(
+        preload_id,
+        req.item.clone(),
+        req.cache_key.clone(),
+        key_json.clone(),
+        signal,
+        sender,
+    ));
+    index(state, &req.item.tap_id.0, &key_json, session);
+    Ok(preload_id)
+}
+
+type Staged = (PreloadId, String, Arc<zako3_preload_cache::WriteSignal>, mpsc::Sender<Bytes>);
+
+fn stage(state: &AppState, item: &zako3_types::cache::AudioCacheItem) -> Result<Staged, PreloadError> {
+    let preload_id = PreloadId(uuid::Uuid::new_v4().as_u128() as u64);
+    let key_json =
+        serde_json::to_string(&item.key).map_err(|e| PreloadError::BadCacheKey(e.to_string()))?;
+    let (sender, receiver) = mpsc::channel::<Bytes>(FRAME_CHANNEL_CAP);
+    let signal = state.preload.preload(preload_id, receiver);
+    Ok((preload_id, key_json, signal, sender))
+}
+
+fn index(state: &AppState, tap_id: &str, key_json: &str, session: Arc<PreloadSession>) {
+    let id = session.preload_id.0;
+    state.sessions.insert(id, session);
+    state.active_by_key.insert(active_key(tap_id, key_json), id);
 }
 
 pub fn get_session(state: &AppState, id: PreloadId) -> Result<Arc<PreloadSession>, PreloadError> {
@@ -139,12 +170,13 @@ pub async fn commit_session(state: &AppState, id: PreloadId) -> Result<(), Prelo
         return Err(PreloadError::StagedFileMissing(id.0));
     }
 
+    let target = session.target();
     let res = state
         .cache
         .store_from_path(
             session.item.clone(),
-            session.metadatas.clone(),
-            session.cache_key.clone(),
+            target.metadatas,
+            target.cache_key,
             &opus_path,
         )
         .await;
@@ -177,6 +209,48 @@ pub async fn abort_session(state: &AppState, id: PreloadId) -> Result<(), Preloa
         tracing::warn!(%e, preload_id = id.0, "delete_preload failed during abort");
     }
     Ok(())
+}
+
+/// Attach the metadata a UDP ingest was opened without, and commit if the
+/// audio has already finished.
+pub async fn finalize_ingest(
+    state: &AppState,
+    id: PreloadId,
+    metadatas: Vec<AudioMetadata>,
+    cache_key: AudioCachePolicy,
+) -> Result<(), PreloadError> {
+    let session = get_session(state, id)?;
+    if !session.is_ingest() {
+        return Err(PreloadError::NotAnIngest(id.0));
+    }
+    session.touch();
+    session.finalize(metadatas, cache_key);
+    commit_if_ready(state, id, &session).await
+}
+
+/// Record that the last audio frame is in the writer, and commit if the
+/// metadata has already arrived.
+pub async fn audio_complete(state: &AppState, id: PreloadId) -> Result<(), PreloadError> {
+    let session = get_session(state, id)?;
+    session.touch();
+    finish_frames(state, id).await?;
+    session.mark_audio_done();
+    commit_if_ready(state, id, &session).await
+}
+
+/// Commit exactly once, from whichever of the two halves finishes last.
+async fn commit_if_ready(
+    state: &AppState,
+    id: PreloadId,
+    session: &Arc<PreloadSession>,
+) -> Result<(), PreloadError> {
+    if !session.committable() || !session.claim_commit() {
+        return Ok(());
+    }
+    match commit_session(state, id).await {
+        Ok(()) | Err(PreloadError::NoSuchSession(_)) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Drop a session from both indexes.

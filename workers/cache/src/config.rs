@@ -18,6 +18,27 @@ pub struct Config {
     /// for that cache key. Zero disables the reaper.
     pub preload_session_ttl: Duration,
     pub gc: GcConfig,
+    /// UDP ingest, when it is configured. `None` leaves the worker HTTP-only,
+    /// which is what every pre-v4 deployment stays as.
+    pub udp: Option<UdpConfig>,
+}
+
+/// The cache worker as a protofish4 sink.
+#[derive(Debug, Clone)]
+pub struct UdpConfig {
+    pub bind_addr: String,
+    /// How this worker is named in the sink registry. HQ resolves the same id
+    /// to fill `deliver_to`, so the two must agree.
+    pub sink_id: String,
+    /// Where the proxy forwards to. Defaults to the bind address, which is
+    /// wrong under a wildcard bind — hence the override.
+    pub internal_addr: String,
+    /// Set only once this worker has a public IP of its own, at which point
+    /// taps are pointed straight here and the proxy drops out of the path.
+    pub public_addr: Option<String>,
+    /// Concurrent transfers. Each holds a reorder window, so this is the
+    /// memory bound.
+    pub max_sessions: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +88,35 @@ impl Config {
                 .unwrap_or(300),
         );
 
+        // Ingest is off unless a bind address is given: the port has to be
+        // opened in the deployment anyway, so making it explicit keeps a
+        // half-configured worker from advertising a sink nothing can reach.
+        let udp = env::var("ZK_CACHE_UDP_BIND_ADDR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(|bind_addr| {
+                let internal_addr = env::var("ZK_CACHE_UDP_INTERNAL_ADDR")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| bind_addr.clone());
+                UdpConfig {
+                    bind_addr,
+                    sink_id: env::var("ZK_CACHE_SINK_ID")
+                        .ok()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| "cache".to_string()),
+                    internal_addr,
+                    public_addr: env::var("ZK_CACHE_UDP_PUBLIC_ADDR")
+                        .ok()
+                        .filter(|s| !s.is_empty()),
+                    max_sessions: env::var("ZK_CACHE_UDP_MAX_SESSIONS")
+                        .ok()
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .filter(|v| *v > 0)
+                        .unwrap_or(64),
+                }
+            });
+
         let interval_secs = env::var("ZK_CACHE_GC_INTERVAL_SECONDS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
@@ -88,6 +138,7 @@ impl Config {
             metrics_port,
             warmup_concurrency,
             preload_session_ttl,
+            udp,
             gc: GcConfig {
                 interval: Duration::from_secs(interval_secs),
                 max_bytes,

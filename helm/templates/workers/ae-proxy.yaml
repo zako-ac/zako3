@@ -1,0 +1,107 @@
+{{- if .Values.aeProxy.enabled }}
+{{- $fullname := include "zako3.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-ae-proxy
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ae-proxy
+spec:
+  # Single replica while the route table is in-memory: a second replica would
+  # see only the datagrams the load balancer happened to send it, and source
+  # pinning is per-process. Scaling this needs the routes shared, not more pods.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "ae-proxy" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "ae-proxy" "Release" .Release) | nindent 8 }}
+    spec:
+      {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.aeProxy.nodeAffinity) | nindent 6 }}
+      containers:
+        - name: ae-proxy
+          image: {{ include "zako3.imageRef" (dict "registry" .Values.image.registry "name" "ae-proxy" "tag" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["zako3-ae-proxy"]
+          ports:
+            - name: ingest
+              protocol: UDP
+              containerPort: {{ .Values.ports.aeProxyIngest }}
+            - name: metrics
+              containerPort: {{ .Values.aeProxy.metricsPort | int }}
+          env:
+            - name: ZK_AEP_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.aeProxyIngest }}"
+            - name: ZK_AEP_MAX_ROUTES
+              value: {{ .Values.aeProxy.maxRoutes | quote }}
+            - name: ZK_AEP_MAX_PENDING
+              value: {{ .Values.aeProxy.maxPending | quote }}
+            - name: ZK_AEP_ROUTE_IDLE_SECONDS
+              value: {{ .Values.aeProxy.routeIdleSeconds | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.aeProxy.metricsPort | quote }}
+            {{- include "zako3.sharedEnv" . | nindent 12 }}
+            {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
+          # UDP cannot be probed, so the HTTP metrics port is what the kubelet
+          # checks. Health flips only once the UDP socket is bound.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-ae-proxy
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "ae-proxy" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.aeProxy.metricsPort | int }}
+      targetPort: metrics
+---
+# The public UDP port. Separate from the ClusterIP service above so the internal
+# metrics port is not exposed with it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-ae-proxy-ingest
+  {{- with .Values.aeProxy.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    {{- include "zako3.selectorLabels" (dict "component" "ae-proxy" "Release" .Release) | nindent 4 }}
+  ports:
+    - name: ingest
+      protocol: UDP
+      port: {{ .Values.ports.aeProxyIngest }}
+      # Numeric rather than named: a named targetPort is unreliable for UDP
+      # services on several CNIs.
+      targetPort: {{ .Values.ports.aeProxyIngest }}
+{{- end }}

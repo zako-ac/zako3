@@ -28,6 +28,11 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.ports.cache }}
+            {{- if .Values.cache.udp.enabled }}
+            - name: udp-ingest
+              containerPort: {{ .Values.ports.cacheUdpIngest }}
+              protocol: UDP
+            {{- end }}
           env:
             - name: ZK_CACHE_BIND_ADDR
               value: "0.0.0.0:{{ .Values.ports.cache }}"
@@ -42,6 +47,24 @@ spec:
             {{- if .Values.cache.maxCacheBytes }}
             - name: ZK_CACHE_MAX_BYTES
               value: {{ .Values.cache.maxCacheBytes | quote }}
+            {{- end }}
+            {{- if .Values.cache.udp.enabled }}
+            # Ingest is off unless a bind address is given, so a worker that has
+            # not had its port opened never advertises a sink nothing can reach.
+            - name: ZK_CACHE_UDP_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.cacheUdpIngest }}"
+            # What the proxy forwards to. The bind address is a wildcard and
+            # would be useless as an advertisement.
+            - name: ZK_CACHE_UDP_INTERNAL_ADDR
+              value: "{{ $fullname }}-cache:{{ .Values.ports.cacheUdpIngest }}"
+            - name: ZK_CACHE_SINK_ID
+              value: {{ .Values.cache.udp.sinkId | quote }}
+            - name: ZK_CACHE_UDP_MAX_SESSIONS
+              value: {{ .Values.cache.udp.maxSessions | quote }}
+            {{- if .Values.cache.udp.publicAddr }}
+            - name: ZK_CACHE_UDP_PUBLIC_ADDR
+              value: {{ .Values.cache.udp.publicAddr | quote }}
+            {{- end }}
             {{- end }}
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
@@ -98,3 +121,12 @@ spec:
     - name: http
       port: {{ .Values.ports.cache }}
       targetPort: http
+    {{- if .Values.cache.udp.enabled }}
+    # ClusterIP only: during IP transit taps reach this through ae_proxy, which
+    # is inside the cluster. A LoadBalancer belongs here at the same time each
+    # audio engine gets its own public IP, not before.
+    - name: udp-ingest
+      port: {{ .Values.ports.cacheUdpIngest }}
+      targetPort: {{ .Values.ports.cacheUdpIngest }}
+      protocol: UDP
+    {{- end }}

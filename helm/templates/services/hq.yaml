@@ -81,6 +81,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- if .Values.cache.udp.enabled }}
+            # The second off-switch for the direct preload path: without this HQ
+            # never asks the cache worker for a ticket, whatever a tap's
+            # gateway_v4 flag says.
+            - name: HQ_CACHE_SINK_ID
+              value: {{ .Values.cache.udp.sinkId | quote }}
+            {{- end }}
             {{- if .Values.aeProxy.publicAddr }}
             # Where taps send audio while the shared proxy owns the only public
             # IP. Drop this once each sink advertises its own address.

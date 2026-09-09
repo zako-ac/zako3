@@ -153,9 +153,25 @@ web:
 # --- Shared UDP proxy (temporary: routes tap audio while it owns the only
 # public IP; removed once every sink has its own) ---
 aeProxy:
+  # Deploy the proxy. Independent of publicAddr, which is what HQ hands taps:
+  # the proxy can be running before HQ points anything at it.
+  enabled: false
   # Public address taps send audio to, as host:port. Leave empty to disable the
-  # v4 audio path — HQ then has nowhere to point taps and answers Legacy.
+  # v4 audio path — HQ then has nowhere to point taps and answers Legacy. Set it
+  # to the LoadBalancer address of <release>-ae-proxy-ingest.
   publicAddr: ""
+  nodeAffinity: {}
+  metricsPort: 9095
+  # Concurrent request ids. Eviction is load-bearing here rather than a safety
+  # net, because HQ's routes carry a one-hour TTL and are not always deleted on
+  # completion — watch aeproxy_routes_evicted_total before lowering this.
+  maxRoutes: "4096"
+  # Datagrams held across all in-flight route lookups together. A sender that
+  # opens with a burst would otherwise lose its entire opening window.
+  maxPending: "512"
+  routeIdleSeconds: "300"
+  # Escape hatch for cloud load-balancer annotations on the public UDP service.
+  serviceAnnotations: {}
 
 # --- Cache server (cache + GC, taphub talks to it over HTTP) ---
 cache:
@@ -171,6 +187,20 @@ cache:
   # that dies otherwise leaves an index entry pointing GET /stream at a dead
   # partial file for that cache key, for the life of the pod. 0 disables it.
   preloadSessionTtlSeconds: "300"
+  # UDP preload ingest — the cache worker as a protofish4 sink, so a preload
+  # goes tap → cache with no audio engine in the path. Empty disables it, and
+  # HQ then answers Legacy for every preload.
+  udp:
+    enabled: false
+    # How this worker is named in the sink registry. HQ must resolve the same
+    # id (hq.cacheSinkId) or it has no address to hand a tap.
+    sinkId: "cache"
+    # Concurrent transfers. Each holds a reorder window, so this is a memory
+    # bound rather than a politeness limit.
+    maxSessions: "64"
+    # Set once the cache worker has a public IP of its own; taps are then
+    # pointed straight here and the proxy drops out of this path.
+    publicAddr: ""
   # Optional shared admin token between cache server and taphub. Leave name empty to disable auth.
   adminTokenSecret:
     name: ""
@@ -209,6 +239,15 @@ ports:
   # UDP port each audio engine receives tap audio on. Cluster-internal while the
   # shared proxy fronts it; becomes the public port once engines get their own IPs.
   aeUdpIngest: 5000
+  # Public UDP port the shared proxy listens on. Deliberately the same number as
+  # aeUdpIngest — they are different pods behind different Services, so they do
+  # not collide, and keeping them equal means a tap's port does not change at
+  # cutover when the proxy drops out and engines are addressed directly.
+  aeProxyIngest: 5000
+  # UDP port the cache worker receives preloads on. Cluster-internal only: the
+  # cache is reached through the shared proxy, so it needs no LoadBalancer until
+  # each sink gets its own public IP.
+  cacheUdpIngest: 4101
   web: 80
 
 # --- Redis ---

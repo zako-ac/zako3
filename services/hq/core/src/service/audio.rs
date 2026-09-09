@@ -18,6 +18,7 @@ use sha2::Digest;
 use uuid::Uuid;
 use zako3_metrics::TapMetricsService;
 use zako3_preload_cache::AudioCache;
+use zako3_cache_client::{CreateIngestReq, FinalizeIngestReq, IngestCreatedResp};
 use zako3_states::{RedisPubSub, SinkRegistry};
 use hq_types::cache::{AudioCacheItem, AudioCacheItemKey};
 use hq_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
@@ -50,6 +51,81 @@ pub enum DispatchFailure {
     Transport(String),
 }
 
+/// Opening a UDP ingest slot on the cache worker.
+///
+/// A trait rather than a concrete client so the preload path stays testable
+/// without a cache server, and so HQ never grows a second place that knows how
+/// the cache is reached.
+#[async_trait]
+pub trait CacheIngest: Send + Sync + 'static {
+    /// Mint a ticket and arm the cache worker's receiver. The returned
+    /// `preload_id` must be finalized or aborted by the caller.
+    async fn open(&self, req: CreateIngestReq) -> Result<IngestCreatedResp, String>;
+
+    /// Attach the metadata the slot was opened without.
+    async fn finalize(&self, preload_id: u64, req: FinalizeIngestReq) -> Result<(), String>;
+
+    /// Discard a slot that will never be filled.
+    async fn abort(&self, preload_id: u64);
+}
+
+#[async_trait]
+impl CacheIngest for zako3_cache_client::RemoteAudioCache {
+    async fn open(&self, req: CreateIngestReq) -> Result<IngestCreatedResp, String> {
+        self.open_ingest(&req).await.map_err(|e| e.to_string())
+    }
+
+    async fn finalize(&self, preload_id: u64, req: FinalizeIngestReq) -> Result<(), String> {
+        self.finalize_ingest(preload_id, &req)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn abort(&self, preload_id: u64) {
+        if let Err(e) = self.abort_preload(preload_id).await {
+            tracing::warn!(%e, preload_id, "failed to abort a cache ingest slot");
+        }
+    }
+}
+
+/// Aborts an ingest slot unless it is disarmed.
+///
+/// Every path out of a dispatch that fails — no connection, a refusal, a
+/// timeout, a malformed answer — leaves a session open on the cache worker
+/// that is already shadowing its cache key for `GET /stream`. Waiting for the
+/// reaper means every read of that key tails a partial file that will never be
+/// finished, for the length of the TTL. A guard rather than a cleanup call per
+/// branch, because the branch that gets forgotten is the one that matters.
+struct IngestGuard {
+    ingest: Arc<dyn CacheIngest>,
+    preload_id: Option<u64>,
+    request_id: Option<Uuid>,
+    sinks: SinkRegistry,
+}
+
+impl IngestGuard {
+    fn disarm(&mut self) {
+        self.preload_id = None;
+    }
+}
+
+impl Drop for IngestGuard {
+    fn drop(&mut self) {
+        let Some(preload_id) = self.preload_id else {
+            return;
+        };
+        let ingest = Arc::clone(&self.ingest);
+        let sinks = self.sinks.clone();
+        let request_id = self.request_id;
+        tokio::spawn(async move {
+            ingest.abort(preload_id).await;
+            if let Some(id) = request_id {
+                sinks.clear_route(&id).await;
+            }
+        });
+    }
+}
+
 /// Getting a request to a tap. Implemented by the gateway.
 #[async_trait]
 pub trait TapDispatcher: Send + Sync + 'static {
@@ -72,6 +148,12 @@ pub struct AudioTimeouts {
     pub dispatch: Duration,
     /// Metadata requests answer faster and are worth failing sooner.
     pub metadata: Duration,
+    /// Preloads, which must answer inside the audio engine's own per-attempt
+    /// HQ budget (`default_hq_request_timeout_ms`, 6s). If the caller gives up
+    /// first, the RPC handler is cancelled and its `IngestGuard` aborts a
+    /// transfer the tap is streaming perfectly well — so an inversion here does
+    /// not merely report a spurious failure, it destroys good audio.
+    pub preload: Duration,
 }
 
 impl Default for AudioTimeouts {
@@ -79,6 +161,7 @@ impl Default for AudioTimeouts {
         Self {
             dispatch: Duration::from_secs(10),
             metadata: Duration::from_secs(6),
+            preload: Duration::from_secs(5),
         }
     }
 }
@@ -95,6 +178,12 @@ pub struct AudioRequestService {
     /// Public address of the shared UDP proxy, while it owns the only public
     /// IP. `None` once every sink advertises its own.
     proxy_addr: Option<String>,
+    /// The cache worker's ingest API, when the preload path is enabled.
+    ingest: Option<Arc<dyn CacheIngest>>,
+    /// Which sink id the cache worker advertises under. Configured rather than
+    /// discovered, because a scan of the registry for "the one of kind cache"
+    /// would be a lookup with no key.
+    cache_sink_id: String,
     timeouts: AudioTimeouts,
 }
 
@@ -119,8 +208,17 @@ impl AudioRequestService {
             sinks,
             dispatcher,
             proxy_addr,
+            ingest: None,
+            cache_sink_id: "cache".to_string(),
             timeouts: AudioTimeouts::default(),
         }
+    }
+
+    /// Enable the direct preload path: tap → cache worker, no audio engine.
+    pub fn with_cache_ingest(mut self, ingest: Arc<dyn CacheIngest>, sink_id: String) -> Self {
+        self.ingest = Some(ingest);
+        self.cache_sink_id = sink_id;
+        self
     }
 
     pub fn with_timeouts(mut self, timeouts: AudioTimeouts) -> Self {
@@ -328,10 +426,10 @@ impl AudioRequestService {
 
     /// Fill the cache without playing anything.
     ///
-    /// Currently answers from the cache or defers to the legacy path. The
-    /// direct route — HQ obtains a ticket from the cache worker, which receives
-    /// the stream with no audio engine involved — lands with the cache worker's
-    /// UDP ingest.
+    /// The one path with no audio engine in it at all: HQ obtains a ticket from
+    /// the cache worker, which arms its own receiver, and the tap streams
+    /// straight to disk. The cache worker is a protofish4 sink like any other,
+    /// which is what lets the whole UDP path be reused here unchanged.
     pub async fn preload_audio(
         &self,
         req: CachedAudioRequest,
@@ -351,7 +449,129 @@ impl AudioRequestService {
             }));
         }
 
-        Ok(MetaDispatch::Legacy)
+        // Everything above is shared with the taphub path; only past here does
+        // the protocol diverge, so a tap that has not been migrated must stop
+        // at this line.
+        if !tap.gateway_v4 {
+            return Ok(MetaDispatch::Legacy);
+        }
+
+        let Some(ingest) = self.ingest.clone() else {
+            return Ok(MetaDispatch::Legacy);
+        };
+        // Nothing to preload into: without a cache item there is no target for
+        // the audio, so this is a metadata request wearing the wrong name.
+        let Some(item) = cache_item else {
+            return Ok(MetaDispatch::Legacy);
+        };
+
+        // A cache worker that cannot take an ingest — not yet deployed with a
+        // UDP port, or out of slots — must not fail the preload. Preloading is
+        // an optimisation, and the legacy path still fills the same cache.
+        let opened = match ingest
+            .open(CreateIngestReq {
+                item: item.clone(),
+                metadatas: Vec::new(),
+                cache_key: req.cache_key.clone(),
+            })
+            .await
+        {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::warn!(%e, tap_id = %req.tap_id.0, "cache worker refused an ingest slot");
+                return Ok(MetaDispatch::Legacy);
+            }
+        };
+
+        // Armed from here on. Every early return below goes through the guard.
+        let mut guard = IngestGuard {
+            ingest: Arc::clone(&ingest),
+            preload_id: Some(opened.preload_id),
+            request_id: Some(opened.request_id),
+            sinks: self.sinks.clone(),
+        };
+
+        let ticket = SinkTicket {
+            request_id: opened.request_id,
+            encryption_key: opened.encryption_key,
+        };
+        if !ticket.looks_valid() {
+            return Err(TapHubError::Internal(
+                "cache worker returned a malformed sink ticket".to_string(),
+            ));
+        }
+        let deliver_to = self
+            .resolve_deliver_to(&self.cache_sink_id, &ticket)
+            .await?;
+
+        let response = self
+            .dispatcher
+            .dispatch(
+                &req.tap_id,
+                PendingRequest {
+                    request_id: zakofish4_common::model::RequestId(ticket.request_id),
+                    variant: RequestVariant::AudioRequest(AudioRequestMessage {
+                        ars: zakofish4_common::model::AudioRequestString(
+                            req.audio_request.to_string(),
+                        ),
+                        discord_user_id: zakofish4_common::model::DiscordUserId(
+                            req.discord_user_id.0.clone(),
+                        ),
+                        encryption_key: EncryptionKey(ticket.encryption_key),
+                        deliver_to,
+                        headers: req.headers.clone(),
+                    }),
+                    timeout: self.timeouts.preload,
+                },
+            )
+            .await;
+
+        let success = match response {
+            Ok(ResponseVariant::AudioRequestSuccess(s)) => s,
+            Ok(ResponseVariant::AudioRequestFailure(f)) => {
+                return Err(TapHubError::TapScript {
+                    reason: f.reason,
+                    try_others: f.try_others,
+                });
+            }
+            Ok(_) => {
+                return Err(TapHubError::Internal(
+                    "tap answered a preload with metadata".to_string(),
+                ));
+            }
+            Err(e) => return Err(dispatch_error(e)),
+        };
+
+        let policy = convert_policy(success.cache);
+        let metadatas = self
+            .resolve_metadata(&req.tap_id, success.metadatas, &req.audio_request)
+            .await;
+
+        // Releases the session to commit once the last frame lands. The tap is
+        // already streaming, so this is a race the cache worker resolves: it
+        // commits from whichever of the two halves finishes second.
+        ingest
+            .finalize(
+                opened.preload_id,
+                FinalizeIngestReq {
+                    metadatas: metadatas.clone(),
+                    cache_key: policy.clone(),
+                },
+            )
+            .await
+            .map_err(|e| TapHubError::Internal(format!("failed to finalize an ingest slot: {e}")))?;
+        guard.disarm();
+
+        if matches!(item.key, AudioCacheItemKey::CacheKey(_)) {
+            self.write_arhash_alias(&item, &req.audio_request, &metadatas, &policy)
+                .await;
+        }
+
+        Ok(MetaDispatch::Ready(AudioMetaResponse {
+            metadatas,
+            cache_key: policy,
+            base_volume: tap.base_volume,
+        }))
     }
 
     // --- invalidation ------------------------------------------------------

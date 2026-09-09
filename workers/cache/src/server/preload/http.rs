@@ -18,7 +18,9 @@ impl From<PreloadError> for StatusCode {
         match e {
             PreloadError::NoSuchSession(_) => StatusCode::NOT_FOUND,
             PreloadError::AlreadyUploading(_) => StatusCode::CONFLICT,
-            PreloadError::BadCacheKey(_) => StatusCode::BAD_REQUEST,
+            PreloadError::BadCacheKey(_) | PreloadError::NotAnIngest(_) => {
+                StatusCode::BAD_REQUEST
+            }
             PreloadError::WriterGone(_)
             | PreloadError::StagedFileMissing(_)
             | PreloadError::Store { .. } => StatusCode::INTERNAL_SERVER_ERROR,

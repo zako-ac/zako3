@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod entry;
 pub mod gc;
+pub mod ingest;
 pub mod preload;
 pub mod state;
 pub mod stream;
@@ -37,6 +38,8 @@ pub fn build(state: AppState) -> Router {
         .route("/readyz", get(readyz));
 
     Router::new()
+        .route("/ingest", post(ingest::create))
+        .route("/ingest/:id/finalize", post(ingest::finalize))
         .route("/preload", post(preload::create))
         .route("/preload/:id/frames", post(preload::frames))
         .route("/preload/:id/commit", post(preload::commit))

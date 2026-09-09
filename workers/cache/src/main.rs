@@ -55,14 +55,25 @@ async fn main() -> Result<()> {
     let preload = Arc::new(AudioPreload::new(config.cache_dir.clone(), None));
     let warmup = Arc::new(server::WarmupState::new());
 
-    // Built here rather than inside the router, because the GC sweep and the
-    // session reaper both need the same session maps the handlers use.
-    let state = server::AppState::new(
+    // Bound before the process reports healthy, so a port that cannot be opened
+    // is a startup failure rather than a feature that silently went missing.
+    let ingest = match &config.udp {
+        Some(udp) => Some(server::ingest::start(udp.bind_addr.parse()?, udp.max_sessions).await?),
+        None => None,
+    };
+
+    // Built here rather than inside the router, because the GC sweep, the
+    // session reaper and the UDP pump all need the same session maps the
+    // handlers use.
+    let mut state = server::AppState::new(
         Arc::clone(&cache),
         Arc::clone(&preload),
         config.admin_token.clone(),
         Arc::clone(&warmup),
     );
+    if let Some(ingest) = ingest {
+        state = state.with_ingest(ingest);
+    }
 
     server::gc::spawn(
         server::gc::GcConfig {
@@ -78,6 +89,32 @@ async fn main() -> Result<()> {
     );
 
     server::preload::reaper::spawn(state.clone(), config.preload_session_ttl);
+
+    // Advertise where taps should send. HQ reads this to fill `deliver_to`;
+    // without it the preload path has no address to hand out and falls back to
+    // the legacy route, which is the right failure but a quiet one.
+    if let (Some(udp), Some(repo)) = (&config.udp, &cache_repo) {
+        let registry = zako3_states::SinkRegistry::new(Arc::clone(repo) as _);
+        let ad = zako3_states::SinkAdvertisement {
+            sink_id: udp.sink_id.clone(),
+            kind: zako3_states::SinkKind::Cache,
+            internal_addr: udp.internal_addr.clone(),
+            public_addr: udp.public_addr.clone(),
+        };
+        let interval = std::time::Duration::from_secs((registry.lease_ttl_secs() / 3).max(1));
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                if let Err(e) = registry.advertise(&ad).await {
+                    tracing::warn!(%e, sink_id = %ad.sink_id, "failed to advertise the cache sink");
+                }
+            }
+        });
+    } else if config.udp.is_some() {
+        tracing::warn!("UDP ingest is configured but Redis is not; HQ cannot discover this sink");
+    }
 
     let router = server::build(state);
     let addr: std::net::SocketAddr = config.bind_addr.parse()?;

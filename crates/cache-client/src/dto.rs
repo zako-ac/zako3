@@ -20,6 +20,56 @@ pub struct PreloadCreatedResp {
     pub preload_id: u64,
 }
 
+/// Request body for `POST /ingest` — open a UDP ingest slot.
+///
+/// Same shape as [`CreatePreloadReq`]; the difference is that the cache worker
+/// mints a protofish4 ticket and arms its receiver, rather than waiting to be
+/// uploaded to over HTTP.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateIngestReq {
+    pub item: AudioCacheItem,
+    pub metadatas: Vec<AudioMetadata>,
+    pub cache_key: AudioCachePolicy,
+}
+
+/// Response body for `POST /ingest`.
+///
+/// `preload_id` is not decoration: the caller has opened a session that is
+/// already shadowing this cache key for `GET /stream`, so if it then fails to
+/// find a tap it **must** abort via `POST /preload/{id}/abort` rather than
+/// leaving the session for the reaper. Otherwise every read of that key tails a
+/// partial file that will never be finished.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IngestCreatedResp {
+    pub preload_id: u64,
+    pub request_id: uuid::Uuid,
+    pub encryption_key: [u8; 32],
+}
+
+/// Redacted, because the key is the only capability guarding the datagram path
+/// and one `?resp` in a handler would put it in the logs forever.
+impl std::fmt::Debug for IngestCreatedResp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IngestCreatedResp")
+            .field("preload_id", &self.preload_id)
+            .field("request_id", &self.request_id)
+            .field("encryption_key", &"<redacted>")
+            .finish()
+    }
+}
+
+/// Request body for `POST /ingest/{id}/finalize`.
+///
+/// A UDP ingest slot is opened before anyone knows what is in the track — the
+/// receiver has to be armed before the tap is asked to send. The real metadata
+/// arrives with the tap's response, after that, so it is attached here and the
+/// commit waits for both this and the last audio frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalizeIngestReq {
+    pub metadatas: Vec<AudioMetadata>,
+    pub cache_key: AudioCachePolicy,
+}
+
 /// Request body for `POST /metadata`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreMetadataReq {

@@ -109,6 +109,20 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("ZK_UDP_PROXY_ADDR").ok().filter(|s| !s.is_empty()),
     );
 
+    // Opt-in, and the second off-switch for the preload path: without a sink id
+    // HQ never asks the cache worker for a ticket and every preload takes the
+    // legacy route, whatever a tap's `gateway_v4` flag says.
+    let audio_service = match std::env::var("HQ_CACHE_SINK_ID")
+        .ok()
+        .filter(|s| !s.is_empty())
+    {
+        Some(sink_id) => {
+            tracing::info!(%sink_id, "direct preload path enabled");
+            audio_service.with_cache_ingest(service.cache_admin.clone(), sink_id)
+        }
+        None => audio_service,
+    };
+
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();
     let event_tx_backend = event_tx.clone();

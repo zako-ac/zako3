@@ -16,8 +16,8 @@ use zako3_types::{
 };
 
 use crate::dto::{
-    CacheEntryDto, ClearTapResp, CreatePreloadReq, DeleteEntryResp, EntryQuery,
-    PreloadCreatedResp, StoreMetadataReq, TapQuery,
+    CacheEntryDto, ClearTapResp, CreateIngestReq, CreatePreloadReq, DeleteEntryResp, EntryQuery,
+    FinalizeIngestReq, IngestCreatedResp, PreloadCreatedResp, StoreMetadataReq, TapQuery,
 };
 
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
@@ -51,6 +51,65 @@ impl RemoteAudioCache {
             req = req.header(ADMIN_TOKEN_HEADER, token);
         }
         req
+    }
+
+    /// Open a UDP ingest slot (`POST /ingest`).
+    ///
+    /// The cache server mints the ticket and arms its receiver before replying,
+    /// so a tap may legitimately start sending the instant the caller passes
+    /// `deliver_to` on. The returned `preload_id` is an obligation: the caller
+    /// owns the session from here, and must reach either
+    /// [`finalize_ingest`](Self::finalize_ingest) or
+    /// [`abort_preload`](Self::abort_preload) on every path. A session left
+    /// open shadows its cache key for `GET /stream` until the reaper runs.
+    pub async fn open_ingest(&self, req: &CreateIngestReq) -> io::Result<IngestCreatedResp> {
+        let resp = self
+            .request(reqwest::Method::POST, "/ingest")
+            .json(req)
+            .send()
+            .await
+            .map_err(io_other)?;
+        if !resp.status().is_success() {
+            return Err(io_other(format!("POST /ingest failed: {}", resp.status())));
+        }
+        resp.json().await.map_err(io_other)
+    }
+
+    /// Attach the metadata a UDP ingest was opened without
+    /// (`POST /ingest/{id}/finalize`), releasing it to commit.
+    pub async fn finalize_ingest(
+        &self,
+        preload_id: u64,
+        req: &FinalizeIngestReq,
+    ) -> io::Result<()> {
+        let path = format!("/ingest/{preload_id}/finalize");
+        let resp = self
+            .request(reqwest::Method::POST, &path)
+            .json(req)
+            .send()
+            .await
+            .map_err(io_other)?;
+        if !resp.status().is_success() {
+            return Err(io_other(format!("POST {path} failed: {}", resp.status())));
+        }
+        Ok(())
+    }
+
+    /// Discard a preload session without committing (`POST /preload/{id}/abort`).
+    ///
+    /// Racing the session reaper is normal and returns 404 — that is the same
+    /// outcome, not a failure worth reporting.
+    pub async fn abort_preload(&self, preload_id: u64) -> io::Result<()> {
+        let path = format!("/preload/{preload_id}/abort");
+        let resp = self
+            .request(reqwest::Method::POST, &path)
+            .send()
+            .await
+            .map_err(io_other)?;
+        if resp.status() == StatusCode::NOT_FOUND || resp.status().is_success() {
+            return Ok(());
+        }
+        Err(io_other(format!("POST {path} failed: {}", resp.status())))
     }
 
     /// Delete a single cached entry by key (`DELETE /entry`). Returns `true` if a

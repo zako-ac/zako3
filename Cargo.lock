@@ -10864,6 +10864,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zako3-ae-proxy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.9",
+ "dotenvy",
+ "prometheus",
+ "protofish4",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zako3-states",
+ "zako3-telemetry",
+]
+
+[[package]]
 name = "zako3-audio-engine-audio"
 version = "0.1.0"
 dependencies = [
@@ -11033,6 +11050,7 @@ dependencies = [
  "dashmap 6.2.1",
  "futures-util",
  "opus",
+ "protofish4",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
@@ -11070,6 +11088,7 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing",
  "url",
+ "uuid",
  "zako3-preload-cache",
  "zako3-types",
 ]
