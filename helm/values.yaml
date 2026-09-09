@@ -133,6 +133,10 @@ audioEngine:
     name: ""
     discordTokenKey: "discord-token"
     aeTokenKey: "ae-token"
+  # Per-attempt request timeout for AE → taphub transport calls (ms). Must be
+  # >= taphub.requestTimeoutMs (13s) or the AE gives up on requests the hub
+  # would still answer, making every slow tap look like a stall.
+  requestTimeoutMs: "13000"
 
 # --- Traffic Light ---
 trafficLight:
@@ -142,7 +146,6 @@ trafficLight:
     name: ""
     discordTokensKey: "discord-tokens"
   metricsPort: "9090"
-  tokioConsolePort: "6669"
 
 # --- Web frontend ---
 web:
@@ -234,7 +237,6 @@ ports:
   # zakofish (protofish3) tap listener port.
   taphubZakofish: 1028
   tlRpc: 7070
-  tlAeTransport: 7071
   cache: 4100
   # UDP port each audio engine receives tap audio on. Cluster-internal while the
   # shared proxy fronts it; becomes the public port once engines get their own IPs.

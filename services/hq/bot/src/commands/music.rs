@@ -215,7 +215,14 @@ pub async fn wedding(
 
     let twisted = twisted.unwrap_or_else(|| RandomState::new().build_hasher().finish() % 4 == 0);
     let ars = if twisted { "c" } else { "wedding" };
-    ctx.data()
+
+    // Send "Loading…" immediately so the user sees a response while the engine works.
+    let reply_handle = ctx
+        .send(poise::CreateReply::default().content("로딩 중…"))
+        .await?;
+
+    let result = ctx
+        .data()
         .service
         .audio_engine
         .play(
@@ -227,18 +234,104 @@ pub async fn wedding(
             Volume::from(1.0f32),
             discord_user_id,
         )
+        .await
+        .map_err(Error::from);
+
+    match result {
+        Ok(()) => {
+            let idx = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as usize)
+                .unwrap_or(0);
+            let msg = if twisted {
+                CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
+            } else {
+                CONGRATS[idx % CONGRATS.len()]
+            };
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content(msg))
+                .await?;
+        }
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("wedding command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+const CONGRATS_RESURRECTION: &[&str] = &["왜 하객이 상복을 입고 있죠?"];
+
+/// Play resurrection song (easter egg).
+#[poise::command(
+    slash_command,
+    name_localized("ko", "부활"),
+    description_localized("en-US", "Play the resurrection song"),
+    description_localized("ko", "부활 행진곡 재생")
+)]
+pub async fn resurrection(
+    ctx: Context<'_>,
+    #[description = "Voice channel to play in (default: your current channel)"]
+    #[description_localized("ko", "재생할 음성 채널 (기본값: 현재 채널)")]
+    #[channel_types("Voice")]
+    channel: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
+    let (guild_id, channel_id) = resolve_play_channel(ctx, channel).await?;
+    let tap_id = resolve_tap_id(ctx, "wedding").await?;
+    let queue_name = QueueName::from(MUSIC_QUEUE.to_string());
+    let discord_user_id = DiscordUserId::from(ctx.author().id.get().to_string());
+
+    let ars = "r";
+
+    // Send "Loading…" immediately so the user sees a response while the engine works.
+    let reply_handle = ctx
+        .send(poise::CreateReply::default().content("로딩 중…"))
         .await?;
 
-    let idx = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as usize)
-        .unwrap_or(0);
-    let msg = if twisted {
-        CONGRATS_TWISTED[idx % CONGRATS_TWISTED.len()]
-    } else {
-        CONGRATS[idx % CONGRATS.len()]
-    };
-    ctx.say(msg).await?;
+    let result = ctx
+        .data()
+        .service
+        .audio_engine
+        .play(
+            guild_id,
+            channel_id,
+            queue_name,
+            tap_id,
+            AudioRequestString::from(ars.to_string()),
+            Volume::from(1.0f32),
+            discord_user_id,
+        )
+        .await
+        .map_err(Error::from);
+
+    match result {
+        Ok(()) => {
+            let idx = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as usize)
+                .unwrap_or(0);
+            let msg = CONGRATS_RESURRECTION[idx % CONGRATS_RESURRECTION.len()];
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content(msg))
+                .await?;
+        }
+        Err(ref e) => {
+            if e.is_internal() {
+                tracing::error!("resurrection command error: {e:?}");
+            }
+            let embed = ui::embeds::error_embed(e.to_user_message().as_ref());
+            reply_handle
+                .edit(ctx, poise::CreateReply::default().content("").embed(embed))
+                .await?;
+        }
+    }
+
     Ok(())
 }
 

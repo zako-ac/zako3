@@ -22,6 +22,15 @@ impl TelemetryController {
         self.is_healthy.store(true, Ordering::Relaxed);
         ::tracing::info!("Service marked as healthy");
     }
+
+    /// Marks the service as unhealthy, causing the `/health` endpoint to return
+    /// 503. The application uses this when a serving layer (e.g. the RPC server)
+    /// dies while the process is still alive, so k8s readiness/liveness can
+    /// observe the failure and restart the pod.
+    pub fn unhealthy(&self) {
+        self.is_healthy.store(false, Ordering::Relaxed);
+        ::tracing::warn!("Service marked as unhealthy");
+    }
 }
 
 pub struct TelemetryConfig {

@@ -9,7 +9,7 @@ use tl_protocol::{
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use zako3_types::{GuildId, SessionState};
+use zako3_types::{ChannelId, GuildId, SessionState};
 
 use crate::{
     router, AeDispatcher, RouterError, RouterResult, SessionRoute, StateChangeEvent,
@@ -25,8 +25,10 @@ const TEARDOWN_THRESHOLD: u8 = 3;
 pub struct TlService {
     state: Arc<RwLock<ZakoState>>,
     dispatcher: Arc<dyn AeDispatcher>,
-    /// Consecutive `sync_sessions` failures per route. Reset to 0 on a healthy check.
-    sync_failures: Mutex<FxHashMap<SessionRoute, u8>>,
+    /// Consecutive `sync_sessions` failures per session. A single bot can serve many guilds
+    /// at once, so strikes are tracked per `(route, guild)` — one guild's repeated failures
+    /// must not evict a healthy session the same bot holds in another guild.
+    sync_failures: Mutex<FxHashMap<(SessionRoute, GuildId), u8>>,
 }
 
 impl TlService {
@@ -158,14 +160,14 @@ impl TlService {
                             );
                             if let Some(session_info) = request.session {
                                 let mut state = self.state.write().await;
-                                state.sessions.insert(candidate.route, session_info);
+                                state.insert_session(candidate.route, session_info);
                                 info!(
                                     worker_id = candidate.route.worker_id.0,
                                     ae_id = candidate.route.ae_id.0,
                                     guild_id = ?session_info.guild_id,
                                     channel_id = ?session_info.channel_id,
                                     already_joined,
-                                    total_sessions = state.sessions.len(),
+                                    total_sessions = state.total_session_count(),
                                     "session committed"
                                 );
                             }
@@ -212,6 +214,7 @@ impl TlService {
                     "session command: dispatching to AE"
                 );
 
+                let session_guild = request.session.map(|s| s.guild_id);
                 match self.dispatcher.send(route, request).await {
                     Ok(response) => {
                         // SessionCommand routing never allocates a route, so no write-back is
@@ -231,16 +234,19 @@ impl TlService {
                             );
                         if evict {
                             let mut state = self.state.write().await;
-                            if state.sessions.remove(&route).is_some() {
-                                info!(
-                                    cmd = cmd_name,
-                                    worker_id = route.worker_id.0,
-                                    ae_id = route.ae_id.0,
-                                    total_sessions = state.sessions.len(),
-                                    "session evicted from cache after session command"
-                                );
+                            if let Some(guild_id) = session_guild {
+                                if state.remove_session(&route, guild_id) {
+                                    info!(
+                                        cmd = cmd_name,
+                                        worker_id = route.worker_id.0,
+                                        ae_id = route.ae_id.0,
+                                        guild_id = ?guild_id,
+                                        total_sessions = state.total_session_count(),
+                                        "session evicted from cache after session command"
+                                    );
+                                }
+                                self.sync_failures.lock().unwrap().remove(&(route, guild_id));
                             }
-                            self.sync_failures.lock().unwrap().remove(&route);
                         }
                         if matches!(response, AudioEngineCommandResponse::Error(_)) {
                             warn!(
@@ -344,13 +350,13 @@ impl TlService {
                         );
                     } else {
                         let mut state = self.state.write().await;
-                        state.sessions.remove(&route);
+                        state.remove_session(&route, session_info.guild_id);
                         info!(
                             worker_id = worker_id.0,
                             ae_id = route.ae_id.0,
                             guild_id = ?session_info.guild_id,
                             channel_id = ?session_info.channel_id,
-                            total_sessions = state.sessions.len(),
+                            total_sessions = state.total_session_count(),
                             "auto-Leave: session removed from state"
                         );
                     }
@@ -456,68 +462,88 @@ impl TlService {
 
             match self.dispatcher.send(route, req).await {
                 Ok(AudioEngineCommandResponse::DiscordVoiceState(discord_sessions)) => {
-                    // Get cached sessions for this AE
-                    let cached: std::collections::HashSet<SessionInfo> = {
+                    // Sessions TL already tracks for this route (one bot in possibly many guilds).
+                    let cached: Vec<SessionInfo> = {
                         let state = self.state.read().await;
-                        state
-                            .sessions
-                            .iter()
-                            .filter(|(r, _)| *r == &route)
-                            .map(|(_, info)| info)
-                            .copied()
-                            .collect()
+                        state.sessions_for_route(&route)
                     };
+                    // The AE's live Discord channel per guild.
+                    let live_by_guild: FxHashMap<GuildId, ChannelId> = discord_sessions
+                        .iter()
+                        .map(|s| (s.guild_id, s.channel_id))
+                        .collect();
 
                     let discord_count = discord_sessions.len();
-                    // Sessions the AE is actually connected to in Discord but TL has no cache
-                    // entry for. This happens after a TL restart (cache lost) or an AE restart
-                    // that rejoined from persisted state (fresh register evicted TL's cache).
-                    let uncached: Vec<SessionInfo> = discord_sessions
-                        .into_iter()
-                        .filter(|s| !cached.contains(s))
-                        .collect();
+                    let adopt_count = discord_sessions
+                        .iter()
+                        .filter(|live| !cached.iter().any(|c| c.guild_id == live.guild_id))
+                        .count();
 
                     info!(
                         worker_id = route.worker_id.0,
                         ae_id = route.ae_id.0,
                         discord_sessions = discord_count,
                         cached_sessions = cached.len(),
-                        adopt_count = uncached.len(),
+                        adopt_count,
                         "reconcile: route checked"
                     );
 
-                    // Re-adopt: TL trusts the AE's live Discord connections as the source of
-                    // truth. Rather than kicking a bot it doesn't recognise (which caused the
-                    // leave/rejoin flapping), TL absorbs the live session into its cache.
-                    // The session model holds one session per route, so only adopt into an
-                    // empty slot; a second concurrent session on the same worker can't be
-                    // represented and is left untouched (duplicate eviction handles real dups).
-                    if cached.is_empty() {
-                        if let Some(session_info) = uncached.first().copied() {
-                            if uncached.len() > 1 {
-                                warn!(
+                    // Re-adopt / repair toward the AE's live Discord connections, which TL
+                    // trusts as the source of truth (never kicking a bot it doesn't recognise —
+                    // that caused the old leave/rejoin flapping). A bot can legitimately serve
+                    // many guilds at once, so:
+                    //   - every live session the cache is missing is adopted (not just one);
+                    //   - a cached session whose channel differs from the AE's report is
+                    //     repaired to the live channel (covers a bot moved between channels,
+                    //     where the AE's old SessionControl would otherwise survive and leave
+                    //     a stale entry that `sync_sessions` never evicts).
+                    // Sessions the AE no longer reports at all are left to `sync_sessions`'
+                    // 3-strike eviction, which protects healthy-but-busy bots from transient
+                    // dispatch blips.
+                    let mut repaired = 0u32;
+                    {
+                        let mut state = self.state.write().await;
+                        for live in &discord_sessions {
+                            if !cached.iter().any(|c| c.guild_id == live.guild_id) {
+                                info!(
                                     worker_id = route.worker_id.0,
                                     ae_id = route.ae_id.0,
-                                    extra = uncached.len() - 1,
-                                    "reconcile: multiple live sessions on one route; only one can be tracked"
+                                    guild_id = ?live.guild_id,
+                                    channel_id = ?live.channel_id,
+                                    "reconcile: re-adopting live session into TL cache"
                                 );
+                                state.insert_session(route, *live);
                             }
-                            info!(
-                                worker_id = route.worker_id.0,
-                                ae_id = route.ae_id.0,
-                                guild_id = ?session_info.guild_id,
-                                channel_id = ?session_info.channel_id,
-                                "reconcile: re-adopting live session into TL cache"
-                            );
-                            let mut state = self.state.write().await;
-                            state.sessions.insert(route, session_info);
                         }
-                    } else if !uncached.is_empty() {
-                        warn!(
+                        for cached_info in &cached {
+                            if let Some(&live_channel) = live_by_guild.get(&cached_info.guild_id) {
+                                if live_channel != cached_info.channel_id {
+                                    info!(
+                                        worker_id = route.worker_id.0,
+                                        ae_id = route.ae_id.0,
+                                        guild_id = ?cached_info.guild_id,
+                                        old_channel = ?cached_info.channel_id,
+                                        new_channel = ?live_channel,
+                                        "reconcile: repairing session channel (bot moved)"
+                                    );
+                                    state.insert_session(
+                                        route,
+                                        SessionInfo {
+                                            guild_id: cached_info.guild_id,
+                                            channel_id: live_channel,
+                                        },
+                                    );
+                                    repaired += 1;
+                                }
+                            }
+                        }
+                    }
+                    if repaired > 0 {
+                        info!(
                             worker_id = route.worker_id.0,
                             ae_id = route.ae_id.0,
-                            uncached = uncached.len(),
-                            "reconcile: live session on an already-occupied route; cannot track (model is one-session-per-route)"
+                            repaired,
+                            "reconcile: repaired moved session(s)"
                         );
                     }
                 }
@@ -551,7 +577,7 @@ impl TlService {
     pub async fn evict_duplicates(&self) {
         let sessions: Vec<(SessionRoute, SessionInfo)> = {
             let state = self.state.read().await;
-            state.sessions.iter().map(|(r, i)| (*r, *i)).collect()
+            state.all_sessions()
         };
 
         // Group routes by channel — SessionInfo is (guild_id, channel_id)
@@ -604,7 +630,7 @@ impl TlService {
                 );
             }
             let mut state = self.state.write().await;
-            state.sessions.remove(&route);
+            state.remove_session(&route, session_info.guild_id);
         }
 
         info!("evict_duplicates: done");
@@ -613,10 +639,10 @@ impl TlService {
     /// Fetches current session state from all connected AEs and removes stale sessions.
     /// Called periodically (every 1 min) and on command failures to reconcile state drift.
     pub async fn sync_sessions(&self) {
-        // Snapshot all current routes
+        // Snapshot all current sessions across every route.
         let routes: Vec<(SessionRoute, SessionInfo)> = {
             let state = self.state.read().await;
-            state.sessions.iter().map(|(r, i)| (*r, *i)).collect()
+            state.all_sessions()
         };
 
         if routes.is_empty() {
@@ -656,10 +682,13 @@ impl TlService {
                 Err(_timeout) => Err("timeout".to_string()),
             };
 
+            // Strikes are tracked per (route, guild) so a bot serving several guilds gets an
+            // independent health signal per guild.
+            let strike_key = (*route, session_info.guild_id);
             match outcome {
                 Ok(()) => {
                     // Healthy — clear any accumulated strikes so a future blip starts fresh.
-                    self.sync_failures.lock().unwrap().remove(route);
+                    self.sync_failures.lock().unwrap().remove(&strike_key);
                     tracing::debug!(
                         worker_id = route.worker_id.0,
                         ae_id = route.ae_id.0,
@@ -672,7 +701,7 @@ impl TlService {
                     // removing the session — a single transient blip must not evict a live bot.
                     let strikes = {
                         let mut m = self.sync_failures.lock().unwrap();
-                        let n = m.entry(*route).or_insert(0);
+                        let n = m.entry(strike_key).or_insert(0);
                         *n = n.saturating_add(1);
                         *n
                     };
@@ -686,7 +715,7 @@ impl TlService {
                         "sync_sessions: check failed"
                     );
                     if strikes >= TEARDOWN_THRESHOLD {
-                        to_remove.push(*route);
+                        to_remove.push(strike_key);
                     }
                 }
             }
@@ -700,12 +729,12 @@ impl TlService {
             );
             let mut state = self.state.write().await;
             let mut strikes = self.sync_failures.lock().unwrap();
-            for route in &to_remove {
-                state.sessions.remove(route);
-                strikes.remove(route);
+            for (route, guild_id) in &to_remove {
+                state.remove_session(route, *guild_id);
+                strikes.remove(&(*route, *guild_id));
             }
             info!(
-                remaining_sessions = state.sessions.len(),
+                remaining_sessions = state.total_session_count(),
                 "sync_sessions: done"
             );
         } else {
@@ -720,7 +749,7 @@ impl TlService {
         self.sync_failures
             .lock()
             .unwrap()
-            .retain(|r, _| routes.iter().any(|(rr, _)| rr == r));
+            .retain(|(r, g), _| routes.iter().any(|(rr, info)| rr == r && info.guild_id == *g));
     }
 }
 
@@ -809,8 +838,11 @@ mod tests {
     }
 
     fn state_with_session(s: SessionInfo) -> Arc<RwLock<ZakoState>> {
-        let mut sessions: FxHashMap<SessionRoute, SessionInfo> = Default::default();
-        sessions.insert(route(), s);
+        let mut sessions: FxHashMap<SessionRoute, FxHashMap<GuildId, SessionInfo>> =
+            Default::default();
+        let mut by_guild: FxHashMap<GuildId, SessionInfo> = Default::default();
+        by_guild.insert(s.guild_id, s);
+        sessions.insert(route(), by_guild);
         let mut workers = FxHashMap::default();
         workers.insert(
             WorkerId(0),
@@ -869,14 +901,18 @@ mod tests {
 
         // The live session is now tracked under the route.
         let s = state.read().await;
-        assert_eq!(s.sessions.get(&route()), Some(&discord_session));
+        assert!(
+            s.sessions_for_route(&route()).contains(&discord_session),
+            "live session must be tracked under the route"
+        );
     }
 
     #[tokio::test]
-    async fn reconcile_occupied_route_does_not_overwrite_or_leave() {
-        // Route already tracks `cached`; the AE additionally reports a second session for the
-        // same worker. The one-session-per-route model can't hold it, so reconcile must not
-        // overwrite the cached one and must not Leave anything.
+    async fn reconcile_adopts_all_live_sessions_on_one_route() {
+        // The reported bug: a single bot serves two guilds at once. The old one-session-per-route
+        // model could track only one, so the second guild's session was dropped every cycle and
+        // the bot was invisible to HQ in that guild. Reconcile must adopt BOTH live sessions
+        // (and send no Leave).
         let cached = session(1, 100);
         let extra = session(2, 200);
         let state = state_with_session(cached);
@@ -895,12 +931,44 @@ mod tests {
         let call_list = calls.lock().unwrap();
         assert!(
             call_list.iter().all(|c| matches!(c, MockCall::FetchDiscordVoiceState)),
-            "no Leave on an occupied route"
+            "no Leave during reconcile"
         );
         drop(call_list);
-        // Cached session preserved (not overwritten by `extra`).
+        // Both the originally-cached and the second guild's session are now tracked.
         let s = state.read().await;
-        assert_eq!(s.sessions.get(&route()), Some(&cached));
+        let tracked = s.sessions_for_route(&route());
+        assert!(tracked.contains(&cached), "cached session preserved");
+        assert!(tracked.contains(&extra), "second guild's session adopted");
+    }
+
+    #[tokio::test]
+    async fn reconcile_repairs_cached_channel_on_move() {
+        // A bot moved to a different channel in the same guild. The AE reports the new channel;
+        // the cache still holds the old one (whose SessionControl survives a move, so
+        // `sync_sessions` would never evict it). Reconcile must repair the cached channel.
+        let old = session(1, 100);
+        let new = session(1, 200);
+        let state = state_with_session(old);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let dispatcher = Arc::new(TestDispatcher {
+            calls: calls.clone(),
+            response: Arc::new(move || {
+                Ok(AudioEngineCommandResponse::DiscordVoiceState(vec![new]))
+            }),
+        });
+
+        TlService::new(state.clone(), dispatcher).reconcile().await;
+
+        let call_list = calls.lock().unwrap();
+        assert!(
+            call_list.iter().all(|c| matches!(c, MockCall::FetchDiscordVoiceState)),
+            "no Leave during reconcile"
+        );
+        drop(call_list);
+        let s = state.read().await;
+        let tracked = s.sessions_for_route(&route());
+        assert!(tracked.contains(&new), "cached channel repaired to the live channel");
+        assert!(!tracked.contains(&old), "stale channel entry gone");
     }
 
     #[tokio::test]
@@ -965,7 +1033,7 @@ mod tests {
         svc.sync_sessions().await;
 
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             1,
             "a single NotJoined must not remove the session"
         );
@@ -984,7 +1052,7 @@ mod tests {
         let svc = TlService::new(state.clone(), dispatcher);
         for i in 0..TEARDOWN_THRESHOLD {
             svc.sync_sessions().await;
-            let remaining = state.read().await.sessions.len();
+            let remaining = state.read().await.total_session_count();
             if i + 1 < TEARDOWN_THRESHOLD {
                 assert_eq!(remaining, 1, "session kept before threshold (pass {})", i + 1);
             } else {
@@ -1023,7 +1091,7 @@ mod tests {
             svc.sync_sessions().await;
         }
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             1,
             "interleaved success resets strikes, so no eviction"
         );
@@ -1055,7 +1123,7 @@ mod tests {
 
         assert!(matches!(resp, AudioEngineCommandResponse::Ok));
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             0,
             "successful Leave must evict the cached session"
         );
@@ -1089,7 +1157,7 @@ mod tests {
             AudioEngineCommandResponse::Error(AudioEngineError::NotJoined)
         ));
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             0,
             "NotJoined for a session command must evict the stale route"
         );
@@ -1116,7 +1184,7 @@ mod tests {
         let _ = svc.execute(req).await;
 
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             1,
             "a successful non-Leave command must keep the session"
         );
@@ -1132,9 +1200,14 @@ mod tests {
             worker_id: WorkerId(1),
             ae_id: AeId(1),
         };
-        let mut sessions: FxHashMap<SessionRoute, SessionInfo> = Default::default();
-        sessions.insert(route_a, s);
-        sessions.insert(route_b, s);
+        let mut sessions: FxHashMap<SessionRoute, FxHashMap<GuildId, SessionInfo>> =
+            Default::default();
+        let mut by_guild_a: FxHashMap<GuildId, SessionInfo> = Default::default();
+        by_guild_a.insert(s.guild_id, s);
+        sessions.insert(route_a, by_guild_a);
+        let mut by_guild_b: FxHashMap<GuildId, SessionInfo> = Default::default();
+        by_guild_b.insert(s.guild_id, s);
+        sessions.insert(route_b, by_guild_b);
         let mut workers = FxHashMap::default();
         for &wid in &[0u16, 1u16] {
             workers.insert(
@@ -1179,7 +1252,7 @@ mod tests {
         assert_eq!(leaves[0], session(1, 100), "the duplicate session is the one left");
 
         // State should now have one session remaining
-        let remaining = state.read().await.sessions.len();
+        let remaining = state.read().await.total_session_count();
         assert_eq!(remaining, 1, "one session should remain after eviction");
     }
 
@@ -1253,14 +1326,14 @@ mod tests {
         assert!(matches!(r1, AudioEngineCommandResponse::Ok));
         let route_after_first = {
             let st = state.read().await;
-            assert_eq!(st.sessions.len(), 1, "exactly one route committed");
+            assert_eq!(st.total_session_count(), 1, "exactly one route committed");
             *st.sessions.keys().next().unwrap()
         };
 
         let r2 = svc.execute(join_request(s)).await;
         assert!(matches!(r2, AudioEngineCommandResponse::Ok));
         let st = state.read().await;
-        assert_eq!(st.sessions.len(), 1, "re-Join must not add a second route");
+        assert_eq!(st.total_session_count(), 1, "re-Join must not add a second route");
         assert!(
             st.sessions.contains_key(&route_after_first),
             "re-Join must resolve to the same route (idempotent)"
@@ -1287,7 +1360,7 @@ mod tests {
             AudioEngineCommandResponse::Error(AudioEngineError::InternalError(_))
         ));
         assert_eq!(
-            state.read().await.sessions.len(),
+            state.read().await.total_session_count(),
             0,
             "rejected Join must not commit any session"
         );

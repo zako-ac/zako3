@@ -28,6 +28,15 @@ pub(crate) fn build_metadata(headers_env: Option<String>) -> MetadataMap {
 pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
+    // Route panics through tracing (and the OTLP log bridge) so a panic in any
+    // spawned task surfaces in collected logs instead of silently vanishing
+    // (the default hook only writes to stderr, which k8s does not gather).
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        ::tracing::error!(target: "panic", "PANIC: {}", info);
+        default_hook(info);
+    }));
+
     let console_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let fmt_layer = fmt::layer()

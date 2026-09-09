@@ -68,6 +68,7 @@ impl ZakofishTapPf3 {
             max_backoff: Duration::from_secs(8),
             backoff_multiplier: 2.0,
             max_retries: None,
+            pool_size: 1,
         };
 
         // Build a resolver that queries 1.1.1.1 directly, bypassing the system

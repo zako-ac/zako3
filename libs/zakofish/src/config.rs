@@ -26,15 +26,14 @@ pub fn load_private_key<P: AsRef<Path>>(path: P) -> Result<PrivateKeyDer<'static
     Ok(key)
 }
 
-/// Default protofish3 `ProtofishConfig` for zakofish. Disables the keepalive
-/// timeout; other pf3-specific knobs (max_datagram_size, retransmission buffer,
-/// credit batching, ack interval) keep their pf3 library defaults.
+/// Default protofish3 `ProtofishConfig` for zakofish. Keeps pf3's library
+/// defaults (keepalive_interval=15s, keepalive_timeout=45s) so dead tap
+/// connections are detected and reconnected within ~45s instead of lingering
+/// until quinn's idle timeout. Other pf3-specific knobs (max_datagram_size,
+/// retransmission buffer, credit batching, ack interval) keep their pf3
+/// library defaults.
 pub fn default_protofish3_config() -> protofish3::ProtofishConfig {
-    let mut cfg = protofish3::ProtofishConfig::default();
-
-    cfg.keepalive_timeout = None;
-
-    cfg
+    protofish3::ProtofishConfig::default()
 }
 
 /// Creates a pf3 `ServerConfig`. Loads the cert chain and private key from disk,
@@ -50,7 +49,6 @@ pub fn create_server_config<P1: AsRef<Path>, P2: AsRef<Path>>(
 
     let mut cfg = protofish3::ServerConfig::new(bind_address, cert_chain, private_key);
     cfg.protofish = default_protofish3_config();
-    cfg.protofish.keepalive_timeout = None;
 
     Ok(cfg)
 }

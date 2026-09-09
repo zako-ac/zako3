@@ -122,22 +122,25 @@ impl TapService {
             .await?
             .ok_or(CoreError::NotFound("User not found".to_string()))?;
 
-        let mut tap_dtos = Vec::new();
-        for tap in taps {
-            let tap_dto = self.map_to_tap_dto(tap, None).await;
+        // All taps share this single owner, so only the latest-metrics rows need batching.
+        // Fetch them in one query (mirrors `batch_owner_and_rows`), then enrich concurrently
+        // via `enrich_tap` — removing the previous per-tap `map_to_tap_dto(_, None)` N+1.
+        let tap_ids: Vec<TapId> = taps.iter().map(|t| t.id.clone()).collect();
+        let rows = self
+            .tap_metrics
+            .get_latest_rows(&tap_ids)
+            .await
+            .unwrap_or_default();
 
-            let tap_with_access = TapWithAccessDto {
-                tap: tap_dto,
-                has_access: true,
-                owner: UserSummaryDto {
-                    id: user.id.0.clone(),
-                    username: user.username.0.clone(),
-                    avatar: user.avatar_url.clone().unwrap_or_default(),
-                },
-            };
-
-            tap_dtos.push(tap_with_access);
-        }
+        let user = &user;
+        let tap_dtos: Vec<TapWithAccessDto> = stream::iter(taps)
+            .map(|tap| {
+                let row = rows.get(&tap.id).cloned();
+                async move { self.enrich_tap(tap, true, user, row).await }
+            })
+            .buffer_unordered(ENRICH_CONCURRENCY)
+            .collect()
+            .await;
 
         let total = tap_dtos.len() as u64;
         Ok(PaginatedResponseDto {
