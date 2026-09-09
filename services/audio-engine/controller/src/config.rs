@@ -21,6 +21,25 @@ pub struct AppConfig {
     #[serde(default = "default_taphub_request_timeout_ms")]
     pub taphub_request_timeout_ms: u64,
 
+    // --- v4 audio plane (all optional; unset means taphub only) ---
+    /// HQ's internal RPC endpoint. Absent disables the v4 path entirely.
+    pub hq_rpc_url: Option<String>,
+    pub hq_rpc_admin_token: Option<String>,
+    #[serde(default = "default_hq_request_timeout_ms")]
+    pub hq_request_timeout_ms: u64,
+    /// Where this engine receives audio over UDP.
+    #[serde(default = "default_udp_bind_addr")]
+    pub udp_bind_addr: String,
+    /// Reachable from the internet, once this engine has its own public IP.
+    /// Unset while the shared proxy owns the only one.
+    pub udp_public_addr: Option<String>,
+    /// Overrides the id this engine advertises itself under. Defaults to the
+    /// pod name, which is stable across restarts in a StatefulSet.
+    pub sink_id: Option<String>,
+    #[serde(default = "default_cache_rpc_url")]
+    pub cache_rpc_url: String,
+    pub cache_rpc_admin_token: Option<String>,
+
     // Telemetry configuration
     #[serde(default = "default_service_name")]
     pub service_name: String,
@@ -31,6 +50,20 @@ pub struct AppConfig {
 
 fn default_ae_port() -> u16 {
     8090
+}
+
+/// Kept under the engine's per-attempt budget so a slow HQ surfaces as an HQ
+/// timeout rather than being swallowed by the outer command backstop.
+fn default_hq_request_timeout_ms() -> u64 {
+    6000
+}
+
+fn default_udp_bind_addr() -> String {
+    "0.0.0.0:5000".to_string()
+}
+
+fn default_cache_rpc_url() -> String {
+    "http://localhost:4100".to_string()
 }
 
 fn default_tl_rpc_url() -> String {
@@ -81,6 +114,38 @@ impl AppConfig {
                 eprintln!("Failed to load configuration: {}", e);
                 std::process::exit(1);
             }
+        }
+    }
+}
+
+
+impl AppConfig {
+    /// How this engine identifies itself to HQ and in the sink registry.
+    ///
+    /// Must be stable across a restart: HQ resolves it to an address, and a new
+    /// id every restart would leave stale advertisements behind until their
+    /// leases lapse.
+    pub fn sink_id(&self) -> String {
+        self.sink_id
+            .clone()
+            .or_else(|| std::env::var("POD_NAME").ok())
+            .or_else(|| std::env::var("HOSTNAME").ok())
+            .unwrap_or_else(|| "audio-engine".to_string())
+    }
+
+    /// The address the proxy forwards to.
+    ///
+    /// Derived from the bind address plus this pod's own IP, since binding
+    /// `0.0.0.0` says nothing about how to reach it.
+    pub fn udp_internal_addr(&self) -> String {
+        let port = self
+            .udp_bind_addr
+            .rsplit_once(':')
+            .map(|(_, p)| p.to_string())
+            .unwrap_or_else(|| "5000".to_string());
+        match std::env::var("POD_IP") {
+            Ok(ip) if !ip.is_empty() => format!("{ip}:{port}"),
+            _ => self.udp_bind_addr.clone(),
         }
     }
 }

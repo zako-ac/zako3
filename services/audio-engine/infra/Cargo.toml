@@ -20,3 +20,16 @@ opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
 redis = { version = "0.27", features = ["tokio-comp"] }
 sha2 = "0.10"
+zako3-cache-client.workspace = true
+zako3-preload-cache.workspace = true
+zako3-opus-jitter.workspace = true
+zako3-states.workspace = true
+protofish4.workspace = true
+bytes = "1.12.1"
+uuid.workspace = true
+rand = "0.10.2"
+jsonrpsee = { workspace = true, features = ["http-client"] }
+anyhow.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.49.0", features = ["full"] }

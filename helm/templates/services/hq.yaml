@@ -73,6 +73,20 @@ spec:
             {{- end }}
             - name: NATS_URL
               value: "nats://{{ $fullname }}-nats:4222"
+            # Identifies this replica in tap-gateway presence entries and NATS
+            # subjects. Taps hold a WebSocket to one replica while an audio
+            # request may reach any of them, so a dispatch has to name the
+            # replica that actually holds the connection.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if .Values.aeProxy.publicAddr }}
+            # Where taps send audio while the shared proxy owns the only public
+            # IP. Drop this once each sink advertises its own address.
+            - name: ZK_UDP_PROXY_ADDR
+              value: {{ .Values.aeProxy.publicAddr | quote }}
+            {{- end }}
             - name: METRICS_PORT
               value: {{ .Values.hq.metricsPort | quote }}
             - name: TOKIO_CONSOLE_BIND

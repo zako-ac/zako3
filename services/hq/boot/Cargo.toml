@@ -21,3 +21,5 @@ sqlx = { workspace = true }
 sha2 = "0.10"
 hex = "0.4"
 serde_json = { workspace = true }
+async-nats.workspace = true
+uuid.workspace = true

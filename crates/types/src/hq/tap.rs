@@ -68,6 +68,11 @@ pub struct Tap {
     pub permission: TapPermission,
     pub roles: Vec<TapRole>,
     pub base_volume: f32,
+    /// Whether this tap speaks the v4 WebSocket gateway rather than the
+    /// protofish3 taphub. Both run in parallel during the migration, and taps
+    /// belong to third parties, so each is switched over on its own.
+    #[serde(default)]
+    pub gateway_v4: bool,
 
     pub timestamp: ResourceTimestamp,
 }
@@ -83,6 +88,7 @@ impl Tap {
             permission: TapPermission::OwnerOnly,
             roles: vec![],
             base_volume: 1.0,
+            gateway_v4: false,
             timestamp: ResourceTimestamp::now(),
         }
     }

@@ -77,7 +77,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    let taphub_service = Arc::new(RealTapHubService::new_lazy(taphub_cell));
+    let legacy_taphub: Arc<dyn zako3_audio_engine_core::service::taphub::TapHubService> =
+        Arc::new(RealTapHubService::new_lazy(taphub_cell));
+
+    // The v4 audio plane, when configured. It wraps the taphub service rather
+    // than replacing it: HQ answers `Legacy` for any tap that has not been
+    // migrated, and the request falls straight through to the path above.
+    let taphub_service = match build_hq_audio(&config, Arc::clone(&legacy_taphub)).await {
+        Ok(Some(svc)) => {
+            tracing::info!(sink_id = %config.sink_id(), "v4 audio plane enabled");
+            svc
+        }
+        Ok(None) => {
+            tracing::info!("HQ_RPC_URL not set; using the taphub path only");
+            legacy_taphub
+        }
+        Err(e) => {
+            // Falling back rather than failing to start: a broken v4 setup must
+            // not take audio down when the legacy path is right there.
+            tracing::error!(%e, "failed to start the v4 audio plane; using taphub only");
+            legacy_taphub
+        }
+    };
 
     // Step 1: Resolve advertised address.
     let advertised_addr = if let Some(addr) = &config.ae_advertise_addr {
@@ -292,4 +313,81 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+
+/// Build the v4 audio plane, or `None` when HQ is not configured.
+///
+/// Binds the UDP socket, starts advertising this engine as a sink, and returns
+/// a service that falls back to `legacy` for any tap HQ has not migrated.
+async fn build_hq_audio(
+    config: &AppConfig,
+    legacy: Arc<dyn zako3_audio_engine_core::service::taphub::TapHubService>,
+) -> anyhow::Result<Option<Arc<dyn zako3_audio_engine_core::service::taphub::TapHubService>>> {
+    let Some(hq_url) = config.hq_rpc_url.clone() else {
+        return Ok(None);
+    };
+
+    let hq = zako3_audio_engine_infra::hq_client::HqAudioClient::new(
+        &hq_url,
+        config.hq_rpc_admin_token.as_deref().unwrap_or_default(),
+        Duration::from_millis(config.hq_request_timeout_ms),
+    )?;
+
+    let bind: std::net::SocketAddr = config.udp_bind_addr.parse()?;
+    let endpoint = protofish4::Endpoint::bind(bind).await?;
+    tracing::info!(addr = %endpoint.local_addr()?, "protofish4 ingest listening");
+
+    // One reader for the socket, plus a ticker driving per-transfer timers —
+    // NACK retries and stall detection both hang off that.
+    tokio::spawn({
+        let e = Arc::clone(&endpoint);
+        async move {
+            if let Err(err) = e.run().await {
+                tracing::error!(%err, "protofish4 endpoint stopped");
+            }
+        }
+    });
+    tokio::spawn({
+        let e = Arc::clone(&endpoint);
+        async move {
+            let mut ticker = tokio::time::interval(Duration::from_millis(10));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                e.tick().await;
+            }
+        }
+    });
+
+    let cache = Arc::new(zako3_cache_client::RemoteAudioCache::new(
+        config.cache_rpc_url.clone(),
+        config.cache_rpc_admin_token.clone(),
+    )?);
+
+    // Advertise where taps should send. `public_addr` stays unset while the
+    // shared proxy owns the only public IP; setting it later moves taps
+    // straight here with no protocol change.
+    let registry = zako3_states::SinkRegistry::new(Arc::new(
+        zako3_states::RedisCacheRepository::new(&config.redis_url).await?,
+    ));
+    zako3_audio_engine_infra::hq_audio::spawn_sink_heartbeat(
+        registry,
+        zako3_states::SinkAdvertisement {
+            sink_id: config.sink_id(),
+            kind: zako3_states::SinkKind::AudioEngine,
+            internal_addr: config.udp_internal_addr(),
+            public_addr: config.udp_public_addr.clone(),
+        },
+    );
+
+    Ok(Some(Arc::new(
+        zako3_audio_engine_infra::hq_audio::HqAudioService::new(
+            hq,
+            endpoint,
+            cache,
+            config.sink_id(),
+            legacy,
+        ),
+    )))
 }

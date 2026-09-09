@@ -16,3 +16,4 @@ rcgen = "0.13"
 opus = "0.3.1"
 rustls-pemfile = "2.2.0"
 thiserror.workspace = true
+zako3-opus-jitter.workspace = true

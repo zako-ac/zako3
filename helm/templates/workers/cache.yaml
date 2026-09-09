@@ -37,6 +37,8 @@ spec:
               value: {{ .Values.cache.gcIntervalSeconds | quote }}
             - name: ZK_CACHE_WARMUP_CONCURRENCY
               value: {{ .Values.cache.warmupConcurrency | quote }}
+            - name: ZK_CACHE_PRELOAD_SESSION_TTL_SECONDS
+              value: {{ .Values.cache.preloadSessionTtlSeconds | quote }}
             {{- if .Values.cache.maxCacheBytes }}
             - name: ZK_CACHE_MAX_BYTES
               value: {{ .Values.cache.maxCacheBytes | quote }}

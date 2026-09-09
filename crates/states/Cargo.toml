@@ -10,8 +10,13 @@ redis = { version = "1.2.0", features = ["tokio-comp", "connection-manager"], op
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 zako3-types.workspace = true
 
 [features]
 redis = ["dep:redis"]
+
+[dev-dependencies]
+chrono.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

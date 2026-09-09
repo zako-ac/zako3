@@ -3,6 +3,7 @@ pub mod error;
 pub mod intended_vc;
 #[cfg(feature = "redis")]
 pub mod pubsub;
+pub mod sink;
 pub mod tap_hub;
 pub mod tap_names;
 pub mod user_settings;
@@ -15,7 +16,8 @@ pub use error::{Result, StateServiceError};
 pub use intended_vc::IntendedVoiceChannelService;
 #[cfg(feature = "redis")]
 pub use pubsub::{MapperCacheEvent, RedisPubSub, MAPPER_CACHE_CHANNEL};
-pub use tap_hub::TapHubStateService;
+pub use sink::{SinkAdvertisement, SinkKind, SinkRegistry};
+pub use tap_hub::{GatewayPresenceService, TapHubStateService};
 pub use tap_names::TapNamesCacheService;
 pub use user_settings::UserSettingsStateService;
 pub use voice_state::{VoiceChannelLocation, VoiceStateService};

@@ -5,6 +5,7 @@ use std::time::Duration;
 use zako3_preload_cache::FileAudioCache;
 use zako3_states::RedisCacheRepository;
 
+use crate::server::AppState;
 use crate::{actions, metrics};
 
 pub struct GcConfig {
@@ -22,6 +23,7 @@ pub fn spawn(
     cache_dir: std::path::PathBuf,
     repo: Option<Arc<RedisCacheRepository>>,
     warmup: Arc<crate::server::WarmupState>,
+    state: AppState,
 ) {
     tokio::spawn(async move {
         // Never evict against a half-built index: the GDSF pass would under-count
@@ -33,7 +35,7 @@ pub fn spawn(
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
-            run_once(&cfg, &cache, &cache_dir, repo.as_deref()).await;
+            run_once(&cfg, &cache, &cache_dir, repo.as_deref(), &state).await;
         }
     });
 }
@@ -43,12 +45,16 @@ async fn run_once(
     cache: &FileAudioCache,
     cache_dir: &Path,
     repo: Option<&RedisCacheRepository>,
+    state: &AppState,
 ) {
     match actions::expired::evict_expired(cache).await {
         Ok(m) => finish(m, repo).await,
         Err(e) => tracing::warn!(%e, "evict_expired failed"),
     }
-    match actions::dangling::evict_dangling(cache, cache_dir).await {
+    // Snapshot the live staging paths immediately before the sweep, so a
+    // preload opened during the previous action is still protected.
+    let protected = state.in_flight_paths();
+    match actions::dangling::evict_dangling(cache, cache_dir, &protected).await {
         Ok(m) => finish(m, repo).await,
         Err(e) => tracing::warn!(%e, "evict_dangling failed"),
     }

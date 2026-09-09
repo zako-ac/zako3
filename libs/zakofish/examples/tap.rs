@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to the Hub running at 127.0.0.1:4433
     tap.connect_and_run(
-        "127.0.0.1:4433".parse()?,
+        "127.0.0.1:4433",
         "localhost", // server name
         hello_info,
         Arc::new(SimpleTapHandler),

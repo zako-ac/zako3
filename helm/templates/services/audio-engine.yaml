@@ -55,6 +55,11 @@ spec:
               containerPort: 8090
             - name: metrics
               containerPort: 9090
+            {{- if .Values.aeProxy.publicAddr }}
+            - name: udp-ingest
+              protocol: UDP
+              containerPort: {{ .Values.ports.aeUdpIngest }}
+            {{- end }}
           env:
             - name: REDIS_URL
               value: "redis://{{ $fullname }}-redis:6379"
@@ -80,6 +85,35 @@ spec:
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: TAPHUB_REQUEST_TIMEOUT_MS
               value: "6000"
+            # --- v4 audio plane ---
+            # Present only when the proxy has a public address configured;
+            # without it HQ has nowhere to point taps, so leaving these unset
+            # keeps the engine on the taphub path.
+            {{- if .Values.aeProxy.publicAddr }}
+            - name: HQ_RPC_URL
+              value: "http://{{ $fullname }}-hq:{{ .Values.ports.hqRpc }}"
+            - name: HQ_RPC_ADMIN_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-hq-secret" $fullname)
+                    "existingName" .Values.hq.existingSecret.name
+                    "key" .Values.hq.existingSecret.keys.rpcAdminToken) | nindent 16 }}
+            - name: UDP_BIND_ADDR
+              value: "0.0.0.0:{{ .Values.ports.aeUdpIngest }}"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CACHE_RPC_URL
+              value: "http://{{ $fullname }}-cache:{{ .Values.ports.cache }}"
+            {{- if .Values.cache.adminTokenSecret.name }}
+            - name: CACHE_RPC_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cache.adminTokenSecret.name }}
+                  key: {{ .Values.cache.adminTokenSecret.key }}
+            {{- end }}
+            {{- end }}
             - name: OTLP_ENDPOINT
               value: {{ include "zako3.otlpEndpoint" . | quote }}
             {{- include "zako3.otlpAuthEnv" . | nindent 12 }}

@@ -43,6 +43,7 @@ impl CacheRepository for NoopCache {
     async fn pfcount(&self, _key: &str) -> zako3_states::Result<u64> { Ok(0) }
     async fn pfcount_multi(&self, _keys: &[String]) -> zako3_states::Result<u64> { Ok(0) }
     async fn sadd(&self, _key: &str, _member: &str) -> zako3_states::Result<()> { Ok(()) }
+    async fn srem(&self, _key: &str, _member: &str) -> zako3_states::Result<()> { Ok(()) }
     async fn smembers(&self, _key: &str) -> zako3_states::Result<Vec<String>> { Ok(vec![]) }
     async fn hgetall(&self, _key: &str) -> zako3_states::Result<Vec<(String, String)>> { Ok(vec![]) }
     async fn hincrby(&self, _key: &str, _field: &str, _amount: i64) -> zako3_states::Result<i64> { Ok(0) }

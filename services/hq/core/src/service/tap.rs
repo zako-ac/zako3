@@ -46,6 +46,12 @@ pub struct TapService {
 }
 
 impl TapService {
+    /// The underlying repository, for callers that need to read a tap without
+    /// the auditing and cache-invalidation the service methods carry.
+    pub fn repo(&self) -> Arc<dyn TapRepository> {
+        Arc::clone(&self.tap_repo)
+    }
+
     pub fn new(
         tap_repo: Arc<dyn TapRepository>,
         user_repo: Arc<dyn UserRepository>,

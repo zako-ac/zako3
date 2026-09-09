@@ -16,6 +16,7 @@ pub trait CacheRepository: Send + Sync {
     async fn pfcount(&self, key: &str) -> Result<u64>;
     async fn pfcount_multi(&self, keys: &[String]) -> Result<u64>;
     async fn sadd(&self, key: &str, member: &str) -> Result<()>;
+    async fn srem(&self, key: &str, member: &str) -> Result<()>;
     async fn smembers(&self, key: &str) -> Result<Vec<String>>;
     async fn hgetall(&self, key: &str) -> Result<Vec<(String, String)>>;
     async fn hincrby(&self, key: &str, field: &str, amount: i64) -> Result<i64>;
@@ -114,6 +115,13 @@ impl CacheRepository for RedisCacheRepository {
         use redis::AsyncCommands;
         let mut conn = self.client.clone();
         let _: () = conn.sadd(key, member).await?;
+        Ok(())
+    }
+
+    async fn srem(&self, key: &str, member: &str) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self.client.clone();
+        let _: () = conn.srem(key, member).await?;
         Ok(())
     }
 

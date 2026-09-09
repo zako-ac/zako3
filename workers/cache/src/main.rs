@@ -1,11 +1,11 @@
-mod actions;
+// Only `config` is private to the binary; everything else comes from the lib,
+// so the module tree is compiled once rather than once per target.
 mod config;
-mod metrics;
-mod server;
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use zako3_cache::server;
 use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 use config::Config;
@@ -55,6 +55,15 @@ async fn main() -> Result<()> {
     let preload = Arc::new(AudioPreload::new(config.cache_dir.clone(), None));
     let warmup = Arc::new(server::WarmupState::new());
 
+    // Built here rather than inside the router, because the GC sweep and the
+    // session reaper both need the same session maps the handlers use.
+    let state = server::AppState::new(
+        Arc::clone(&cache),
+        Arc::clone(&preload),
+        config.admin_token.clone(),
+        Arc::clone(&warmup),
+    );
+
     server::gc::spawn(
         server::gc::GcConfig {
             interval: config.gc.interval,
@@ -65,14 +74,12 @@ async fn main() -> Result<()> {
         config.cache_dir.clone(),
         cache_repo.clone(),
         Arc::clone(&warmup),
+        state.clone(),
     );
 
-    let router = server::build(
-        Arc::clone(&cache),
-        Arc::clone(&preload),
-        config.admin_token.clone(),
-        Arc::clone(&warmup),
-    );
+    server::preload::reaper::spawn(state.clone(), config.preload_session_ttl);
+
+    let router = server::build(state);
     let addr: std::net::SocketAddr = config.bind_addr.parse()?;
     let listener = server::bind(addr).await?;
     telemetry.healthy();

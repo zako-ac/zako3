@@ -7,7 +7,6 @@ pub mod stream;
 pub mod warmup;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use axum::{
     Json, Router,
@@ -17,30 +16,20 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use dashmap::DashMap;
 use tokio::net::TcpListener;
 use tower_http::trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tracing::Level;
-use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
 pub use state::AppState;
 pub use warmup::WarmupState;
 
-pub fn build(
-    cache: Arc<FileAudioCache>,
-    preload: Arc<AudioPreload>,
-    admin_token: Option<String>,
-    warmup: Arc<WarmupState>,
-) -> Router {
-    let state = AppState {
-        cache,
-        preload,
-        sessions: Arc::new(DashMap::new()),
-        active_by_key: Arc::new(DashMap::new()),
-        admin_token,
-        warmup,
-    };
-
+/// Build the HTTP router over an already-constructed [`AppState`].
+///
+/// The state is passed in rather than created here because the session reaper,
+/// the dangling-file sweep and the UDP ingest path all need the same session
+/// maps these handlers use — and so do tests, which otherwise have no way to
+/// reach them.
+pub fn build(state: AppState) -> Router {
     // Merged after the auth layer so the probes stay unauthenticated: `.layer`
     // only wraps routes registered before it, and the kubelet has no token.
     let probes = Router::new()

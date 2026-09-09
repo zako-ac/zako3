@@ -17,6 +17,8 @@ members = [
     "workers/*",
     "zakoctl", "crates/tl-protocol", "crates/tl-client",
     "crates/metrics",
+    "crates/tap-select",
+    "crates/opus-jitter",
 ]
 
 [workspace.dependencies]
@@ -29,6 +31,8 @@ zako3-cache-client = { path = "crates/cache-client" }
 zako3-types = { path = "crates/types" }
 zako3-states = { path = "crates/states" }
 zako3-metrics = { path = "crates/metrics" }
+zako3-tap-select = { path = "crates/tap-select" }
+zako3-opus-jitter = { path = "crates/opus-jitter" }
 
 zako3-tts-matching = { path = "crates/tts-matching" }
 zako3-emoji-matcher-proto = { path = "crates/emoji-matcher-proto" }
@@ -67,6 +71,9 @@ mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 protofish3 = { git = "https://github.com/zako-ac/protofish3-rs" }
+zakofish4-common = { git = "https://github.com/zako-ac/zakofish4" }
+zakofish4-hub = { git = "https://github.com/zako-ac/zakofish4" }
+protofish4 = { git = "https://github.com/zako-ac/protofish4-rs" }
 async-nats = "0.45.0"
 dashmap = "6"
 envy = "0.4"

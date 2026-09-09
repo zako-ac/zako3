@@ -128,7 +128,9 @@ async fn test_zakofish_flow_pf3() {
         let _ = hub_clone.run().await;
     });
 
-    let local_addr = hub.local_addr().unwrap();
+    // `connect_and_run` takes a host string so it can re-resolve DNS across
+    // reconnects; the bound address has to be rendered back to one.
+    let local_addr = hub.local_addr().unwrap().to_string();
 
     let mut client_config = protofish3::ClientConfig::new("127.0.0.1:0".parse().unwrap());
     client_config.root_certificates = cert_chain;
@@ -151,7 +153,7 @@ async fn test_zakofish_flow_pf3() {
     let tap_clone = tap.clone();
     tokio::spawn(async move {
         let _ = tap_clone
-            .connect_and_run(local_addr, "localhost", hello_info, tap_handler)
+            .connect_and_run(&local_addr, "localhost", hello_info, tap_handler)
             .await;
     });
 

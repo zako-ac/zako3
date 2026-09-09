@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{TrackId, hq::TapId};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
 #[serde(tag = "type", content = "value")]
 pub enum AudioCacheItemKey {
     /// Still stores to a file due to preloading.

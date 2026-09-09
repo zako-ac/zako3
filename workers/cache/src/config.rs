@@ -10,6 +10,13 @@ pub struct Config {
     pub metrics_port: Option<u16>,
     /// Sidecar reads in flight while the index warms up at startup.
     pub warmup_concurrency: usize,
+    /// How long a preload session may sit idle before it is collected.
+    ///
+    /// Generous, because a legitimately slow producer must not be cut off — but
+    /// finite, because a producer that vanishes gives no other signal, and a
+    /// session left behind keeps `GET /stream` pointed at a dead partial file
+    /// for that cache key. Zero disables the reaper.
+    pub preload_session_ttl: Duration,
     pub gc: GcConfig,
 }
 
@@ -53,6 +60,13 @@ impl Config {
             .filter(|v| *v > 0)
             .unwrap_or(zako3_preload_cache::DEFAULT_WARMUP_CONCURRENCY);
 
+        let preload_session_ttl = Duration::from_secs(
+            env::var("ZK_CACHE_PRELOAD_SESSION_TTL_SECONDS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(300),
+        );
+
         let interval_secs = env::var("ZK_CACHE_GC_INTERVAL_SECONDS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
@@ -73,6 +87,7 @@ impl Config {
             otlp_endpoint,
             metrics_port,
             warmup_concurrency,
+            preload_session_ttl,
             gc: GcConfig {
                 interval: Duration::from_secs(interval_secs),
                 max_bytes,

@@ -13,7 +13,7 @@ songbird.workspace = true
 zako3-types.workspace = true
 zako3-tl-client.workspace = true
 zako3-audio-engine-core.path = "../core"
-zako3-audio-engine-infra.path = "../infra"
+zako3-audio-engine-infra = { path = "../infra" }
 zako3-telemetry.workspace = true
 zako3-taphub-transport-client.workspace = true
 tl-protocol.workspace = true
@@ -25,3 +25,6 @@ jsonrpsee.workspace = true
 gethostname.workspace = true
 opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
+protofish4.workspace = true
+zako3-states = { workspace = true, features = ["redis"] }
+zako3-cache-client.workspace = true

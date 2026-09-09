@@ -199,7 +199,7 @@ async fn dangling_removes_orphan_file_and_ghost_row() {
     );
     cache.db().insert(entry_ghost).await.expect("insert ghost");
 
-    let m = actions::dangling::evict_dangling(&cache, dir.path())
+    let m = actions::dangling::evict_dangling(&cache, dir.path(), &Default::default())
         .await
         .expect("evict_dangling");
 
@@ -229,7 +229,7 @@ async fn dangling_skips_downloading_entry() {
     );
     cache.db().insert(entry).await.expect("insert");
 
-    let m = actions::dangling::evict_dangling(&cache, dir.path())
+    let m = actions::dangling::evict_dangling(&cache, dir.path(), &Default::default())
         .await
         .expect("evict_dangling");
 

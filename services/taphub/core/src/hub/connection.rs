@@ -82,6 +82,9 @@ impl HubHandler for TapHubConnectionHandler {
                     friendly_name: hello.friendly_name,
                     selection_weight: hello.selection_weight,
                     connected_at: chrono::Utc::now(),
+                    // taphub is a single process and publishes the whole list
+                    // itself, so there is no replica to disambiguate.
+                    replica_id: String::new(),
                 };
 
                 let tap_id = tap.id.clone();

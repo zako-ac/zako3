@@ -150,6 +150,13 @@ web:
   viteWsBaseUrl: "ws://localhost"
   viteGrafanaUrl: "http://localhost:3000"
 
+# --- Shared UDP proxy (temporary: routes tap audio while it owns the only
+# public IP; removed once every sink has its own) ---
+aeProxy:
+  # Public address taps send audio to, as host:port. Leave empty to disable the
+  # v4 audio path — HQ then has nowhere to point taps and answers Legacy.
+  publicAddr: ""
+
 # --- Cache server (cache + GC, taphub talks to it over HTTP) ---
 cache:
   nodeAffinity: {}
@@ -160,6 +167,10 @@ cache:
   maxCacheBytes: "4294967296"
   # Sidecar reads in flight while the index warms up at startup.
   warmupConcurrency: "64"
+  # How long a preload upload may sit idle before it is collected. A producer
+  # that dies otherwise leaves an index entry pointing GET /stream at a dead
+  # partial file for that cache key, for the life of the pod. 0 disables it.
+  preloadSessionTtlSeconds: "300"
   # Optional shared admin token between cache server and taphub. Leave name empty to disable auth.
   adminTokenSecret:
     name: ""
@@ -195,6 +206,9 @@ ports:
   tlRpc: 7070
   tlAeTransport: 7071
   cache: 4100
+  # UDP port each audio engine receives tap audio on. Cluster-internal while the
+  # shared proxy fronts it; becomes the public port once engines get their own IPs.
+  aeUdpIngest: 5000
   web: 80
 
 # --- Redis ---

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use jitter::OpusJitterBuffer;
+use zako3_opus_jitter::{JitterConfig, OpusJitterBuffer};
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
 use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
 
@@ -205,7 +205,7 @@ impl TransportClient {
                             }
                         };
 
-                    let single = match xfer {
+                    let mut single = match xfer {
                         XferRecv::Single(s) if s.mode() == XferMode::Unrel => s,
                         _ => {
                             tracing::error!("Expected Unrel single transfer");
@@ -213,45 +213,48 @@ impl TransportClient {
                         }
                     };
 
-                    let mut jitter = match OpusJitterBuffer::new(
-                        single,
-                        48000,
-                        opus::Channels::Stereo,
-                        20,
-                        100,
-                    ) {
-                        Ok(j) => j,
-                        Err(e) => {
-                            tracing::error!("Failed to create jitter buffer: {:?}", e);
-                            return;
-                        }
-                    };
+                    let (frame_tx, frame_rx) = mpsc::channel(jitter::CHANNEL_CAP);
+                    let mut jitter =
+                        match OpusJitterBuffer::new(frame_rx, JitterConfig::default()) {
+                            Ok(j) => j,
+                            Err(e) => {
+                                tracing::error!("Failed to create jitter buffer: {:?}", e);
+                                return;
+                            }
+                        };
 
-                    loop {
-                        match jitter.yield_pcm().await {
-                            Ok(Some(pcm)) => {
-                                if tx.send(pcm).await.is_err() {
+                    // Both halves run in this task: the transfer borrows the
+                    // channel receiver above, so the pump cannot be spawned
+                    // separately.
+                    let pump = jitter::pump(&mut single, frame_tx);
+                    let consume = async {
+                        loop {
+                            match jitter.yield_pcm().await {
+                                Ok(Some(pcm)) => {
+                                    if tx.send(pcm).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                Ok(None) => break, // Stream ended
+                                Err(e) => {
+                                    tracing::error!("Jitter buffer error: {:?}", e);
+                                    if e.to_string().contains("InvalidPacket") {
+                                        tracing::warn!(
+                                            "Invalid opus packet detected; invalidating cache"
+                                        );
+                                        send_invalidate_cache(
+                                            conn_clone,
+                                            req_clone,
+                                            invalidate_timeout,
+                                        )
+                                        .await;
+                                    }
                                     break;
                                 }
                             }
-                            Ok(None) => break, // Stream ended
-                            Err(e) => {
-                                tracing::error!("Jitter buffer error: {:?}", e);
-                                if e.to_string().contains("InvalidPacket") {
-                                    tracing::warn!(
-                                        "Invalid opus packet detected; invalidating cache"
-                                    );
-                                    send_invalidate_cache(
-                                        conn_clone,
-                                        req_clone,
-                                        invalidate_timeout,
-                                    )
-                                    .await;
-                                }
-                                break;
-                            }
                         }
-                    }
+                    };
+                    tokio::join!(pump, consume);
                 });
 
                 Ok(AudioResponse {

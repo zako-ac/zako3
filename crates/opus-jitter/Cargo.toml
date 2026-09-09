@@ -1,0 +1,15 @@
+[package]
+name = "zako3-opus-jitter"
+version = "0.1.0"
+edition = "2024"
+description = "Reorders timestamped Opus frames into a steady PCM stream."
+
+[dependencies]
+opus = "0.3"
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+bytes = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

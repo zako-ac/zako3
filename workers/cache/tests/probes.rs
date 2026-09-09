@@ -6,26 +6,29 @@ use axum::{
     http::{Request, StatusCode},
 };
 use tower::ServiceExt;
-use zako3_cache::server::{self, WarmupState};
+use zako3_cache::server::{self, AppState, WarmupState};
 use zako3_preload_cache::{AudioPreload, FileAudioCache};
 
-async fn router_with(
+async fn state_with(
     dir: &tempfile::TempDir,
     admin_token: Option<&str>,
     warmup: Arc<WarmupState>,
-) -> Router {
+) -> AppState {
     let cache = Arc::new(
         FileAudioCache::open_empty(dir.path().to_path_buf(), None)
             .await
             .expect("open cache"),
     );
     let preload = Arc::new(AudioPreload::new(dir.path().to_path_buf(), None));
-    server::build(
-        cache,
-        preload,
-        admin_token.map(str::to_string),
-        warmup,
-    )
+    AppState::new(cache, preload, admin_token.map(str::to_string), warmup)
+}
+
+async fn router_with(
+    dir: &tempfile::TempDir,
+    admin_token: Option<&str>,
+    warmup: Arc<WarmupState>,
+) -> Router {
+    server::build(state_with(dir, admin_token, warmup).await)
 }
 
 async fn get(router: Router, path: &str) -> (StatusCode, String) {

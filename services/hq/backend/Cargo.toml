@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-hq-core.path = "../core"
-axum = { workspace = true, features = ["multipart"] }
+hq-core = { path = "../core" }
+axum = { workspace = true, features = ["multipart", "ws"] }
 futures-util = "0.3"
 tokio = { workspace = true }
 tower-http = { workspace = true, features = ["trace", "cors"] }
@@ -29,3 +29,11 @@ zako3-cache-client.workspace = true
 sha2 = "0.10"
 hex = "0.4"
 mcpkit = "0.6"
+zakofish4-common.workspace = true
+zakofish4-hub.workspace = true
+zako3-tap-select.workspace = true
+async-trait.workspace = true
+dashmap.workspace = true
+chrono.workspace = true
+async-nats.workspace = true
+thiserror.workspace = true

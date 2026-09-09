@@ -1,9 +1,12 @@
 use hq_core::service::api_key::ApiKeyService;
+use hq_core::service::audio::AudioRequestService;
 use hq_core::service::auth::AuthService;
 use hq_core::service::tap::TapService;
 use hq_types::ZakoResult;
+use hq_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
 use hq_types::hq::rpc::HqRpcServer;
 use hq_types::hq::{Tap, TapId, User, UserId};
+use hq_types::{AudioRequest, CachedAudioRequest, TapHubError};
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee::types::ErrorObjectOwned;
 use std::future::Future;
@@ -17,6 +20,9 @@ pub struct HqRpcImpl {
     api_key_service: ApiKeyService,
     tap_service: TapService,
     auth_service: AuthService,
+    /// Absent when HQ runs without a tap gateway, in which case every audio
+    /// call answers `Legacy` and the taphub path is untouched.
+    audio: Option<AudioRequestService>,
 }
 
 impl HqRpcImpl {
@@ -29,7 +35,13 @@ impl HqRpcImpl {
             api_key_service,
             tap_service,
             auth_service,
+            audio: None,
         }
+    }
+
+    pub fn with_audio(mut self, audio: AudioRequestService) -> Self {
+        self.audio = Some(audio);
+        self
     }
 }
 
@@ -229,6 +241,69 @@ impl HqRpcServer for HqRpcImpl {
         };
         Ok(self.tap_service.check_access(&tap, user_id).await)
     }
+
+    // --- audio plane -------------------------------------------------------
+    //
+    // The outer `RpcResult` is transport failure; the inner `Result` is the
+    // domain answer. Keeping them apart means a `TapHubError` survives the wire
+    // intact and can still be turned into a localized message for the user,
+    // instead of arriving as an opaque JSON-RPC error string.
+
+    async fn request_audio(
+        &self,
+        ae_id: String,
+        ticket: SinkTicket,
+        request: CachedAudioRequest,
+    ) -> RpcResult<Result<AudioDispatch, TapHubError>> {
+        let Some(audio) = self.audio.as_ref() else {
+            return Ok(Ok(AudioDispatch::Legacy));
+        };
+        Ok(audio.request_audio(&ae_id, ticket, request).await)
+    }
+
+    async fn request_audio_meta(
+        &self,
+        request: AudioRequest,
+    ) -> RpcResult<Result<MetaDispatch, TapHubError>> {
+        let Some(audio) = self.audio.as_ref() else {
+            return Ok(Ok(MetaDispatch::Legacy));
+        };
+        Ok(audio.request_audio_meta(request).await)
+    }
+
+    async fn preload_audio(
+        &self,
+        request: CachedAudioRequest,
+    ) -> RpcResult<Result<MetaDispatch, TapHubError>> {
+        let Some(audio) = self.audio.as_ref() else {
+            return Ok(Ok(MetaDispatch::Legacy));
+        };
+        Ok(audio.preload_audio(request).await)
+    }
+
+    async fn invalidate_cache(
+        &self,
+        request: CachedAudioRequest,
+    ) -> RpcResult<Result<(), TapHubError>> {
+        let Some(audio) = self.audio.as_ref() else {
+            // Without the audio service this is taphub's job, and it has
+            // already done it — reporting an error would make a working
+            // invalidation look broken.
+            return Ok(Ok(()));
+        };
+        Ok(audio.invalidate_cache(request).await)
+    }
+
+    async fn report_stream_outcome(
+        &self,
+        request_id: uuid::Uuid,
+        report: StreamReport,
+    ) -> RpcResult<()> {
+        if let Some(audio) = self.audio.as_ref() {
+            audio.report_stream_outcome(request_id, report).await;
+        }
+        Ok(())
+    }
 }
 
 pub async fn start_rpc_server(
@@ -237,6 +312,7 @@ pub async fn start_rpc_server(
     auth_service: AuthService,
     address: &str,
     admin_token: String,
+    audio: Option<AudioRequestService>,
 ) -> ZakoResult<()> {
     let middleware = tower::ServiceBuilder::new().layer(AuthLayer::new(admin_token));
 
@@ -245,8 +321,11 @@ pub async fn start_rpc_server(
         .build(address)
         .await?;
 
-    let handle =
-        server.start(HqRpcImpl::new(api_key_service, tap_service, auth_service).into_rpc());
+    let mut rpc = HqRpcImpl::new(api_key_service, tap_service, auth_service);
+    if let Some(audio) = audio {
+        rpc = rpc.with_audio(audio);
+    }
+    let handle = server.start(rpc.into_rpc());
     tracing::info!("RPC server listening on {}", address);
 
     handle.stopped().await;

@@ -30,6 +30,7 @@ pub mod guild;
 pub use guild::*;
 pub mod mapper;
 pub use mapper::*;
+pub mod audio_dispatch;
 pub mod history;
 pub mod rpc;
 pub mod zod_impls;

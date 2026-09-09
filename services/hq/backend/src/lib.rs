@@ -11,6 +11,7 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+pub mod gateway;
 pub mod handlers;
 pub mod mcp;
 pub mod middleware;
@@ -184,6 +185,20 @@ pub fn app(
     service: Service,
     event_tx: broadcast::Sender<PlaybackEvent>,
     stats_tx: broadcast::Sender<()>,
+) -> Router {
+    app_with_gateway(service, event_tx, stats_tx, None)
+}
+
+/// The API, optionally with the tap gateway mounted.
+///
+/// `/gateway` deliberately shares this router, and therefore the ingress the
+/// web API already uses: a WebSocket over TLS on 443 is exactly what survives
+/// the middleboxes that were dropping the old QUIC connections.
+pub fn app_with_gateway(
+    service: Service,
+    event_tx: broadcast::Sender<PlaybackEvent>,
+    stats_tx: broadcast::Sender<()>,
+    gateway: Option<gateway::Gateway>,
 ) -> Router {
     let state = Arc::new(service.clone());
     let mcp_service = state.clone();
@@ -361,6 +376,17 @@ pub fn app(
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .with_state(state);
 
-    rest.merge(mcp::mcp_routes(mcp_service, mcp_event_tx))
+    let rest = rest.merge(mcp::mcp_routes(mcp_service, mcp_event_tx));
+
+    match gateway {
+        // Its own `with_state`, so the gateway is not forced into the shape of
+        // the REST router's state — and so it can be left out entirely.
+        Some(gateway) => rest.merge(
+            Router::new()
+                .route("/gateway", get(gateway::gateway_handler))
+                .with_state(gateway),
+        ),
+        None => rest,
+    }
 }
 pub mod rpc;

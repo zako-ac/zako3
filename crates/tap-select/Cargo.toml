@@ -1,0 +1,11 @@
+[package]
+name = "zako3-tap-select"
+version = "0.1.0"
+edition = "2024"
+description = "Weighted selection over a tap's live connections."
+
+[dependencies]
+zako3-types.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

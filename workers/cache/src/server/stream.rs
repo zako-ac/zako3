@@ -31,17 +31,13 @@ pub async fn stream(
         .active_by_key
         .get(&active_key(&q.tap_id, &q.key))
         .map(|r| *r)
+        && let Some(session) = state.sessions.get(&preload_id).map(|r| r.clone())
+        && let Some(reader) = state
+            .preload
+            .open_reader_with_signal(session.preload_id, Arc::clone(&session.signal))
+            .await
     {
-        if let Some(session) = state.sessions.get(&preload_id.into()).map(|r| r.clone()) {
-            let signal = Arc::clone(&session.signal);
-            if let Some(reader) = state
-                .preload
-                .open_reader_with_signal(session.preload_id, Arc::clone(&signal))
-                .await
-            {
-                return Ok(body_response(spawn_reader(reader)));
-            }
-        }
+        return Ok(body_response(spawn_reader(reader)));
     }
 
     // 2. Fall back to the committed cache file.

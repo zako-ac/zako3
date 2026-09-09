@@ -1,4 +1,7 @@
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use tokio::fs;
@@ -12,8 +15,22 @@ use crate::metrics::ActionMetrics;
 ///
 /// Orphan `.opus` files and their sibling `.json` sidecars are removed together.
 /// Orphan `.json` files (no corresponding DB `json_path`) are also removed.
-/// Lock files (*.lock) are skipped — they are managed by AudioPreload in taphub.
-pub async fn evict_dangling(cache: &FileAudioCache, cache_dir: &Path) -> Result<ActionMetrics> {
+///
+/// `protected` lists staging paths belonging to preload sessions that are still
+/// live. They must be skipped: a preload has no database row until it commits,
+/// so to this sweep an actively-growing staging file is indistinguishable from
+/// an orphan. The window used to be a few seconds of HTTP upload; with UDP
+/// ingest a preload can be live for the length of a whole track.
+///
+/// A `.lock` file that is *not* protected is stale by definition — only a live
+/// preload holds one — so those are removed here. Nothing used to clean them up
+/// at all, because they were previously written by taphub rather than by this
+/// process.
+pub async fn evict_dangling(
+    cache: &FileAudioCache,
+    cache_dir: &Path,
+    protected: &HashSet<PathBuf>,
+) -> Result<ActionMetrics> {
     let started = std::time::Instant::now();
     let mut processing_count = 0u64;
     let mut evict_count = 0u64;
@@ -38,6 +55,10 @@ pub async fn evict_dangling(cache: &FileAudioCache, cache_dir: &Path) -> Result<
         let path = entry.path();
         let Some(ext) = path.extension() else { continue };
 
+        if protected.contains(&path) {
+            continue;
+        }
+
         if ext == "opus" {
             processing_count += 1;
             let path_str = path.to_string_lossy().into_owned();
@@ -54,6 +75,16 @@ pub async fn evict_dangling(cache: &FileAudioCache, cache_dir: &Path) -> Result<
                 if json_sibling.exists() {
                     let _ = fs::remove_file(&json_sibling).await;
                 }
+            }
+        } else if ext == "lock" {
+            processing_count += 1;
+            let path_str = path.to_string_lossy().into_owned();
+            match fs::remove_file(&path).await {
+                Ok(()) => {
+                    tracing::info!(path = %path_str, "removed stale preload lock");
+                    evict_count += 1;
+                }
+                Err(e) => tracing::warn!(%e, path = %path_str, "failed to remove stale lock"),
             }
         } else if ext == "json" {
             processing_count += 1;

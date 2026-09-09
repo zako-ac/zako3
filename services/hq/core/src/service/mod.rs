@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod auth;
 pub mod discord_resolver;
 pub mod mapping;

@@ -60,12 +60,66 @@ async fn main() -> anyhow::Result<()> {
     ));
     info!("History bridge started (stats SSE + playback SSE)");
 
+    // Identifies this process in presence entries and NATS subjects. In
+    // Kubernetes this is the pod name; the hostname is a reasonable stand-in
+    // anywhere else, and a random suffix keeps two local processes distinct.
+    let replica_id = std::env::var("POD_NAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| format!("hq-{}", uuid::Uuid::new_v4()));
+
+    // Optional: without NATS the gateway still serves taps, it just cannot
+    // reach a connection held by another replica.
+    let gateway_nats = match config.nats_url.as_deref() {
+        Some(url) => match async_nats::connect(url).await {
+            Ok(client) => Some(client),
+            Err(e) => {
+                tracing::warn!(%e, "NATS connect failed; cross-replica tap dispatch disabled");
+                None
+            }
+        },
+        None => None,
+    };
+
+    let presence = zako3_states::GatewayPresenceService::new(Arc::new(
+        zako3_states::RedisCacheRepository::new(&config.redis_url).await?,
+    ));
+    let gateway = hq_backend::gateway::Gateway::new(
+        service.clone(),
+        presence,
+        gateway_nats,
+        replica_id.clone(),
+    );
+    info!(replica_id = %replica_id, "Tap gateway ready at /gateway");
+
+    // The audio plane. Every tap answers `Legacy` until it is individually
+    // flipped to `gateway_v4`, so wiring this in changes nothing on its own.
+    let sink_registry = zako3_states::SinkRegistry::new(Arc::new(
+        zako3_states::RedisCacheRepository::new(&config.redis_url).await?,
+    ));
+    let audio_service = hq_core::service::audio::AudioRequestService::new(
+        service.tap.repo(),
+        service.tap.clone(),
+        service.cache_admin.clone(),
+        service.tap_metrics.clone(),
+        Arc::new(zako3_states::RedisPubSub::new(&config.redis_url).await?),
+        sink_registry,
+        Arc::new(hq_backend::gateway::dispatcher::GatewayDispatcher::new(
+            gateway.clone(),
+        )),
+        std::env::var("ZK_UDP_PROXY_ADDR").ok().filter(|s| !s.is_empty()),
+    );
+
     let backend_address = config.backend_address.clone();
     let service_backend = service.clone();
     let event_tx_backend = event_tx.clone();
     let stats_tx_backend = stats_tx.clone();
     let backend_task = tokio::spawn(async move {
-        let app = hq_backend::app(service_backend, event_tx_backend, stats_tx_backend);
+        let app = hq_backend::app_with_gateway(
+            service_backend,
+            event_tx_backend,
+            stats_tx_backend,
+            Some(gateway),
+        );
 
         let listener = TcpListener::bind(&backend_address)
             .await
@@ -87,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
             service_rpc.auth,
             &rpc_address,
             rpc_admin_token,
+            Some(audio_service),
         );
         if let Err(e) = rpc.await {
             tracing::error!("RPC server error: {}", e);
