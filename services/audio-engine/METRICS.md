@@ -18,6 +18,7 @@ This document describes the Prometheus metrics exported by the Audio Engine.
 | `audio_mixer_buffer_depth_samples` | Gauge | Current available samples in the mixer buffer. |
 | `audio_decoder_stalls_total` | Counter | Total number of decoder stalls (buffer full). |
 | `audio_stream_underruns_total` | Counter | Total number of output stream underruns. |
+| `audio_jitter_dropped_frames_total` | Counter | Opus frames discarded because the jitter buffer was full (a sender outran playback). |
 | `audio_decode_errors_total` | Counter | Total number of audio decoding errors. |
 
 ### Labels for `audio_decode_errors_total`

@@ -9,12 +9,14 @@
 //! flight, so anything else would need a handshake to close the gap.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use protofish4::{Endpoint, ReceiverConfig, RelOutcome, SessionKey};
+use protofish4::{BufferFeedback, Endpoint, ReceiverConfig, RelOutcome, SessionKey};
 use tokio::sync::mpsc;
+use zako3_audio_engine_audio::metrics;
 use zako3_audio_engine_core::error::{ZakoError, ZakoResult};
 use zako3_audio_engine_core::service::taphub::TapHubService;
 use zako3_audio_engine_core::types::{
@@ -34,6 +36,67 @@ const PCM_QUEUE: usize = 100;
 
 /// Frames buffered between the UDP receiver and the jitter buffer.
 const INGEST_QUEUE: usize = 256;
+
+/// Sleep until `ts_ms` of the track has actually elapsed.
+///
+/// Reading a cache entry is not a clock: the server serves frames as fast as it
+/// can, and handing all of them to the jitter buffer at once asks it to hold a
+/// whole track it can never play — which is what made a long cache hit collapse
+/// into its first fifteen seconds. Frames that are already due (a slow server,
+/// or a stream being tailed while it is still being written) are not delayed.
+async fn pace_to(started: tokio::time::Instant, ts_ms: u64) {
+    let due = started + Duration::from_millis(ts_ms);
+    if tokio::time::Instant::now() < due {
+        tokio::time::sleep_until(due).await;
+    }
+}
+
+/// How far ahead of playback the sender has run, reported back to it.
+///
+/// Occupancy is measured from the newest frame to arrive to the play head, not
+/// from what the jitter buffer happens to be holding: frames waiting in the
+/// queues between the receiver and the decoder will not be heard any sooner
+/// than the ones in the buffer, and a sender that is told only about the buffer
+/// would look idle while a whole track sat in the pipeline. Everything the
+/// sender sends is accounted for, wherever it currently waits.
+///
+/// Without a sender to tell — the cache path, which has no tap attached — this
+/// is inert.
+#[derive(Clone, Default)]
+struct Occupancy {
+    feedback: Option<BufferFeedback>,
+    newest_rx_ms: Arc<AtomicU64>,
+    playhead_ms: Arc<AtomicU64>,
+}
+
+impl Occupancy {
+    /// An occupancy report for a stream whose frames come from a tap.
+    fn for_sender(feedback: BufferFeedback) -> Self {
+        Self { feedback: Some(feedback), ..Default::default() }
+    }
+
+    /// A frame arrived from the sender.
+    fn note_arrival(&self, ts_ms: u64) {
+        self.newest_rx_ms.store(ts_ms, Ordering::Relaxed);
+    }
+
+    /// Playback reached this timestamp.
+    fn note_playhead(&self, ts_ms: Option<u64>) {
+        if let Some(ts_ms) = ts_ms {
+            self.playhead_ms.store(ts_ms, Ordering::Relaxed);
+        }
+    }
+
+    /// Publish the current lag, in milliseconds.
+    fn report(&self) {
+        let Some(feedback) = &self.feedback else {
+            return;
+        };
+        let newest = self.newest_rx_ms.load(Ordering::Relaxed);
+        let played = self.playhead_ms.load(Ordering::Relaxed);
+        feedback.set_buffered_ms(newest.saturating_sub(played));
+    }
+}
 
 pub struct HqAudioService {
     hq: Arc<HqAudioClient>,
@@ -95,6 +158,9 @@ impl HqAudioService {
         tokio::spawn(async move {
             // Frames come out in order, so timestamps follow the frame index.
             let mut index = 0u64;
+            // Playback starts here, so the timestamps can be paced against the
+            // wall clock from the first frame on.
+            let started = tokio::time::Instant::now();
             loop {
                 match reader.next_frame().await {
                     Ok(NextFrame::Frame(bytes)) => {
@@ -107,6 +173,7 @@ impl HqAudioService {
                         {
                             return;
                         }
+                        pace_to(started, ts_ms).await;
                     }
                     Ok(NextFrame::Pending) => continue,
                     Ok(NextFrame::Done) => return,
@@ -121,7 +188,9 @@ impl HqAudioService {
         Ok(AudioResponse {
             cache_key: Some(meta.cache_key),
             metadatas: meta.metadatas,
-            stream: self.spawn_decoder(frame_rx, None),
+            // No tap is attached to a cache read, so there is no sender to
+            // report occupancy to.
+            stream: self.spawn_decoder(frame_rx, None, Occupancy::default()),
         })
     }
 
@@ -134,6 +203,7 @@ impl HqAudioService {
         &self,
         frames: mpsc::Receiver<TimedFrame>,
         request_id: Option<uuid::Uuid>,
+        occupancy: Occupancy,
     ) -> mpsc::Receiver<Vec<f32>> {
         let (pcm_tx, pcm_rx) = mpsc::channel(PCM_QUEUE);
         let hq = Arc::clone(&self.hq);
@@ -147,9 +217,23 @@ impl HqAudioService {
                 }
             };
 
+            // Drops are counted as they happen, so report the delta rather
+            // than waiting for the stream to end to mention them.
+            let mut reported_drops = 0u64;
+
             loop {
                 match jitter.yield_pcm().await {
                     Ok(Some(pcm)) => {
+                        // Tell the sender how far behind playback is running.
+                        // A tap that reports a full buffer pauses itself, which
+                        // is what keeps the buffer from having to drop at all.
+                        occupancy.note_playhead(jitter.playhead_ms());
+                        occupancy.report();
+                        let dropped = jitter.dropped_frames();
+                        if dropped > reported_drops {
+                            metrics::record_jitter_dropped(dropped - reported_drops);
+                            reported_drops = dropped;
+                        }
                         if pcm_tx.send(pcm).await.is_err() {
                             break;
                         }
@@ -223,7 +307,9 @@ impl TapHubService for HqAudioService {
 
                 let (frame_tx, frame_rx) = mpsc::channel(INGEST_QUEUE);
                 let mut streams = streams;
+                let occupancy = Occupancy::for_sender(streams.feedback.clone());
                 let request_id = ticket.request_id;
+                let arrivals = occupancy.clone();
                 let hq = Arc::clone(&self.hq);
 
                 // Playback: every frame that arrives, in arrival order.
@@ -232,6 +318,7 @@ impl TapHubService for HqAudioService {
                     // disarm the receiver mid-stream.
                     let _armed = armed;
                     while let Some(frame) = streams.unrel.recv().await {
+                        arrivals.note_arrival(frame.ts.0);
                         if frame_tx
                             .send(TimedFrame {
                                 ts_ms: frame.ts.0,
@@ -284,7 +371,7 @@ impl TapHubService for HqAudioService {
                 Ok(AudioResponse {
                     cache_key: Some(meta.cache_key),
                     metadatas: meta.metadatas,
-                    stream: self.spawn_decoder(frame_rx, Some(request_id)),
+                    stream: self.spawn_decoder(frame_rx, Some(request_id), occupancy),
                 })
             }
         }

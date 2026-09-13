@@ -73,7 +73,10 @@ songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 protofish3 = { git = "https://github.com/zako-ac/protofish3-rs" }
 zakofish4-common = { git = "https://github.com/zako-ac/zakofish4" }
 zakofish4-hub = { git = "https://github.com/zako-ac/zakofish4" }
-protofish4 = { git = "https://github.com/zako-ac/protofish4-rs" }
+# Pinned to the commit that hands the sink's buffer occupancy back to the
+# sender (`BufferFeedback`); point this at main once
+# https://github.com/zako-ac/protofish4-rs/pull/1 is merged.
+protofish4 = { git = "https://github.com/zako-ac/protofish4-rs", rev = "4a912879a42b8f36480eb49d9750e570aef56048" }
 async-nats = "0.45.0"
 dashmap = "6"
 envy = "0.4"
