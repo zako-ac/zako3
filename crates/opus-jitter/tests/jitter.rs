@@ -185,6 +185,42 @@ async fn the_hard_cap_still_bounds_a_sender_that_cannot_be_paced() {
     );
 }
 
+/// A stall that skips frames must not leave them behind. They can never be
+/// played — the play head has passed them — and left in the map they would both
+/// count against the lead window and, once the channel ran dry, let the next
+/// recovery rewind the head onto audio that had already gone out.
+#[tokio::test]
+async fn a_stall_never_rewinds_onto_the_frames_it_skipped() {
+    let frames = encode_frames(6);
+    let (tx, rx) = mpsc::channel(16);
+    // 0 ms, then a hole, then 60/80/100 ms. The hole is smaller than the
+    // playout budget, so this is a stall rather than a concealment.
+    for i in [0usize, 3, 4, 5] {
+        tx.try_send(TimedFrame {
+            ts_ms: i as u64 * FRAME_MS,
+            payload: frames[i].clone(),
+        })
+        .expect("send");
+    }
+    let _held = tx;
+
+    let mut jb = OpusJitterBuffer::new(rx, cfg()).unwrap();
+
+    let mut played = 0;
+    let err = loop {
+        match jb.yield_pcm().await {
+            Ok(Some(_)) => played += 1,
+            Ok(None) => break None,
+            Err(e) => break Some(e),
+        }
+    };
+
+    // One frame before the hole and one after it; the three the jump passed over
+    // are gone, so the next stall ends what this buffer has.
+    assert_eq!(played, 2, "the skipped frames must not be replayed");
+    assert!(matches!(err, Some(JitterError::Stalled(_))));
+}
+
 /// A sender that runs ahead of real time is now *held back* rather than
 /// decimated: the frames it could not hand over stay in the channel, and every
 /// hop upstream waits on them. This is the bug the cap was papering over — a

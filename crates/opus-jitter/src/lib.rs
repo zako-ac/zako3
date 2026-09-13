@@ -289,23 +289,38 @@ impl OpusJitterBuffer {
 
     /// Resume after the source went quiet, rather than ending the track.
     ///
-    /// A gap that outlasts the stall timeout and still has audio behind it is a
-    /// wedge somewhere upstream, not the end of the stream; skipping to the
-    /// newest frame kept the rest of the track audible. With nothing buffered
-    /// there is genuinely nothing left to play, and the caller is told so.
+    /// A gap that outlasts the stall timeout while audio is still somewhere
+    /// ahead is a wedge upstream, not the end of the stream, so playback skips
+    /// to the newest frame and carries on. What it skips is dropped: the play
+    /// head has passed those frames, so they can never be heard, and left in the
+    /// map they would count against the lead window for the rest of the stream.
+    ///
+    /// With nothing *ahead* of the play head there is genuinely nothing left to
+    /// play, and the caller is told so — rather than the head being rewound onto
+    /// audio that has already gone out.
     fn recover_from_stall(&mut self) -> bool {
         let Some(newest) = self.buffer.keys().next_back().copied() else {
             return false;
         };
+
+        // Nothing has played yet, so nothing has been passed over: the pre-roll
+        // simply starts with what is already here.
+        let Some(next) = self.next_play_ts else {
+            self.next_play_ts = self.buffer.keys().next().copied();
+            return true;
+        };
+
+        if newest < next {
+            return false;
+        }
+
         tracing::warn!(
             stalled_ms = self.cfg.stall_timeout.as_millis() as u64,
             buffered_ms = self.buffered_ms(),
             "source went quiet; resuming at the newest buffered frame"
         );
-        match self.next_play_ts {
-            Some(_) => self.next_play_ts = Some(newest),
-            None => self.next_play_ts = self.buffer.keys().next().copied(),
-        }
+        self.next_play_ts = Some(newest);
+        self.buffer.retain(|ts, _| *ts >= newest);
         true
     }
 

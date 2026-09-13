@@ -9,7 +9,6 @@
 //! flight, so anything else would need a handshake to close the gap.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -51,50 +50,34 @@ async fn pace_to(started: tokio::time::Instant, ts_ms: u64) {
     }
 }
 
-/// How far ahead of playback the sender has run, reported back to it.
+/// Where playback has reached, reported back so the sender can pace itself.
 ///
-/// Occupancy is measured from the newest frame to arrive to the play head, not
-/// from what the jitter buffer happens to be holding: frames waiting in the
-/// queues between the receiver and the decoder will not be heard any sooner
-/// than the ones in the buffer, and a sender that is told only about the buffer
-/// would look idle while a whole track sat in the pipeline. Everything the
-/// sender sends is accounted for, wherever it currently waits.
+/// The engine cannot measure how far ahead a sender has run: the frames it
+/// would have to count are spread across queues it does not own — this
+/// pipeline's ingest channel as much as the endpoint's own — so a number
+/// computed here would top out at this pipeline's depth and never reach the
+/// sender's water marks. It reports the one thing only it knows, the timestamp
+/// playback has reached, and the endpoint subtracts that from the newest frame
+/// it has received.
 ///
 /// Without a sender to tell — the cache path, which has no tap attached — this
 /// is inert.
 #[derive(Clone, Default)]
 struct Occupancy {
     feedback: Option<BufferFeedback>,
-    newest_rx_ms: Arc<AtomicU64>,
-    playhead_ms: Arc<AtomicU64>,
 }
 
 impl Occupancy {
-    /// An occupancy report for a stream whose frames come from a tap.
+    /// A report for a stream whose frames come from a tap.
     fn for_sender(feedback: BufferFeedback) -> Self {
-        Self { feedback: Some(feedback), ..Default::default() }
-    }
-
-    /// A frame arrived from the sender.
-    fn note_arrival(&self, ts_ms: u64) {
-        self.newest_rx_ms.store(ts_ms, Ordering::Relaxed);
+        Self { feedback: Some(feedback) }
     }
 
     /// Playback reached this timestamp.
     fn note_playhead(&self, ts_ms: Option<u64>) {
-        if let Some(ts_ms) = ts_ms {
-            self.playhead_ms.store(ts_ms, Ordering::Relaxed);
+        if let (Some(feedback), Some(ts_ms)) = (&self.feedback, ts_ms) {
+            feedback.set_playhead_ms(ts_ms);
         }
-    }
-
-    /// Publish the current lag, in milliseconds.
-    fn report(&self) {
-        let Some(feedback) = &self.feedback else {
-            return;
-        };
-        let newest = self.newest_rx_ms.load(Ordering::Relaxed);
-        let played = self.playhead_ms.load(Ordering::Relaxed);
-        feedback.set_buffered_ms(newest.saturating_sub(played));
     }
 }
 
@@ -228,7 +211,6 @@ impl HqAudioService {
                         // A tap that reports a full buffer pauses itself, which
                         // is what keeps the buffer from having to drop at all.
                         occupancy.note_playhead(jitter.playhead_ms());
-                        occupancy.report();
                         let dropped = jitter.dropped_frames();
                         if dropped > reported_drops {
                             metrics::record_jitter_dropped(dropped - reported_drops);
@@ -309,7 +291,6 @@ impl TapHubService for HqAudioService {
                 let mut streams = streams;
                 let occupancy = Occupancy::for_sender(streams.feedback.clone());
                 let request_id = ticket.request_id;
-                let arrivals = occupancy.clone();
                 let hq = Arc::clone(&self.hq);
 
                 // Playback: every frame that arrives, in arrival order.
@@ -318,7 +299,6 @@ impl TapHubService for HqAudioService {
                     // disarm the receiver mid-stream.
                     let _armed = armed;
                     while let Some(frame) = streams.unrel.recv().await {
-                        arrivals.note_arrival(frame.ts.0);
                         if frame_tx
                             .send(TimedFrame {
                                 ts_ms: frame.ts.0,
