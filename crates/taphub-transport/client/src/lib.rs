@@ -259,6 +259,16 @@ impl TransportClient {
                         }
                     };
                     tokio::join!(pump, consume);
+
+                    if jitter.dropped_frames() > 0 {
+                        // The pf3 path has no back channel to the tap, so the
+                        // buffer warns as it drops and this is the total for the
+                        // track. A nonzero count means audio was decimated.
+                        tracing::warn!(
+                            dropped = jitter.dropped_frames(),
+                            "frames dropped: the sender ran ahead of playback"
+                        );
+                    }
                 });
 
                 Ok(AudioResponse {

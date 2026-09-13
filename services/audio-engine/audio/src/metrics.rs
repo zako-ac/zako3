@@ -16,6 +16,7 @@ pub struct AudioMetrics {
     pub decoder_stalls: AtomicU64,
     pub stream_underruns: AtomicU64,
     pub mixer_buffer_depth: AtomicI64,
+    pub jitter_drops: AtomicU64,
 }
 
 impl AudioMetrics {
@@ -26,6 +27,7 @@ impl AudioMetrics {
             decoder_stalls: AtomicU64::new(0),
             stream_underruns: AtomicU64::new(0),
             mixer_buffer_depth: AtomicI64::new(0),
+            jitter_drops: AtomicU64::new(0),
         }
     }
 }
@@ -46,6 +48,7 @@ struct AudioOtelMetrics {
     preload: Counter<u64>,
     taphub_request_duration: Histogram<f64>,
     taphub_errors: Counter<u64>,
+    jitter_drops: Counter<u64>,
     // Keep alive so the callback is not unregistered
     _mixer_buffer_depth_gauge: ObservableGauge<i64>,
 }
@@ -121,6 +124,12 @@ fn otel() -> &'static AudioOtelMetrics {
             taphub_errors: meter
                 .u64_counter("taphub_errors_total")
                 .with_description("Total number of TapHub request errors")
+                .build(),
+            jitter_drops: meter
+                .u64_counter("audio_jitter_dropped_frames_total")
+                .with_description(
+                    "Opus frames discarded because the jitter buffer was full",
+                )
                 .build(),
             _mixer_buffer_depth_gauge: buffer_depth_gauge,
         }
@@ -210,6 +219,17 @@ pub fn record_preload(result: &str) {
 pub fn record_taphub_request_duration(duration_secs: f64) {
     #[cfg(feature = "telemetry")]
     otel().taphub_request_duration.record(duration_secs, &[]);
+}
+
+/// Frames the jitter buffer discarded because a sender outran playback.
+///
+/// Nonzero means pacing failed somewhere upstream — the buffer drops only what
+/// it has no room to hold — so this is the metric that says the audio path is
+/// decimating a track rather than playing it.
+pub fn record_jitter_dropped(frames: u64) {
+    AUDIO_METRICS.jitter_drops.fetch_add(frames, Ordering::Relaxed);
+    #[cfg(feature = "telemetry")]
+    otel().jitter_drops.add(frames, &[]);
 }
 
 pub fn record_taphub_error(endpoint: &str) {

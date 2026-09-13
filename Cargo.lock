@@ -1113,7 +1113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1964,7 +1964,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4885,7 +4885,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6105,7 +6105,7 @@ dependencies = [
 [[package]]
 name = "protofish4"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs#d925f73b61d15968b39fd3f3de881035a99dc070"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "bytes",
  "protofish4-proto",
@@ -6118,7 +6118,7 @@ dependencies = [
 [[package]]
 name = "protofish4-proto"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs#d925f73b61d15968b39fd3f3de881035a99dc070"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "chacha20poly1305 0.11.0",
  "thiserror 2.0.18",
@@ -7017,7 +7017,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7146,7 +7146,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs 0.26.11",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8577,7 +8577,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.52.0",
@@ -8599,7 +8599,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
