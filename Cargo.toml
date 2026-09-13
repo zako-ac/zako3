@@ -76,7 +76,7 @@ zakofish4-hub = { git = "https://github.com/zako-ac/zakofish4" }
 # Pinned to the commit that hands the sink's buffer occupancy back to the
 # sender (`BufferFeedback`); point this at main once
 # https://github.com/zako-ac/protofish4-rs/pull/1 is merged.
-protofish4 = { git = "https://github.com/zako-ac/protofish4-rs", rev = "4a912879a42b8f36480eb49d9750e570aef56048" }
+protofish4 = { git = "https://github.com/zako-ac/protofish4-rs", rev = "b333461f1feb7b6f1cee993805b6a6dd7f482667" }
 async-nats = "0.45.0"
 dashmap = "6"
 envy = "0.4"

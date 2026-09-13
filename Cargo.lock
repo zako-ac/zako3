@@ -1113,7 +1113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1964,7 +1964,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2184,7 +2184,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4885,7 +4885,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6105,7 +6105,7 @@ dependencies = [
 [[package]]
 name = "protofish4"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs?rev=4a912879a42b8f36480eb49d9750e570aef56048#4a912879a42b8f36480eb49d9750e570aef56048"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=b333461f1feb7b6f1cee993805b6a6dd7f482667#b333461f1feb7b6f1cee993805b6a6dd7f482667"
 dependencies = [
  "bytes",
  "protofish4-proto",
@@ -6118,7 +6118,7 @@ dependencies = [
 [[package]]
 name = "protofish4-proto"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs?rev=4a912879a42b8f36480eb49d9750e570aef56048#4a912879a42b8f36480eb49d9750e570aef56048"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=b333461f1feb7b6f1cee993805b6a6dd7f482667#b333461f1feb7b6f1cee993805b6a6dd7f482667"
 dependencies = [
  "chacha20poly1305 0.11.0",
  "thiserror 2.0.18",
@@ -6271,7 +6271,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7017,7 +7017,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7030,7 +7030,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7146,7 +7146,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs 0.26.11",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7167,7 +7167,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs 1.0.8",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8580,7 +8580,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8599,7 +8599,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
