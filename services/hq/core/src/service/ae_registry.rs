@@ -6,6 +6,27 @@
 //! stops heartbeating simply stops being a placement candidate, so a crashed
 //! pod drops out without any explicit deregistration or cross-service
 //! reconciliation.
+//!
+//! # Trust model
+//!
+//! Registration is self-reported and is *not* bound to a caller identity: any
+//! holder of the shared admin token can `register_ae`/`heartbeat_ae` under a
+//! peer's `sink_id` (moving that engine's dispatch target) or call
+//! `report_guilds` for it (rewriting its permission set). The traffic-light
+//! broker this replaced minted a per-engine token at registration and required
+//! it back on every heartbeat, so this is a deliberate narrowing of that
+//! guarantee.
+//!
+//! It is accepted, not overlooked. The admin token already reaches every engine
+//! and the backend, so its holder can serve itself the whole audio command
+//! surface directly (`AudioEngineRpc::execute`) instead of going through a
+//! peer's entry — impersonating an engine buys no capability that the token did
+//! not already carry. Binding advertisements to the connection would mean
+//! minting and distributing a per-engine credential through the helm secrets
+//! again, which is most of what this change set out to delete. Revisit if the
+//! admin token ever spans a trust boundary it does not span today, e.g. if
+//! engines are placed in a different namespace or operated by a different
+//! party.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -42,9 +63,6 @@ pub const HEARTBEAT_TTL: Duration = Duration::from_secs(45);
 ///   2 × MAX_ATTEMPTS(2) × taphub_per_attempt(6s) = 24s ≤ engine backstop(25s)
 ///     < HQ dispatch(30s)
 pub const AE_DISPATCH_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// How long an engine is given to answer the registration call itself.
-const REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
 pub enum AeError {
@@ -288,11 +306,13 @@ pub fn rank_engines(
             .then_with(|| a.sink_id.cmp(&b.sink_id))
     });
 
-    if let Some(client_id) = already_serving {
-        if let Some(pos) = eligible.iter().position(|e| e.client_id == client_id) {
-            let entry = eligible.remove(pos);
-            eligible.insert(0, entry);
-        }
+    // The bot Discord says is already in the channel wins the placement, so a
+    // re-Join answers `AlreadyJoined` instead of allocating a second bot.
+    if let Some(pos) = already_serving
+        .and_then(|client_id| eligible.iter().position(|e| e.client_id == client_id))
+    {
+        let entry = eligible.remove(pos);
+        eligible.insert(0, entry);
     }
 
     eligible

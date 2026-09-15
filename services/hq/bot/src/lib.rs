@@ -169,6 +169,13 @@ pub async fn run(
     });
     let _ = resolver_slot.set(cache_resolver as Arc<dyn DiscordNameResolver>);
 
+    // Discord's voice state, straight from the same cache the gateway fills.
+    // Installed before `start()` for the same reason the resolver is: any
+    // command that arrives afterwards must see a populated slot rather than
+    // answering "no session" because the implementation was never plugged in.
+    let voice_presence = Arc::new(SerenityVoicePresence::new(client.cache.clone()));
+    let _ = voice_presence_slot.set(voice_presence as Arc<dyn VoicePresence>);
+
     client.start().await?;
     Ok(())
 }

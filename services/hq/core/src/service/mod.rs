@@ -1,3 +1,4 @@
+pub mod ae_registry;
 pub mod audio;
 pub mod auth;
 pub mod discord_resolver;
@@ -5,6 +6,7 @@ pub mod mapping;
 pub mod tap;
 pub mod tts_channel;
 pub mod validation;
+pub mod voice_presence;
 
 pub use auth::AuthService;
 pub use discord_resolver::{
@@ -27,7 +29,9 @@ pub mod playback;
 pub use mapping::MappingService;
 pub use playback::{PlaybackService, UserVoiceInfo};
 pub mod audio_engine;
+pub use ae_registry::AeRegistry;
 pub use audio_engine::AudioEngineService;
+pub use voice_presence::{VoicePresence, VoicePresenceSlot, make_voice_presence_slot};
 pub mod emoji_match_publisher;
 pub use emoji_match_publisher::EmojiMatchPublisher;
 
@@ -301,6 +305,8 @@ impl Service {
             name_resolver_slot,
             tts_channel: TTSChannelService::new(tts_channel_repo),
             audio_engine: audio_engine_service,
+            ae_registry,
+            voice_presence,
             emoji_match_publisher,
             cache_admin,
             gateway_presence,

@@ -1,3 +1,5 @@
+use ae_protocol::{AeAdvertisement, AeRegistryRpcServer};
+use hq_core::service::ae_registry::AeRegistry;
 use hq_core::service::api_key::ApiKeyService;
 use hq_core::service::audio::AudioRequestService;
 use hq_core::service::auth::AuthService;
@@ -7,6 +9,7 @@ use hq_types::hq::audio_dispatch::{
     AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport,
 };
 use hq_types::hq::rpc::HqRpcServer;
+use hq_types::GuildId;
 use hq_types::hq::{Tap, TapId, User, UserId};
 use hq_types::{AudioRequest, CachedAudioRequest, TapHubError};
 use jsonrpsee::core::{RpcResult, async_trait};
