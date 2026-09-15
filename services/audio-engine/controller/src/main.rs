@@ -1,17 +1,17 @@
+use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use std::net::SocketAddr;
 
+use ae_protocol::{AeAdvertisement, AudioEngineRpcServer};
+use jsonrpsee::server::Server;
 use serenity::Client;
 use serenity::all::GatewayIntents;
 use songbird::SerenityInit;
-use jsonrpsee::server::Server;
-use tl_protocol::AudioEngineRpcServer;
 
 use zako3_audio_engine_controller::{
-    address::{SelfAddressResolver, HeuristicSelfAddressResolver},
+    address::{HeuristicSelfAddressResolver, SelfAddressResolver},
     config::AppConfig,
-    guild_reporter::{report_guilds_once, run_ae_heartbeat, run_guild_reporter},
+    hq_registry::{HqRegistryClient, report_guilds_once, run_ae_heartbeat, run_guild_reporter},
     ready_waiter::create_ready_waiter,
     server::AeTransportHandler,
 };
@@ -21,9 +21,8 @@ use zako3_audio_engine_infra::{
     RedisStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
-use zako3_telemetry::TelemetryConfig;
-use zako3_tl_client::TlClient;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
+use zako3_telemetry::TelemetryConfig;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -89,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             svc
         }
         Ok(None) => {
-            tracing::info!("HQ_RPC_URL not set; using the taphub path only");
+            tracing::info!("AUDIO_PLANE_V4 off; using the taphub path only");
             legacy_taphub
         }
         Err(e) => {
@@ -125,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 2: Create OnceLock for session_manager (will be filled later).
     let sm_cell: Arc<OnceLock<Arc<SessionManager>>> = Arc::new(OnceLock::new());
 
-    // Step 3: Start jsonrpsee HTTP server for TL to call this AE (before registering).
+    // Step 3: Start the jsonrpsee HTTP server HQ dispatches commands to.
     let ae_listen_addr: SocketAddr = format!("0.0.0.0:{}", config.ae_port)
         .parse()
         .expect("Invalid AE listen address");
@@ -140,38 +139,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server_handle = server.start(handler.into_rpc());
 
-    // Step 4: Register with TL and receive Discord token.
-    let tl_client = loop {
-        match TlClient::connect(&config.tl_rpc_url).await {
-            Ok(c) => break c,
-            Err(e) => {
-                tracing::warn!("Failed to connect to TL client: {e}, retrying in 2s");
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
+    // Step 4: Resolve the Discord token this engine logs in as.
+    //
+    // No broker hands this out any more: it comes from this pod's own
+    // environment. It has to be the same token this ordinal used before, since
+    // the Redis session store is namespaced by it — a different token would
+    // silently orphan every session this engine was supposed to rejoin.
+    let token_str = match config.resolve_discord_token() {
+        Some(token) => token,
+        None => {
+            tracing::error!(
+                ordinal = ?config.pod_ordinal(),
+                "no Discord token available; set DISCORD_TOKEN (single engine) or \
+                 DISCORD_TOKENS (comma-separated pool indexed by pod ordinal)"
+            );
+            std::process::exit(1);
         }
     };
 
-    let token_str = loop {
-        match tl_client.register_ae(advertised_addr.clone()).await {
-            Ok(t) => {
-                tracing::info!("Registered with TL and received Discord token");
-                break t;
-            }
-            Err(e) => {
-                tracing::warn!("Failed to register with TL: {e}, retrying in 2s");
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
-        }
-    };
-
-    // Step 5: Spawn AE heartbeat to re-register with TL every 15 s (handles TL restarts).
-    tokio::spawn(run_ae_heartbeat(
-        config.tl_rpc_url.clone(),
-        token_str.clone(),
-        advertised_addr.clone(),
-    ));
-
-    // Step 6: Build the Discord / audio infrastructure with the assigned token.
+    // Step 5: Build the Discord / audio infrastructure with that token.
     let songbird_manager = songbird::Songbird::serenity();
     let (ready_waiter, mut ready_recv, mut ctx_recv) = create_ready_waiter();
 
@@ -193,7 +179,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     ready_recv.recv().await;
-    let serenity_ctx = ctx_recv.recv().await.expect("ctx channel closed before ready");
+    let serenity_ctx = ctx_recv
+        .recv()
+        .await
+        .expect("ctx channel closed before ready");
 
     // Channel carrying terminal voice disconnects from the songbird driver-event watcher
     // (registered per-join) to the controller's consumer task below.
@@ -226,7 +215,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // automatically; TL's reconcile will re-adopt these live sessions into its cache.
     match session_manager.list_sessions().await {
         Ok(persisted) if !persisted.is_empty() => {
-            tracing::info!(count = persisted.len(), "Rejoining persisted voice sessions");
+            tracing::info!(
+                count = persisted.len(),
+                "Rejoining persisted voice sessions"
+            );
             for s in persisted {
                 if let Err(e) = session_manager.rejoin(&s).await {
                     tracing::error!(
@@ -266,19 +258,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    tracing::info!("Audio Engine is ready and connected to Discord!");
-    telemetry.healthy();
+    // Step 6: announce ourselves to HQ and keep the registration alive.
+    //
+    // This happens after Discord is up because the advertisement carries the
+    // bot's user id, which is only known once we are logged in — and HQ places
+    // sessions by matching that id against Discord's voice state.
+    let advertisement = AeAdvertisement {
+        sink_id: config.sink_id(),
+        client_id: serenity_ctx.cache.current_user().id.get().to_string(),
+        advertise_addr: advertised_addr.clone(),
+    };
 
-    // Step 6: Spawn background guild reporter.
+    let registry = match HqRegistryClient::new(
+        &config.hq_rpc_url,
+        config.hq_rpc_admin_token.as_deref().unwrap_or_default(),
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!(
+                hq_rpc_url = %config.hq_rpc_url,
+                "failed to build the HQ registry client: {e}"
+            );
+            std::process::exit(1);
+        }
+    };
+
+    loop {
+        match registry.register(advertisement.clone()).await {
+            Ok(()) => {
+                tracing::info!(
+                    hq_rpc_url = %config.hq_rpc_url,
+                    sink_id = %advertisement.sink_id,
+                    client_id = %advertisement.client_id,
+                    "registered with HQ"
+                );
+                break;
+            }
+            Err(e) => {
+                tracing::warn!("failed to register with HQ: {e}, retrying in 2s");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
+    }
+
+    tokio::spawn(run_ae_heartbeat(registry.clone(), advertisement.clone()));
     tokio::spawn(run_guild_reporter(
         serenity_ctx.clone(),
-        config.tl_rpc_url.clone(),
-        token_str.clone(),
+        registry.clone(),
+        advertisement.client_id.clone(),
     ));
+    report_guilds_once(&serenity_ctx, &registry, &advertisement.client_id).await;
 
-    // Report guilds once on startup
-    report_guilds_once(&serenity_ctx, &config.tl_rpc_url, &token_str).await;
-
+    tracing::info!("Audio Engine is ready and connected to Discord!");
+    telemetry.healthy();
     tracing::info!("Audio Engine is serving requests");
 
     // Step 7: Wait for server to stop OR shutdown signal
@@ -315,8 +347,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
-/// Build the v4 audio plane, or `None` when HQ is not configured.
+/// Build the v4 audio plane, or `None` when it is switched off.
 ///
 /// Binds the UDP socket, starts advertising this engine as a sink, and returns
 /// a service that falls back to `legacy` for any tap HQ has not migrated.
@@ -324,9 +355,10 @@ async fn build_hq_audio(
     config: &AppConfig,
     legacy: Arc<dyn zako3_audio_engine_core::service::taphub::TapHubService>,
 ) -> anyhow::Result<Option<Arc<dyn zako3_audio_engine_core::service::taphub::TapHubService>>> {
-    let Some(hq_url) = config.hq_rpc_url.clone() else {
+    if !config.audio_plane_v4 {
         return Ok(None);
-    };
+    }
+    let hq_url = config.hq_rpc_url.clone();
 
     let hq = zako3_audio_engine_infra::hq_client::HqAudioClient::new(
         &hq_url,

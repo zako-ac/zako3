@@ -17,7 +17,6 @@ pub struct AppConfig {
     pub redis_url: String,
     pub rpc_admin_token: String,
     pub zako_website_url: String,
-    pub traffic_light_url: String,
     pub otlp_endpoint: Option<String>,
     pub metrics_port: Option<u16>,
     pub sub_bot_ids: Vec<String>,
@@ -49,8 +48,6 @@ impl AppConfig {
             rpc_admin_token: env::var("RPC_ADMIN_TOKEN")?,
             zako_website_url: env::var("ZAKO_WEBSITE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-            traffic_light_url: env::var("TRAFFIC_LIGHT_URL")
-                .unwrap_or_else(|_| "127.0.0.1:7070".to_string()),
             otlp_endpoint: env::var("OTLP_ENDPOINT").ok(),
             metrics_port: env::var("METRICS_PORT")
                 .ok()

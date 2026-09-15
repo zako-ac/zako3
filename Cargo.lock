@@ -27,6 +27,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "ae-protocol"
+version = "0.1.0"
+dependencies = [
+ "jsonrpsee",
+ "serde",
+ "zako3-types",
+]
+
+[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,8 +609,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
 dependencies = [
  "fastrand",
- "gloo-timers 0.3.0",
- "tokio",
 ]
 
 [[package]]
@@ -823,29 +830,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 dependencies = [
  "allocator-api2",
-]
-
-[[package]]
-name = "bytecheck"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0caa33a2c0edca0419d15ac723dff03f1956f7978329b1e3b5fdaaaed9d3ca8b"
-dependencies = [
- "bytecheck_derive",
- "ptr_meta",
- "rancor",
- "simdutf8",
-]
-
-[[package]]
-name = "bytecheck_derive"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89385e82b5d1821d2219e0b095efa2cc1f246cbf99080f3be46a1a85c0d392d9"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -2519,7 +2503,7 @@ version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af43fadb8a98512d547e37b4e92e0ced13e205c061b87b4623eff01d918d6968"
 dependencies = [
- "gloo-timers 0.4.0",
+ "gloo-timers",
  "send_wrapper",
 ]
 
@@ -2699,18 +2683,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "gloo-timers"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
-dependencies = [
- "futures-channel",
- "futures-core",
- "js-sys",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -3133,6 +3105,7 @@ dependencies = [
 name = "hq-backend"
 version = "0.1.0"
 dependencies = [
+ "ae-protocol",
  "async-nats",
  "async-trait",
  "axum 0.7.9",
@@ -3217,6 +3190,7 @@ dependencies = [
 name = "hq-core"
 version = "0.1.0"
 dependencies = [
+ "ae-protocol",
  "anyhow",
  "async-nats",
  "async-trait",
@@ -3231,6 +3205,7 @@ dependencies = [
  "oauth2",
  "opentelemetry 0.32.0",
  "reqwest 0.11.27",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3246,7 +3221,6 @@ dependencies = [
  "zako3-metrics",
  "zako3-preload-cache",
  "zako3-states",
- "zako3-tl-client",
  "zako3-tts-matching",
  "zako3-types",
  "zakofish4-common",
@@ -4785,26 +4759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "munge"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e17401f259eba956ca16491461b6e8f72913a0a114e39736ce404410f915a0c"
-dependencies = [
- "munge_macro",
-]
-
-[[package]]
-name = "munge_macro"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4568f25ccbd45ab5d5603dc34318c1ec56b117531781260002151b8530a9f931"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "nanorand"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6137,26 +6091,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ptr_meta"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9a0cf95a1196af61d4f1cbdab967179516d9a4a4312af1f31948f8f6224a79"
-dependencies = [
- "ptr_meta_derive",
-]
-
-[[package]]
-name = "ptr_meta_derive"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7347867d0a7e1208d93b46767be83e2b8f978c3dad35f775ac8d8847551d6fe1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "pulldown-cmark"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6294,15 +6228,6 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
-
-[[package]]
-name = "rancor"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daff8b7b3ccf5f7ba270b3e7a0a4d4c701c5797e38dec27c7e2c3dbb830fed1c"
-dependencies = [
- "ptr_meta",
-]
 
 [[package]]
 name = "rand"
@@ -6644,15 +6569,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rend"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "663ba70707f96e871406fe10d68128412e619b06d1d47cb91c3a4c6501176240"
-dependencies = [
- "bytecheck",
-]
-
-[[package]]
 name = "reqwest"
 version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6798,36 +6714,6 @@ dependencies = [
  "crossbeam-utils",
  "portable-atomic",
  "portable-atomic-util",
-]
-
-[[package]]
-name = "rkyv"
-version = "0.8.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "815cc8a37159a463064825246cadb07961e25cd9885908606f6d08a98d8f8874"
-dependencies = [
- "bytecheck",
- "bytes",
- "hashbrown 0.17.1",
- "indexmap 2.14.0",
- "munge",
- "ptr_meta",
- "rancor",
- "rend",
- "rkyv_derive",
- "tinyvec",
- "uuid",
-]
-
-[[package]]
-name = "rkyv_derive"
-version = "0.8.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0ed1a78a1b19d184b0daa629dd9a024573173ec7d485b287cb369fb3607cc1c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -8771,16 +8657,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "tl-protocol"
-version = "0.1.0"
-dependencies = [
- "jsonrpsee",
- "rkyv",
- "serde",
- "zako3-types",
-]
 
 [[package]]
 name = "tls_codec"
@@ -10932,6 +10808,7 @@ dependencies = [
 name = "zako3-audio-engine-controller"
 version = "0.1.0"
 dependencies = [
+ "ae-protocol",
  "anyhow",
  "async-trait",
  "dotenvy",
@@ -10944,7 +10821,6 @@ dependencies = [
  "serde",
  "serenity",
  "songbird",
- "tl-protocol",
  "tokio",
  "tracing",
  "tracing-opentelemetry 0.32.1",
@@ -10954,7 +10830,6 @@ dependencies = [
  "zako3-states",
  "zako3-taphub-transport-client",
  "zako3-telemetry",
- "zako3-tl-client",
  "zako3-types",
 ]
 
@@ -11329,78 +11204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zako3-tl-boot"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "dotenvy",
- "envy",
- "jsonrpsee",
- "serde",
- "tl-protocol",
- "tokio",
- "tracing",
- "zako3-telemetry",
- "zako3-tl-core",
- "zako3-tl-infra",
- "zako3-types",
-]
-
-[[package]]
-name = "zako3-tl-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "backon",
- "jsonrpsee",
- "opentelemetry 0.31.0",
- "thiserror 1.0.69",
- "tl-protocol",
- "tokio",
- "tracing",
- "tracing-opentelemetry 0.32.1",
- "zako3-types",
-]
-
-[[package]]
-name = "zako3-tl-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "derive_more 2.1.1",
- "opentelemetry 0.31.0",
- "parking_lot 0.12.5",
- "rustc-hash",
- "serde",
- "thiserror 1.0.69",
- "tl-protocol",
- "tokio",
- "tracing",
- "tracing-opentelemetry 0.32.1",
- "zako3-types",
-]
-
-[[package]]
-name = "zako3-tl-infra"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "dashmap 6.2.1",
- "http 1.4.2",
- "jsonrpsee",
- "opentelemetry 0.31.0",
- "rustc-hash",
- "tl-protocol",
- "tokio",
- "tracing",
- "tracing-opentelemetry 0.32.1",
- "zako3-tl-core",
- "zako3-types",
-]
-
-[[package]]
 name = "zako3-tts-matching"
 version = "0.1.0"
 dependencies = [
@@ -11450,6 +11253,7 @@ dependencies = [
 name = "zakoctl"
 version = "0.1.0"
 dependencies = [
+ "ae-protocol",
  "anyhow",
  "chrono",
  "clap",
@@ -11471,7 +11275,6 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "zako3-states",
  "zako3-taphub-transport-client",
- "zako3-tl-client",
  "zako3-types",
 ]
 

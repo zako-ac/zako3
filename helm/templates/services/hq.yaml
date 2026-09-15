@@ -60,8 +60,6 @@ spec:
               value: "redis://{{ $fullname }}-redis:6379"
             - name: MAPPER_CACHE_REFRESH_SECS
               value: {{ .Values.hq.mapperCacheRefreshSecs | quote }}
-            - name: TRAFFIC_LIGHT_URL
-              value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: HQ_CACHE_RPC_URL
               value: "http://{{ $fullname }}-cache:{{ .Values.ports.cache }}"
             {{- if .Values.cache.adminTokenSecret.name }}

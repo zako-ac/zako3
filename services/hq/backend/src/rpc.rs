@@ -1,3 +1,5 @@
+use ae_protocol::{AeAdvertisement, AeRegistryRpcServer};
+use hq_core::service::ae_registry::AeRegistry;
 use hq_core::service::api_key::ApiKeyService;
 use hq_core::service::audio::AudioRequestService;
 use hq_core::service::auth::AuthService;
@@ -7,6 +9,7 @@ use hq_types::hq::audio_dispatch::{
     AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport,
 };
 use hq_types::hq::rpc::HqRpcServer;
+use hq_types::GuildId;
 use hq_types::hq::{Tap, TapId, User, UserId};
 use hq_types::{AudioRequest, CachedAudioRequest, TapHubError};
 use jsonrpsee::core::{RpcResult, async_trait};
@@ -311,6 +314,7 @@ pub async fn start_rpc_server(
     address: &str,
     admin_token: String,
     audio: Option<AudioRequestService>,
+    ae_registry: Option<Arc<AeRegistry>>,
 ) -> ZakoResult<()> {
     let middleware = tower::ServiceBuilder::new().layer(AuthLayer::new(admin_token));
 
@@ -323,10 +327,54 @@ pub async fn start_rpc_server(
     if let Some(audio) = audio {
         rpc = rpc.with_audio(audio);
     }
-    let handle = server.start(rpc.into_rpc());
+
+    // The engine registry rides on the same authenticated endpoint the engines
+    // already talk to for the audio plane, so there is one address (and one
+    // credential) an engine needs, whatever it does with it.
+    let mut module = rpc.into_rpc();
+    if let Some(registry) = ae_registry {
+        module
+            .merge(AeRegistryRpcImpl::new(registry).into_rpc())
+            .map_err(|e| hq_types::ZakoError::Rpc(e.to_string()))?;
+    }
+
+    let handle = server.start(module);
     tracing::info!("RPC server listening on {}", address);
 
     handle.stopped().await;
 
     Ok(())
+}
+
+/// The half of HQ's RPC surface the audio engines call.
+pub struct AeRegistryRpcImpl {
+    registry: Arc<AeRegistry>,
+}
+
+impl AeRegistryRpcImpl {
+    pub fn new(registry: Arc<AeRegistry>) -> Self {
+        Self { registry }
+    }
+}
+
+#[async_trait]
+impl AeRegistryRpcServer for AeRegistryRpcImpl {
+    async fn register_ae(&self, advertisement: AeAdvertisement) -> RpcResult<()> {
+        self.registry
+            .register(advertisement)
+            .await
+            .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))
+    }
+
+    async fn heartbeat_ae(&self, advertisement: AeAdvertisement) -> RpcResult<()> {
+        self.registry
+            .heartbeat(advertisement)
+            .await
+            .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))
+    }
+
+    async fn report_guilds(&self, client_id: String, guilds: Vec<GuildId>) -> RpcResult<()> {
+        self.registry.report_guilds(&client_id, guilds).await;
+        Ok(())
+    }
 }

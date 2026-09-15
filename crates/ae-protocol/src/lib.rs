@@ -1,7 +1,18 @@
+//! Control plane between HQ and the audio engines.
+//!
+//! Two directions live here:
+//!
+//! * [`AudioEngineRpc`] — HQ → engine. An engine serves `execute`, which is the
+//!   whole audio command vocabulary (join/leave/play/stop/...). HQ picks an
+//!   engine and calls it; nothing is proxied through a third party.
+//! * [`AeRegistryRpc`] — engine → HQ. An engine announces itself (address, the
+//!   Discord bot it logs in as) and keeps that alive with a heartbeat, so HQ
+//!   always has a live, self-reported set of engines to place sessions on.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use zako3_types::{hq::*, *};
+use zako3_types::{GuildId, hq::*, *};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AudioEngineError {
@@ -37,31 +48,55 @@ pub struct AudioEngineCommandRequest {
     pub idempotency_key: Option<String>,
 }
 
-#[jsonrpsee::proc_macros::rpc(server, client)]
-pub trait TrafficLightRpc {
-    #[method(name = "execute")]
-    async fn execute(&self, request: AudioEngineCommandRequest) -> jsonrpsee::core::RpcResult<AudioEngineCommandResponse>;
-
-    #[method(name = "get_sessions_in_guild")]
-    async fn get_sessions_in_guild(&self, guild_id: GuildId) -> jsonrpsee::core::RpcResult<Vec<SessionState>>;
-
-    #[method(name = "list_bot_ids")]
-    async fn list_bot_ids(&self) -> jsonrpsee::core::RpcResult<Vec<String>>;
-
-    #[method(name = "report_guilds")]
-    async fn report_guilds(&self, token: String, guilds: Vec<GuildId>) -> jsonrpsee::core::RpcResult<()>;
-
-    #[method(name = "register_ae")]
-    async fn register_ae(&self, listen_addr: String) -> jsonrpsee::core::RpcResult<String>;
-
-    #[method(name = "heartbeat_ae")]
-    async fn heartbeat_ae(&self, token: String, listen_addr: String) -> jsonrpsee::core::RpcResult<()>;
+/// What an engine tells HQ about itself on register/heartbeat.
+///
+/// Deliberately self-reported and address-based: an engine is the only process
+/// that knows its own reachable address and which Discord bot it logged in as,
+/// so HQ stores what it is told rather than deriving it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AeAdvertisement {
+    /// Stable engine identity — the StatefulSet pod name in a cluster. HQ keys
+    /// its registry on this, so a restart re-registers over the old entry
+    /// instead of leaving a stale one behind.
+    pub sink_id: String,
+    /// Discord user id of the bot this engine is logged in as. This is the id
+    /// HQ matches against Discord's voice state to learn which channel the
+    /// engine is serving.
+    pub client_id: String,
+    /// `http://host:port` HQ dispatches commands to.
+    pub advertise_addr: String,
 }
 
 #[jsonrpsee::proc_macros::rpc(server, client)]
 pub trait AudioEngineRpc {
     #[method(name = "execute")]
-    async fn execute(&self, request: AudioEngineCommandRequest) -> jsonrpsee::core::RpcResult<AudioEngineCommandResponse>;
+    async fn execute(
+        &self,
+        request: AudioEngineCommandRequest,
+    ) -> jsonrpsee::core::RpcResult<AudioEngineCommandResponse>;
+}
+
+/// The registry surface HQ serves to the audio engines.
+#[jsonrpsee::proc_macros::rpc(server, client)]
+pub trait AeRegistryRpc {
+    /// First contact after an engine has logged into Discord. Idempotent: a
+    /// restart re-registers over the previous entry for the same `sink_id`.
+    #[method(name = "register_ae")]
+    async fn register_ae(&self, advertisement: AeAdvertisement) -> jsonrpsee::core::RpcResult<()>;
+
+    /// Keeps an entry eligible. HQ stops placing sessions on an engine it has
+    /// not heard from recently, so a crashed engine drops out on its own.
+    #[method(name = "heartbeat_ae")]
+    async fn heartbeat_ae(&self, advertisement: AeAdvertisement) -> jsonrpsee::core::RpcResult<()>;
+
+    /// The guilds this engine's bot is currently a member of. Placement refuses
+    /// to send a Join to an engine that is not in the target guild.
+    #[method(name = "report_guilds")]
+    async fn report_guilds(
+        &self,
+        client_id: String,
+        guilds: Vec<GuildId>,
+    ) -> jsonrpsee::core::RpcResult<()>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -69,6 +69,10 @@ mod tests {
 
     #[test]
     fn test_heuristic_with_audio_engine_hostname() {
+        // Serialised against the token-pool test, which sets the same variable.
+        let _env = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // Simulate setting an audio-engine hostname
         unsafe {
             std::env::set_var("HOSTNAME", "audio-engine-0");

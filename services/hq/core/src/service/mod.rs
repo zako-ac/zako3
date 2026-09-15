@@ -1,3 +1,4 @@
+pub mod ae_registry;
 pub mod audio;
 pub mod auth;
 pub mod discord_resolver;
@@ -5,6 +6,7 @@ pub mod mapping;
 pub mod tap;
 pub mod tts_channel;
 pub mod validation;
+pub mod voice_presence;
 
 pub use auth::AuthService;
 pub use discord_resolver::{
@@ -27,7 +29,9 @@ pub mod playback;
 pub use mapping::MappingService;
 pub use playback::{PlaybackService, UserVoiceInfo};
 pub mod audio_engine;
+pub use ae_registry::AeRegistry;
 pub use audio_engine::AudioEngineService;
+pub use voice_presence::{VoicePresence, VoicePresenceSlot, make_voice_presence_slot};
 pub mod emoji_match_publisher;
 pub use emoji_match_publisher::EmojiMatchPublisher;
 
@@ -47,7 +51,6 @@ use zako3_states::{
     GatewayPresenceService, IntendedVoiceChannelService, TapHealthService, TapHubStateService,
     TapNamesCacheService, UserSettingsStateService, VoiceStateService,
 };
-use zako3_tl_client::TlClient;
 
 #[derive(Clone)]
 pub struct Service {
@@ -68,6 +71,12 @@ pub struct Service {
     pub name_resolver_slot: DiscordNameResolverSlot,
     pub tts_channel: TTSChannelService,
     pub audio_engine: AudioEngineService,
+    /// The live set of audio engines, kept in memory and fed by the engines'
+    /// own registrations/heartbeats over HQ's RPC surface.
+    pub ae_registry: Arc<AeRegistry>,
+    /// Where Discord's voice state is read from. `hq-bot` installs the
+    /// serenity-backed implementation once its client is up.
+    pub voice_presence: VoicePresenceSlot,
     pub emoji_match_publisher: Option<EmojiMatchPublisher>,
     /// Admin client for the cache worker (clear/delete cached audio).
     pub cache_admin: Arc<RemoteAudioCache>,
@@ -177,13 +186,15 @@ impl Service {
             notification_service.clone(),
         );
 
-        let audio_engine = Arc::new(
-            TlClient::connect(&config.traffic_light_url)
-                .await
-                .map_err(|e| CoreError::Internal(e.to_string()))?,
-        );
+        let ae_registry = AeRegistry::new();
+        let voice_presence = make_voice_presence_slot();
 
-        let audio_engine_service = AudioEngineService::new(audio_engine.clone(), event_tx);
+        let audio_engine_service = AudioEngineService::new(
+            ae_registry.clone(),
+            voice_presence.clone(),
+            config.clone(),
+            event_tx,
+        );
 
         let voice_state = VoiceStateService::new(redis_repo.clone());
         let intended_vc = IntendedVoiceChannelService::new(redis_repo.clone());
@@ -294,6 +305,8 @@ impl Service {
             name_resolver_slot,
             tts_channel: TTSChannelService::new(tts_channel_repo),
             audio_engine: audio_engine_service,
+            ae_registry,
+            voice_presence,
             emoji_match_publisher,
             cache_admin,
             gateway_presence,
