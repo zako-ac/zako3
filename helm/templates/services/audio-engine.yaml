@@ -75,8 +75,6 @@ spec:
                   fieldPath: metadata.namespace
             - name: AE_ADVERTISE_ADDR
               value: "http://$(POD_NAME).{{ $fullname }}-audio-engine.$(POD_NAMESPACE).svc.cluster.local:8090"
-            - name: TL_RPC_URL
-              value: "http://{{ $fullname }}-traffic-light:{{ .Values.ports.tlRpc }}"
             - name: TAPHUB_URL
               value: "{{ $fullname }}-taphub:{{ .Values.ports.taphubTransport }}"
             - name: TAPHUB_SNI
@@ -85,11 +83,11 @@ spec:
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: TAPHUB_REQUEST_TIMEOUT_MS
               value: "6000"
-            # --- v4 audio plane ---
-            # Present only when the proxy has a public address configured;
-            # without it HQ has nowhere to point taps, so leaving these unset
-            # keeps the engine on the taphub path.
-            {{- if .Values.aeProxy.publicAddr }}
+            # HQ is where this engine registers, and HQ both dispatches audio
+            # commands back to the address this engine advertises and (when the
+            # v4 plane is on) resolves taps. Registration is not optional:
+            # without it HQ does not know the engine exists, so the endpoint and
+            # its token are injected unconditionally.
             - name: HQ_RPC_URL
               value: "http://{{ $fullname }}-hq:{{ .Values.ports.hqRpc }}"
             - name: HQ_RPC_ADMIN_TOKEN
@@ -98,6 +96,13 @@ spec:
                     "secretName" (printf "%s-hq-secret" $fullname)
                     "existingName" .Values.hq.existingSecret.name
                     "key" .Values.hq.existingSecret.keys.rpcAdminToken) | nindent 16 }}
+            # --- v4 audio plane ---
+            # Present only when the proxy has a public address configured;
+            # without it HQ has nowhere to point taps, so leaving these unset
+            # keeps the engine on the taphub path.
+            {{- if .Values.aeProxy.publicAddr }}
+            - name: AUDIO_PLANE_V4
+              value: "true"
             - name: UDP_BIND_ADDR
               value: "0.0.0.0:{{ .Values.ports.aeUdpIngest }}"
             - name: POD_IP
@@ -119,12 +124,17 @@ spec:
             {{- include "zako3.otlpAuthEnv" . | nindent 12 }}
             - name: METRICS_PORT
               value: "9090"
-            - name: DISCORD_TOKEN
+            # The whole token pool, indexed by this pod's ordinal (pod `-N`
+            # logs in as entry N). Handing every pod the list is what makes one
+            # bot per replica expressible without an init container, and it maps
+            # ordinals to tokens exactly as the removed token broker did, so
+            # engines keep the Redis session namespace they persisted under.
+            - name: DISCORD_TOKENS
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
                     "secretName" $instanceSecretName
                     "existingName" $existingSecret
-                    "key" .Values.audioEngine.existingSecret.discordTokenKey) | nindent 16 }}
+                    "key" .Values.audioEngine.existingSecret.discordTokensKey) | nindent 16 }}
             - name: AE_TOKEN
               valueFrom:
                 {{- include "zako3.secretKeyRef" (dict
