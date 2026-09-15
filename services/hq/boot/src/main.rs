@@ -161,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
             &rpc_address,
             rpc_admin_token,
             Some(audio_service),
+            Some(service_rpc.ae_registry.clone()),
         );
         if let Err(e) = rpc.await {
             tracing::error!("RPC server error: {}", e);
@@ -170,9 +171,17 @@ async fn main() -> anyhow::Result<()> {
 
     let service_bot = service.clone();
     let resolver_slot = service.name_resolver_slot.clone();
+    let voice_presence_slot = service.voice_presence.clone();
     let bot_task = tokio::spawn(async move {
         info!("Starting bot...");
-        if let Err(e) = hq_bot::run(service_bot, resolver_slot, event_tx.clone()).await {
+        if let Err(e) = hq_bot::run(
+            service_bot,
+            resolver_slot,
+            voice_presence_slot,
+            event_tx.clone(),
+        )
+        .await
+        {
             tracing::error!("Bot error: {}", e);
             panic!("Bot failed");
         }

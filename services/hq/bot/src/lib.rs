@@ -1,7 +1,7 @@
 use ::serenity::all::GatewayIntents;
 use hq_core::{
-    service::{DiscordNameResolver, DiscordNameResolverSlot},
     PlaybackEvent, Service,
+    service::{DiscordNameResolver, DiscordNameResolverSlot, VoicePresence, VoicePresenceSlot},
 };
 use poise::serenity_prelude as serenity;
 use std::sync::Arc;
@@ -13,9 +13,11 @@ pub mod error;
 pub mod events;
 pub mod ui;
 pub mod util;
+pub mod voice_presence;
 
 use discord_resolver::SerenityNameResolver;
 pub use error::BotError;
+use voice_presence::SerenityVoicePresence;
 
 pub struct Data {
     pub service: Service,
@@ -28,7 +30,11 @@ async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
     match err {
         poise::FrameworkError::Command { error, ctx, .. } => {
             if error.is_internal() {
-                tracing::error!("Internal bot error in command '{}': {:?}", ctx.command().name, error);
+                tracing::error!(
+                    "Internal bot error in command '{}': {:?}",
+                    ctx.command().name,
+                    error
+                );
             }
             let embed = ui::embeds::error_embed(error.to_user_message().as_ref());
             let reply = poise::CreateReply::default().embed(embed).ephemeral(true);
@@ -44,10 +50,14 @@ async fn on_error(err: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-/// Periodically refreshes the set of Zako worker-bot Discord user ids from
-/// Traffic-Light's registry. Used by the voice-state auto-leave logic to detect
-/// whether *any* Zako bot occupies a channel. On fetch failure the last-known set
-/// is retained (never cleared) so a transient TL outage can't cause spurious leaves.
+/// Periodically refreshes the set of Zako worker-bot Discord user ids.
+///
+/// The ids come from HQ's own audio-engine registry — each engine reports the
+/// bot it logged in as — which is also the set HQ uses when it reads Discord's
+/// voice state, so both sides agree on what "a Zako bot" is. Used by the
+/// voice-state auto-leave logic to detect whether *any* Zako bot (not just this
+/// master process) occupies a channel. On fetch failure the last-known set is
+/// retained (never cleared) so a transient outage can't cause spurious leaves.
 fn spawn_zako_bot_id_refresh(
     service: Arc<Service>,
     zako_bot_ids: Arc<tokio::sync::RwLock<std::collections::HashSet<serenity::UserId>>>,
@@ -65,12 +75,16 @@ fn spawn_zako_bot_id_refresh(
                         .map(serenity::UserId::new)
                         .collect();
                     if parsed.is_empty() {
-                        tracing::warn!("list_bot_ids returned no usable ids; keeping previous set");
+                        tracing::warn!(
+                            "no audio engine has reported a bot id yet; keeping previous set"
+                        );
                     } else {
                         *zako_bot_ids.write().await = parsed;
                     }
                 }
-                Err(e) => tracing::warn!("Failed to refresh Zako bot ids from TL: {e}"),
+                Err(e) => {
+                    tracing::warn!("Failed to refresh Zako bot ids from the AE registry: {e}")
+                }
             }
         }
     });
@@ -79,6 +93,7 @@ fn spawn_zako_bot_id_refresh(
 pub async fn run(
     service: Service,
     resolver_slot: DiscordNameResolverSlot,
+    voice_presence_slot: VoicePresenceSlot,
     event_tx: broadcast::Sender<PlaybackEvent>,
 ) -> anyhow::Result<()> {
     let token = service.config.discord_bot_token.clone();

@@ -47,7 +47,6 @@ use zako3_states::{
     GatewayPresenceService, IntendedVoiceChannelService, TapHealthService, TapHubStateService,
     TapNamesCacheService, UserSettingsStateService, VoiceStateService,
 };
-use zako3_tl_client::TlClient;
 
 #[derive(Clone)]
 pub struct Service {
@@ -68,6 +67,12 @@ pub struct Service {
     pub name_resolver_slot: DiscordNameResolverSlot,
     pub tts_channel: TTSChannelService,
     pub audio_engine: AudioEngineService,
+    /// The live set of audio engines, kept in memory and fed by the engines'
+    /// own registrations/heartbeats over HQ's RPC surface.
+    pub ae_registry: Arc<AeRegistry>,
+    /// Where Discord's voice state is read from. `hq-bot` installs the
+    /// serenity-backed implementation once its client is up.
+    pub voice_presence: VoicePresenceSlot,
     pub emoji_match_publisher: Option<EmojiMatchPublisher>,
     /// Admin client for the cache worker (clear/delete cached audio).
     pub cache_admin: Arc<RemoteAudioCache>,
@@ -177,13 +182,15 @@ impl Service {
             notification_service.clone(),
         );
 
-        let audio_engine = Arc::new(
-            TlClient::connect(&config.traffic_light_url)
-                .await
-                .map_err(|e| CoreError::Internal(e.to_string()))?,
-        );
+        let ae_registry = AeRegistry::new();
+        let voice_presence = make_voice_presence_slot();
 
-        let audio_engine_service = AudioEngineService::new(audio_engine.clone(), event_tx);
+        let audio_engine_service = AudioEngineService::new(
+            ae_registry.clone(),
+            voice_presence.clone(),
+            config.clone(),
+            event_tx,
+        );
 
         let voice_state = VoiceStateService::new(redis_repo.clone());
         let intended_vc = IntendedVoiceChannelService::new(redis_repo.clone());

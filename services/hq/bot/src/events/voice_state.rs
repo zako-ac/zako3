@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use dashmap::DashSet;
-use tokio::sync::RwLock;
 use hq_core::{CoreResult, PlaybackEvent, Service};
 use hq_types::{
     AudioRequestString, ChannelId, GuildId, QueueName,
@@ -10,6 +9,7 @@ use hq_types::{
 };
 use poise::serenity_prelude as serenity;
 use serenity::{Context, EventHandler, async_trait, model::voice::VoiceState};
+use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 use tracing::Instrument as _;
 use zako3_states::VoiceStateService;
@@ -23,9 +23,9 @@ pub struct VoiceStateHandler {
     /// Tracks (guild_id, channel_id) pairs where a join is currently in-flight.
     /// Prevents concurrent voice state events from each firing a separate join RPC.
     pub joining: Arc<DashSet<(u64, u64)>>,
-    /// The set of all Zako worker-bot Discord user ids, sourced from Traffic-Light's
-    /// registry (see `TlClient::list_bot_ids`) and refreshed periodically. Used to
-    /// detect whether *any* Zako bot (not just this master process) is in a channel.
+    /// The set of all Zako worker-bot Discord user ids, sourced from HQ's
+    /// audio-engine registry and refreshed periodically. Used to detect
+    /// whether *any* Zako bot (not just this master process) is in a channel.
     pub zako_bot_ids: Arc<RwLock<HashSet<serenity::UserId>>>,
 }
 
@@ -35,12 +35,14 @@ struct ChannelSnapshot {
     channel_id: ChannelId,
     guild_id: GuildId,
     real_user_count: usize,
-    /// Whether *any* Zako bot (this master or a worker bot from TL's pool) is physically
-    /// connected to this channel, read from Discord's own voice state (the serenity cache)
-    /// rather than a Traffic-Light round-trip. The master never joins VC itself — worker bots
-    /// do — so presence is matched against the full Zako bot id set (see `zako_bot_ids`).
-    /// TL's session view is eventually-consistent and its `GetSessionState` round-trip can
-    /// transiently fail; Discord's gateway state is the authority for physical presence.
+    /// Whether *any* Zako bot (this master or a worker bot) is physically
+    /// connected to this channel, read from Discord's own voice state (the
+    /// serenity cache). The master never joins VC itself — worker bots do — so
+    /// presence is matched against the full Zako bot id set (see `zako_bot_ids`).
+    ///
+    /// Discord's gateway state is the authority for physical presence: nothing in
+    /// HQ has to remember what it asked for, and a session that was never
+    /// recorded still shows up as long as the connection is real.
     bot_is_present: bool,
 }
 
@@ -501,8 +503,14 @@ async fn resolve_tap_id(service: &Service, settings: &UserSettings) -> CoreResul
     if let Some(tap_id) = &settings.tts_voice {
         return Ok(tap_id.clone());
     }
-    if let Some(tap) = service.tap.get_tap_by_name(&TapName::from("google".to_string())).await? {
+    if let Some(tap) = service
+        .tap
+        .get_tap_by_name(&TapName::from("google".to_string()))
+        .await?
+    {
         return Ok(tap.id);
     }
-    Err(hq_core::CoreError::NotFound("Default tap 'google' not found.".into()))
+    Err(hq_core::CoreError::NotFound(
+        "Default tap 'google' not found.".into(),
+    ))
 }

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Structured error from the TapHub subsystem. Serializable so it can cross
-/// the taphub-transport and tl-protocol wire boundaries while preserving
+/// the taphub-transport and ae-protocol wire boundaries while preserving
 /// enough type information for the bot to render a localized user message.
 #[derive(Debug, Clone, Error, Serialize, Deserialize)]
 pub enum TapHubError {

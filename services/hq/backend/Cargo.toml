@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 hq-core = { path = "../core" }
+ae-protocol = { workspace = true }
 axum = { workspace = true, features = ["multipart", "ws"] }
 futures-util = "0.3"
 tokio = { workspace = true }
