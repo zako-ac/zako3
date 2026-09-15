@@ -18,6 +18,7 @@ fn main() {
     generator.add_schema::<TapWithAccessDto>("TapWithAccessDto");
     generator.add_schema::<TimeSeriesPointDto>("TimeSeriesPointDto");
     generator.add_schema::<TapStatsDto>("TapStatsDto");
+    generator.add_schema::<TapHealthDto>("TapHealthDto");
     generator.add_schema::<PaginationMetaDto>("PaginationMetaDto");
 
     // We handle generics explicitly by creating aliases or just not adding PaginatedResponseDto since TS handles generics better manually.

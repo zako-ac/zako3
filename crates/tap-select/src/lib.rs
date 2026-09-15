@@ -50,21 +50,56 @@ impl DynamicSampler {
 
     /// Pick a connection, or `None` if the tap has none online.
     pub fn next_state<'a>(&mut self, states: &'a OnlineTapStates) -> Option<&'a OnlineTapState> {
-        if states.is_empty() {
+        self.next_state_with(states, |_| Some(1.0))
+    }
+
+    /// Pick a connection, skipping the ones the caller rules out and scaling
+    /// the weights of the ones it wants deprioritised.
+    ///
+    /// `adjust` answers per connection: `None` rules it out for this draw, and
+    /// `Some(scale)` multiplies its sanitised weight — `0.0` deprioritises it
+    /// without excluding it. The two are deliberately different. A connection
+    /// that just failed mid-request must not be picked again, so it is ruled
+    /// out; a tap that is merely busy must still be reachable, because it is
+    /// the only tap that can serve its own id and there is nothing to fall back
+    /// to.
+    ///
+    /// The cursor advances over the *eligible* set, so a ruled-out connection
+    /// does not leave a hole in the weight space that has to be redistributed.
+    pub fn next_state_with<'a>(
+        &mut self,
+        states: &'a OnlineTapStates,
+        adjust: impl Fn(&OnlineTapState) -> Option<f32>,
+    ) -> Option<&'a OnlineTapState> {
+        let eligible: Vec<(&OnlineTapState, f64)> = states
+            .iter()
+            .filter_map(|s| {
+                let scale = adjust(s)?;
+                // A caller-supplied scale is as untrusted as the reported
+                // weight: `NaN` would make every comparison false and negative
+                // weights would silently cancel each other out.
+                let scale = if scale.is_finite() {
+                    scale.clamp(0.0, MAX_WEIGHT)
+                } else {
+                    0.0
+                };
+                Some((s, sanitize_weight(s.selection_weight) as f64 * scale as f64))
+            })
+            .collect();
+
+        if eligible.is_empty() {
             return None;
         }
 
-        let weights: Vec<f64> = states
-            .iter()
-            .map(|s| sanitize_weight(s.selection_weight) as f64)
-            .collect();
-
-        let total: f64 = weights.iter().sum();
-        // Every connection asked for zero (or all were clamped to it). Falling
-        // back to uniform keeps the tap usable instead of unreachable.
+        let total: f64 = eligible.iter().map(|(_, w)| *w).sum();
+        // Every eligible connection asked for zero, or the tap is marked busy
+        // and every weight was scaled away. Falling back to uniform keeps the
+        // tap usable instead of unreachable. Weights and scales are both
+        // clamped to finite non-negative values before they get here, so this
+        // really is a test for "nothing is left to prefer", not for NaN.
         if total <= 0.0 {
-            let idx = self.advance_cursor(states.len());
-            return states.get(idx);
+            let idx = self.advance_cursor(eligible.len());
+            return eligible.get(idx).map(|(s, _)| *s);
         }
 
         const PHI: f64 = 0.618_033_988_749_895;
@@ -72,13 +107,13 @@ impl DynamicSampler {
         let target = self.cursor * total;
 
         let mut running = 0.0;
-        for (i, w) in weights.iter().enumerate() {
+        for (s, w) in &eligible {
             running += w;
             if running >= target {
-                return states.get(i);
+                return Some(*s);
             }
         }
-        states.last()
+        eligible.last().map(|(s, _)| *s)
     }
 
     /// Backwards-compatible shim for callers that only need the id.

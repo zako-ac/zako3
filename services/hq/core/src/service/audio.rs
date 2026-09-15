@@ -19,9 +19,11 @@ use uuid::Uuid;
 use zako3_metrics::TapMetricsService;
 use zako3_preload_cache::AudioCache;
 use zako3_cache_client::{CreateIngestReq, FinalizeIngestReq, IngestCreatedResp};
-use zako3_states::{RedisPubSub, SinkRegistry};
+use zako3_states::{RedisPubSub, SinkRegistry, TapHealthService};
 use hq_types::cache::{AudioCacheItem, AudioCacheItemKey};
-use hq_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
+use hq_types::hq::audio_dispatch::{
+    AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport, StreamReport,
+};
 use hq_types::hq::history::{PlayAudioHistory, UseHistoryEntry};
 use hq_types::hq::{DiscordUserId, Tap, TapId};
 use hq_types::{
@@ -185,6 +187,11 @@ pub struct AudioRequestService {
     /// would be a lookup with no key.
     cache_sink_id: String,
     timeouts: AudioTimeouts,
+    /// Where first-sample observations are recorded.
+    ///
+    /// Optional because a deployment without a gateway has no health to record
+    /// into and no probe to read it back out.
+    health: Option<TapHealthService>,
 }
 
 impl AudioRequestService {
@@ -211,7 +218,17 @@ impl AudioRequestService {
             ingest: None,
             cache_sink_id: "cache".to_string(),
             timeouts: AudioTimeouts::default(),
+            health: None,
         }
+    }
+
+    /// Record first-sample latency into the gateway's health store.
+    ///
+    /// Without this the store only ever knows what probing said, and a tap that
+    /// is slow for real listeners but fast for a probe stays `Healthy` forever.
+    pub fn with_health(mut self, health: TapHealthService) -> Self {
+        self.health = Some(health);
+        self
     }
 
     /// Enable the direct preload path: tap → cache worker, no audio engine.
@@ -600,14 +617,28 @@ impl AudioRequestService {
 
     // --- stream outcomes ---------------------------------------------------
 
-    /// Record how a transfer ended, and release its proxy route.
-    pub async fn report_stream_outcome(&self, request_id: Uuid, report: StreamReport) {
+    /// Record how a transfer ended, how long it took to start, and release its
+    /// proxy route.
+    ///
+    /// The first-sample interval is the one measurement only the sink can make:
+    /// HQ sees the request leave and the tap's answer come back, and never the
+    /// audio that followed. Without it, a tap that takes nine seconds to
+    /// produce its first sample is indistinguishable from a healthy one, and a
+    /// tap that produces nothing at all is indistinguishable from a slow one.
+    pub async fn report_stream_outcome(&self, report: StreamOutcomeReport) {
+        let StreamOutcomeReport {
+            request_id,
+            tap_id,
+            time_to_first_sample_ms,
+            report,
+        } = report;
+
         match &report {
             StreamReport::Completed { frames_sent } => {
-                tracing::info!(%request_id, frames_sent, "stream completed");
+                tracing::info!(%request_id, frames_sent, ?time_to_first_sample_ms, "stream completed");
             }
             StreamReport::Aborted { frames_sent, reason } => {
-                tracing::warn!(%request_id, frames_sent, %reason, "stream aborted");
+                tracing::warn!(%request_id, frames_sent, %reason, ?time_to_first_sample_ms, "stream aborted");
             }
             // The one that indicts the network path rather than the tap, and
             // therefore the one worth alerting on.
@@ -615,6 +646,28 @@ impl AudioRequestService {
                 tracing::error!(%request_id, %reason, "audio could not be delivered to its sink");
             }
         }
+
+        // Only when a gateway is running: without one there is no probe and no
+        // routing decision that could act on the verdict.
+        if let Some(health) = self.health.as_ref() {
+            match health
+                .record_first_sample(&tap_id, time_to_first_sample_ms)
+                .await
+            {
+                Ok(true) => tracing::warn!(
+                    tap_id = %tap_id.0,
+                    ?time_to_first_sample_ms,
+                    "tap deprioritised: its first sample was late"
+                ),
+                Ok(false) => {}
+                Err(e) => tracing::warn!(
+                    %e,
+                    tap_id = %tap_id.0,
+                    "failed to record the first-sample time"
+                ),
+            }
+        }
+
         self.sinks.clear_route(&request_id).await;
     }
 

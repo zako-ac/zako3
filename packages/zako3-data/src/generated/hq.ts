@@ -175,10 +175,30 @@ export const TapDtoSchema = z.object({
   cacheHitRateHistory: z.array(z.object({
   timestamp: z.string(),
   value: z.number()
-}))
+})),
+  health: z.object({
+  verdict: z.string(),
+  timeToFirstSampleMs: z.number().nullable(),
+  consecutiveProbeFailures: z.number(),
+  lastProbeAt: z.string().nullable(),
+  lastProbeResult: z.string().nullable(),
+  excludedConnections: z.array(z.string()),
+  busyUntil: z.string().nullable()
+}).nullable()
 })
 });
 export type TapDto = z.infer<typeof TapDtoSchema>;
+
+export const TapHealthDtoSchema = z.object({
+  verdict: z.string(),
+  timeToFirstSampleMs: z.number().nullable(),
+  consecutiveProbeFailures: z.number(),
+  lastProbeAt: z.string().nullable(),
+  lastProbeResult: z.string().nullable(),
+  excludedConnections: z.array(z.string()),
+  busyUntil: z.string().nullable()
+});
+export type TapHealthDto = z.infer<typeof TapHealthDtoSchema>;
 
 export const TapOccupationSchema = z.union([z.literal('official'), z.literal('verified'), z.literal('base')]);
 export type TapOccupation = z.infer<typeof TapOccupationSchema>;
@@ -213,7 +233,16 @@ export const TapStatsDtoSchema = z.object({
   cacheHitRateHistory: z.array(z.object({
   timestamp: z.string(),
   value: z.number()
-}))
+})),
+  health: z.object({
+  verdict: z.string(),
+  timeToFirstSampleMs: z.number().nullable(),
+  consecutiveProbeFailures: z.number(),
+  lastProbeAt: z.string().nullable(),
+  lastProbeResult: z.string().nullable(),
+  excludedConnections: z.array(z.string()),
+  busyUntil: z.string().nullable()
+}).nullable()
 });
 export type TapStatsDto = z.infer<typeof TapStatsDtoSchema>;
 
@@ -255,7 +284,16 @@ export const TapWithAccessDtoSchema = z.object({
   cacheHitRateHistory: z.array(z.object({
   timestamp: z.string(),
   value: z.number()
-}))
+})),
+  health: z.object({
+  verdict: z.string(),
+  timeToFirstSampleMs: z.number().nullable(),
+  consecutiveProbeFailures: z.number(),
+  lastProbeAt: z.string().nullable(),
+  lastProbeResult: z.string().nullable(),
+  excludedConnections: z.array(z.string()),
+  busyUntil: z.string().nullable()
+}).nullable()
 })
 }),
   hasAccess: z.boolean(),

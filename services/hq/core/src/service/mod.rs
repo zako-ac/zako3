@@ -44,8 +44,8 @@ use tokio::sync::broadcast;
 use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapMetricsService;
 use zako3_states::{
-    IntendedVoiceChannelService, TapHubStateService, TapNamesCacheService, UserSettingsStateService,
-    VoiceStateService,
+    GatewayPresenceService, IntendedVoiceChannelService, TapHealthService, TapHubStateService,
+    TapNamesCacheService, UserSettingsStateService, VoiceStateService,
 };
 use zako3_tl_client::TlClient;
 
@@ -71,6 +71,13 @@ pub struct Service {
     pub emoji_match_publisher: Option<EmojiMatchPublisher>,
     /// Admin client for the cache worker (clear/delete cached audio).
     pub cache_admin: Arc<RemoteAudioCache>,
+    /// The v4 gateway's live connections, when this process runs one.
+    ///
+    /// Held here rather than rebuilt in `boot` so the tap listing, the tap
+    /// stats and the gateway all read one projection with one lease.
+    pub gateway_presence: GatewayPresenceService,
+    /// What probing the taps concluded.
+    pub tap_health: TapHealthService,
 }
 
 impl Service {
@@ -142,6 +149,8 @@ impl Service {
         let tap_hub_state_service = TapHubStateService::new(redis_repo.clone());
         let user_settings_cache = UserSettingsStateService::new(redis_repo.clone());
         let tap_names_cache = TapNamesCacheService::new(redis_repo.clone());
+        let gateway_presence = GatewayPresenceService::new(redis_repo.clone());
+        let tap_health = TapHealthService::new(redis_repo.clone());
 
         let tap_service = TapService::new(
             tap_repo.clone(),
@@ -150,7 +159,9 @@ impl Service {
             tap_metrics_service.clone(),
             tap_hub_state_service,
             tap_names_cache,
-        );
+        )
+        .with_gateway_presence(gateway_presence.clone())
+        .with_tap_health(tap_health.clone());
         let api_key_service = ApiKeyService::new(
             api_key_repo.clone(),
             tap_repo.clone(),
@@ -285,6 +296,8 @@ impl Service {
             audio_engine: audio_engine_service,
             emoji_match_publisher,
             cache_admin,
+            gateway_presence,
+            tap_health,
         })
     }
 }

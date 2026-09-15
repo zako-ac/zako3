@@ -12,12 +12,12 @@ use hq_types::hq::TapId as HqTapId;
 use hq_types::{OnlineTapState, TapName};
 use zakofish4_common::action::DisconnectReason;
 use zakofish4_common::event::RequestOutcome;
-use zakofish4_common::messages::{TapClientHello, TapServerReject};
+use zakofish4_common::messages::{ProbeResult, TapClientHello, TapServerReject};
 use zakofish4_common::model::{HubRejectReasonType, RequestId, TapId};
 use zakofish4_hub::{HubBackend, TapHandle};
 
 use super::registry::{Connection, Registry};
-use super::GatewayShared;
+use super::{GatewayShared, PROBE_MIN_PROTOCOL_VERSION};
 
 pub struct GatewayBackend {
     shared: Arc<GatewayShared>,
@@ -95,8 +95,26 @@ impl HubBackend for GatewayBackend {
             replica_id: self.shared.replica_id.clone(),
         };
 
-        self.registry()
-            .insert(self.connection_id, Connection { state, handle });
+        // The version is what entitles us to probe: a tap that predates the
+        // probe cannot answer it, and `Ping`-style silence would be read as
+        // "this tap cannot synthesize".
+        let probe_supported = hello.protocol_version >= PROBE_MIN_PROTOCOL_VERSION;
+        if !probe_supported {
+            tracing::info!(
+                tap_id = %hello.tap_id.0,
+                protocol_version = hello.protocol_version,
+                "tap predates the synthesis probe; it will stay unknown and be routed as before"
+            );
+        }
+
+        self.registry().insert(
+            self.connection_id,
+            Connection {
+                state,
+                handle,
+                probe_supported,
+            },
+        );
 
         self.shared.publish_presence(&hq_tap_id).await;
 
@@ -133,12 +151,35 @@ impl HubBackend for GatewayBackend {
         }
     }
 
+    async fn on_probe_result(&self, tap_id: &TapId, probe_id: u64, result: Option<ProbeResult>) {
+        let delivered = self.registry().complete_probe(probe_id, result.clone());
+        if !delivered {
+            // Expected for a late answer to a probe already reported as
+            // unanswered. Worth knowing about, not worth failing anything for.
+            tracing::debug!(tap_id = %tap_id.0, probe_id, "probe answer arrived with nobody waiting");
+        }
+    }
+
     async fn on_disconnected(&self, tap_id: Option<&TapId>, reason: Option<DisconnectReason>) {
         let removed = self.registry().remove(self.connection_id);
 
         if let Some(tap_id) = tap_id {
             let hq_tap_id = HqTapId(tap_id.0.clone());
             self.shared.publish_presence(&hq_tap_id).await;
+
+            // This replica has nothing left of the tap, so it has no business
+            // still having an opinion about it. Withdraw rather than publish an
+            // empty verdict, which would read as "every connection failed".
+            if self.registry().states_for(&hq_tap_id).is_empty() {
+                if let Err(e) = self
+                    .shared
+                    .health
+                    .withdraw(&hq_tap_id, &self.shared.replica_id)
+                    .await
+                {
+                    tracing::warn!(%e, tap_id = %tap_id.0, "failed to withdraw tap health");
+                }
+            }
 
             let uptime_secs = removed
                 .as_ref()

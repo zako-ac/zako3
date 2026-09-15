@@ -121,6 +121,33 @@ pub struct TapStatsDto {
     pub uptime_percent: f64,
     pub use_rate_history: Vec<TimeSeriesPointDto>,
     pub cache_hit_rate_history: Vec<TimeSeriesPointDto>,
+    /// What the gateway last observed, when this tap is live on the v4 path.
+    ///
+    /// `None` for a tap with no gateway connection at all, which is most of
+    /// them while the cutover is still per-tap.
+    #[serde(default)]
+    pub health: Option<TapHealthDto>,
+}
+
+/// A tap's health, as an operator gets to see it.
+///
+/// Exists because the alternative was guessing: without it, "the tap is
+/// connected but every request fails" and "the tap never connected" look
+/// identical from the outside.
+#[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TapHealthDto {
+    /// `unknown` | `healthy` | `busy` | `unhealthy`.
+    pub verdict: String,
+    /// Most recent arm-to-first-sample interval anyone measured.
+    pub time_to_first_sample_ms: Option<u64>,
+    pub consecutive_probe_failures: u32,
+    pub last_probe_at: Option<String>,
+    pub last_probe_result: Option<String>,
+    /// Connections the gateway will not route to, as `replica/connection`.
+    pub excluded_connections: Vec<String>,
+    /// While this is in the future the tap's connections are deprioritised.
+    pub busy_until: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, zod_gen_derive::ZodSchema)]

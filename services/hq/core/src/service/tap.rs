@@ -4,15 +4,18 @@ use crate::service::validation::{validate_tap_description, validate_tap_name};
 use crate::{CoreError, CoreResult};
 use chrono::Utc;
 use hq_types::hq::{
-    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapId, TapName, TapRole,
-    TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, User, UserId, UserSummaryDto,
+    CreateTapDto, PaginatedResponseDto, PaginationMetaDto, Tap, TapDto, TapHealthDto, TapId,
+    TapName, TapRole, TapStatsDto, TapWithAccessDto, TimeSeriesPointDto, User, UserId,
+    UserSummaryDto,
 };
 use futures_util::stream::{self, StreamExt};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use zako3_metrics::{TapMetricsRow, TapMetricsService};
-use zako3_states::{TapHubStateService, TapNamesCacheService};
+use zako3_states::{
+    GatewayPresenceService, TapHealthService, TapHubStateService, TapNamesCacheService,
+};
 
 /// Max taps enriched concurrently. Owner + latest-metrics lookups are now batched into
 /// one Postgres query each per listing (see `batch_owner_and_rows`), so a listing holds
@@ -43,6 +46,14 @@ pub struct TapService {
     tap_metrics: TapMetricsService,
     tap_hub_state: TapHubStateService,
     tap_names_cache: TapNamesCacheService,
+    /// The v4 gateway's presence, when this process runs one.
+    ///
+    /// Without it this service can only see the taphub registry, which reports
+    /// zero live connections for every tap served over the gateway — a tap
+    /// streaming to a listener right now reads as offline.
+    gateway_presence: Option<GatewayPresenceService>,
+    /// What probing concluded, for the operator view.
+    tap_health: Option<TapHealthService>,
 }
 
 impl TapService {
@@ -67,7 +78,23 @@ impl TapService {
             tap_metrics,
             tap_hub_state,
             tap_names_cache,
+            gateway_presence: None,
+            tap_health: None,
         }
+    }
+
+    /// Let this service see connections the v4 gateway holds. Without it,
+    /// `currently_active` counts only the taphub path.
+    pub fn with_gateway_presence(mut self, presence: GatewayPresenceService) -> Self {
+        self.gateway_presence = Some(presence);
+        self
+    }
+
+    /// Let this service see what probing concluded. Without it, `TapStatsDto`
+    /// carries no `health` and operators are back to guessing.
+    pub fn with_tap_health(mut self, health: TapHealthService) -> Self {
+        self.tap_health = Some(health);
+        self
     }
 
     #[tracing::instrument(skip(self, dto), fields(user_id = %owner_id.0), err)]
@@ -451,11 +478,19 @@ impl TapService {
             .get_latest_total_uses(&tap_id)
             .await
             .unwrap_or(0);
-        let active_now = self
+        // Two registries, one tap: a tap is served over the gateway or over
+        // taphub, never both, so the larger number is the honest one either
+        // way. Before this, a tap live on the gateway reported zero.
+        let taphub_active = self
             .tap_hub_state
             .get_online_count(&tap_id)
             .await
             .unwrap_or(0) as u64;
+        let gateway_states = match self.gateway_presence.as_ref() {
+            Some(presence) => presence.get(&tap_id).await.unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let active_now = taphub_active.max(gateway_states.len() as u64);
         let unique_users = self
             .tap_metrics
             .get_unique_users_count(tap_id.clone())
@@ -516,6 +551,7 @@ impl TapService {
             .unwrap_or_default();
         let current_session_secs: u64 = online_states
             .iter()
+            .chain(gateway_states.iter())
             .map(|s| (chrono::Utc::now() - s.connected_at).num_seconds().max(0) as u64)
             .sum();
         let total_uptime_secs = accumulated_uptime + current_session_secs;
@@ -533,6 +569,33 @@ impl TapService {
             uptime_percent,
             use_rate_history,
             cache_hit_rate_history,
+            health: self.tap_health_dto(&tap_id).await,
+        })
+    }
+
+    /// What probing last concluded about a tap, or `None` when nothing did.
+    ///
+    /// `None` means "nobody holds this tap on the gateway", which for most taps
+    /// is simply true. Reporting `unknown` for them would be noise dressed up
+    /// as information.
+    async fn tap_health_dto(&self, tap_id: &TapId) -> Option<TapHealthDto> {
+        let view = self.tap_health.as_ref()?.get(tap_id).await.ok()?;
+        if view.records().is_empty() {
+            return None;
+        }
+
+        Some(TapHealthDto {
+            verdict: view.verdict().as_str().to_string(),
+            time_to_first_sample_ms: view.time_to_first_sample_ms(),
+            consecutive_probe_failures: view.consecutive_failures(),
+            last_probe_at: view.last_probe_at().map(|t| t.to_rfc3339()),
+            last_probe_result: view.last_probe_result().map(str::to_string),
+            excluded_connections: view
+                .excluded_connections()
+                .into_iter()
+                .map(|(replica, connection)| format!("{replica}/{connection}"))
+                .collect(),
+            busy_until: view.busy_until().map(|t| t.to_rfc3339()),
         })
     }
 
@@ -783,11 +846,23 @@ impl TapService {
     async fn map_to_tap_dto(&self, tap: Tap, prefetched_row: Option<TapMetricsRow>) -> TapDto {
         // Fetch the Redis-backed values concurrently. The latest metrics row is either
         // supplied by the caller (bulk path, already batched) or fetched once here.
-        let (delta, unique_users, accumulated_uptime, online_states) = tokio::join!(
+        // The gateway's presence is joined like the rest rather than fetched
+        // after: a listing already costs this much Redis work, and the one thing
+        // a tap list must not do is disagree with itself about who is live.
+        let gateway_presence = self.gateway_presence.clone();
+        let gateway_tap_id = tap.id.clone();
+        let gateway_states = async move {
+            match gateway_presence {
+                Some(presence) => presence.get(&gateway_tap_id).await.unwrap_or_default(),
+                None => Vec::new(),
+            }
+        };
+        let (delta, unique_users, accumulated_uptime, online_states, gateway_states) = tokio::join!(
             self.tap_metrics.redis.peek_delta(&tap.id),
             self.tap_metrics.get_unique_users_count(tap.id.clone()),
             self.tap_metrics.get_uptime_secs(tap.id.clone()),
             self.tap_hub_state.get_tap_states(&tap.id),
+            gateway_states,
         );
 
         let row = match prefetched_row {
@@ -802,9 +877,12 @@ impl TapService {
         let unique_users = unique_users.unwrap_or(0);
         let accumulated_uptime = accumulated_uptime.unwrap_or(0);
         let online_states = online_states.unwrap_or_default();
-        let active_now = online_states.len() as u64;
+        // Two registries, one tap. A tap is served over one path or the other,
+        // so the larger count is the right one and never double-counts.
+        let active_now = (online_states.len() as u64).max(gateway_states.len() as u64);
         let current_session_secs: u64 = online_states
             .iter()
+            .chain(gateway_states.iter())
             .map(|s| (chrono::Utc::now() - s.connected_at).num_seconds().max(0) as u64)
             .sum();
         let total_uptime_secs = accumulated_uptime + current_session_secs;
@@ -835,6 +913,9 @@ impl TapService {
                 uptime_percent,
                 use_rate_history: vec![],
                 cache_hit_rate_history: vec![],
+                // Listings do not pay for a health read per tap; the detail
+                // view does. `None` here means "not asked", not "unhealthy".
+                health: None,
             },
         }
     }

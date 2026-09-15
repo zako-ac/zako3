@@ -25,7 +25,9 @@ use zako3_cache_client::RemoteAudioCache;
 use zako3_opus_jitter::{JitterConfig, OpusJitterBuffer, TimedFrame};
 use zako3_types::TapHubError;
 use zako3_types::cache::AudioCacheItem;
-use zako3_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
+use zako3_types::hq::audio_dispatch::{
+    AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport, StreamReport,
+};
 
 use crate::cache_tee::CacheTeeFactory;
 use crate::hq_client::HqAudioClient;
@@ -266,6 +268,13 @@ impl TapHubService for HqAudioService {
             .await
             .map_err(|e| ZakoError::TapHub(TapHubError::Internal(e.to_string())))?;
 
+        // The interval that matters: from the sink being armed to the first
+        // frame the tap actually sent. HQ cannot measure it — it never sees the
+        // audio — so this is the only witness to how long the listener waited
+        // before hearing anything, and the only way a tap that is slow without
+        // ever failing becomes visible.
+        let armed_at = tokio::time::Instant::now();
+
         let dispatch = self
             .hq
             .request_audio(&self.sink_id, ticket.clone(), request.clone())
@@ -291,7 +300,14 @@ impl TapHubService for HqAudioService {
                 let mut streams = streams;
                 let occupancy = Occupancy::for_sender(streams.feedback.clone());
                 let request_id = ticket.request_id;
+                let tap_id = request.tap_id.clone();
                 let hq = Arc::clone(&self.hq);
+
+                // Written once, by the playback task, and read by the reporting
+                // task when the transfer ends. `None` there means no frame ever
+                // arrived — not a slow tap, but a tap that produced nothing.
+                let first_sample_ms: Arc<std::sync::Mutex<Option<u64>>> = Arc::default();
+                let observed = Arc::clone(&first_sample_ms);
 
                 // Playback: every frame that arrives, in arrival order.
                 tokio::spawn(async move {
@@ -299,6 +315,11 @@ impl TapHubService for HqAudioService {
                     // disarm the receiver mid-stream.
                     let _armed = armed;
                     while let Some(frame) = streams.unrel.recv().await {
+                        if let Ok(mut slot) = observed.lock()
+                            && slot.is_none()
+                        {
+                            *slot = Some(armed_at.elapsed().as_millis() as u64);
+                        }
                         if frame_tx
                             .send(TimedFrame {
                                 ts_ms: frame.ts.0,
@@ -345,7 +366,16 @@ impl TapHubService for HqAudioService {
                             reason: "receiver closed before reporting".to_string(),
                         },
                     };
-                    hq.report_stream_outcome(request_id, report).await;
+                    hq.report_stream_outcome(StreamOutcomeReport {
+                        request_id,
+                        tap_id,
+                        time_to_first_sample_ms: first_sample_ms
+                            .lock()
+                            .ok()
+                            .and_then(|slot| *slot),
+                        report,
+                    })
+                    .await;
                 });
 
                 Ok(AudioResponse {

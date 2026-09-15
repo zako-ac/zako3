@@ -17,7 +17,10 @@ pub use intended_vc::IntendedVoiceChannelService;
 #[cfg(feature = "redis")]
 pub use pubsub::{MapperCacheEvent, RedisPubSub, MAPPER_CACHE_CHANNEL};
 pub use sink::{SinkAdvertisement, SinkKind, SinkRegistry};
-pub use tap_hub::{GatewayPresenceService, TapHubStateService};
+pub use tap_hub::{
+    ConnectionHealth, ConnectionVerdict, DEFAULT_SLOW_FIRST_SAMPLE_MS, GatewayPresenceService,
+    TapHealth, TapHealthService, TapHealthView, TapHubStateService, TapLatency, TapVerdict,
+};
 pub use tap_names::TapNamesCacheService;
 pub use user_settings::UserSettingsStateService;
 pub use voice_state::{VoiceChannelLocation, VoiceStateService};

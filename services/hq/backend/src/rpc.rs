@@ -3,7 +3,9 @@ use hq_core::service::audio::AudioRequestService;
 use hq_core::service::auth::AuthService;
 use hq_core::service::tap::TapService;
 use hq_types::ZakoResult;
-use hq_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
+use hq_types::hq::audio_dispatch::{
+    AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport,
+};
 use hq_types::hq::rpc::HqRpcServer;
 use hq_types::hq::{Tap, TapId, User, UserId};
 use hq_types::{AudioRequest, CachedAudioRequest, TapHubError};
@@ -294,13 +296,9 @@ impl HqRpcServer for HqRpcImpl {
         Ok(audio.invalidate_cache(request).await)
     }
 
-    async fn report_stream_outcome(
-        &self,
-        request_id: uuid::Uuid,
-        report: StreamReport,
-    ) -> RpcResult<()> {
+    async fn report_stream_outcome(&self, report: StreamOutcomeReport) -> RpcResult<()> {
         if let Some(audio) = self.audio.as_ref() {
-            audio.report_stream_outcome(request_id, report).await;
+            audio.report_stream_outcome(report).await;
         }
         Ok(())
     }

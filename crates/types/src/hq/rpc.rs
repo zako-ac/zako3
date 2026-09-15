@@ -1,8 +1,7 @@
-use crate::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
+use crate::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport};
 use crate::hq::{Tap, User};
 use crate::{AudioRequest, CachedAudioRequest, TapHubError};
 use jsonrpsee::proc_macros::rpc;
-use uuid::Uuid;
 
 #[rpc(server, client)]
 pub trait HqRpc {
@@ -90,14 +89,14 @@ pub trait HqRpc {
         request: CachedAudioRequest,
     ) -> jsonrpsee::core::RpcResult<Result<(), TapHubError>>;
 
-    /// Report how a transfer ended.
+    /// Report how a transfer ended, and how long it took to start.
     ///
     /// The audio engine sees the stream and HQ does not, so this is the only
-    /// way HQ learns the difference between "dispatched" and "delivered".
+    /// way HQ learns the difference between "dispatched" and "delivered" — and
+    /// the only place the arm-to-first-frame interval is measurable at all.
     #[method(name = "report_stream_outcome")]
     async fn report_stream_outcome(
         &self,
-        request_id: Uuid,
-        report: StreamReport,
+        report: StreamOutcomeReport,
     ) -> jsonrpsee::core::RpcResult<()>;
 }

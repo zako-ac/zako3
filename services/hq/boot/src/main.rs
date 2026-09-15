@@ -80,12 +80,14 @@ async fn main() -> anyhow::Result<()> {
         None => None,
     };
 
-    let presence = zako3_states::GatewayPresenceService::new(Arc::new(
-        zako3_states::RedisCacheRepository::new(&config.redis_url).await?,
-    ));
+    // The same presence and health projections the service layer reads, so a
+    // tap listing and a routing decision cannot disagree about who is live.
+    let presence = service.gateway_presence.clone();
+    let tap_health = service.tap_health.clone();
     let gateway = hq_backend::gateway::Gateway::new(
         service.clone(),
         presence,
+        tap_health.clone(),
         gateway_nats,
         replica_id.clone(),
     );
@@ -107,7 +109,10 @@ async fn main() -> anyhow::Result<()> {
             gateway.clone(),
         )),
         std::env::var("ZK_UDP_PROXY_ADDR").ok().filter(|s| !s.is_empty()),
-    );
+    )
+    // First-sample latency goes back into the same store the probe writes, so
+    // what real listeners experienced can deprioritise a tap that probes fine.
+    .with_health(tap_health);
 
     // Opt-in, and the second off-switch for the preload path: without a sink id
     // HQ never asks the cache worker for a ticket and every preload takes the
