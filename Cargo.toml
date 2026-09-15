@@ -71,8 +71,11 @@ mockall = "0.12"
 jsonrpsee = { version = "0.24", features = ["full"] }
 songbird = { version = "0.5.0", git = "https://github.com/mincomk/songbird" }
 protofish3 = { git = "https://github.com/zako-ac/protofish3-rs" }
-zakofish4-common = { git = "https://github.com/zako-ac/zakofish4" }
-zakofish4-hub = { git = "https://github.com/zako-ac/zakofish4" }
+# Pinned to the branch that adds `Probe`/`ProbeResult` — the message pair the
+# gateway needs to prove a tap can still synthesize. Point this at main once
+# https://github.com/zako-ac/zakofish4/pull/new/feat/tts-probe is merged.
+zakofish4-common = { git = "https://github.com/zako-ac/zakofish4", rev = "f7a0a3188a6c39560ca99d65b61788f1feeeac1e" }
+zakofish4-hub = { git = "https://github.com/zako-ac/zakofish4", rev = "f7a0a3188a6c39560ca99d65b61788f1feeeac1e" }
 # Pinned to the commit that hands the sink's buffer occupancy back to the
 # sender (`BufferFeedback`); point this at main once
 # https://github.com/zako-ac/protofish4-rs/pull/1 is merged.

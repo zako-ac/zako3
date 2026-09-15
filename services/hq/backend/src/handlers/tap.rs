@@ -81,6 +81,7 @@ pub async fn create_tap(
             uptime_percent: 0.0,
             use_rate_history: vec![],
             cache_hit_rate_history: vec![],
+            health: None,
         },
     };
 

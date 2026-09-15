@@ -125,3 +125,86 @@ fn selection_reports_the_owning_replica() {
     assert_eq!(picked.replica_id, "replica-a");
     assert_eq!(picked.connection_id, 1);
 }
+
+// --- exclusion -------------------------------------------------------------
+
+/// A retry has to be able to skip the connection that just failed it, without
+/// taking it out of the pool for anyone else.
+#[test]
+fn a_ruled_out_connection_is_never_picked() {
+    let states = vec![conn(1, 1.0), conn(2, 1.0)];
+    let mut sampler = DynamicSampler::new();
+
+    for _ in 0..200 {
+        let picked = sampler
+            .next_state_with(&states, |s| (s.connection_id != 1).then_some(1.0))
+            .expect("a connection");
+        assert_eq!(picked.connection_id, 2);
+    }
+}
+
+#[test]
+fn ruling_out_everything_yields_nothing() {
+    let states = vec![conn(1, 1.0)];
+    let mut sampler = DynamicSampler::new();
+    assert!(sampler.next_state_with(&states, |_| None).is_none());
+}
+
+/// Deprioritising is deliberately not excluding. A tap marked busy is still the
+/// only tap that can serve its own id, so zeroing its weight must not make it
+/// unreachable — the uniform fallback is what keeps that promise.
+#[test]
+fn a_zero_weighted_connection_is_still_reachable() {
+    let states = vec![conn(1, 4.0)];
+    let mut sampler = DynamicSampler::new();
+
+    for _ in 0..50 {
+        assert!(
+            sampler.next_state_with(&states, |_| Some(0.0)).is_some(),
+            "a deprioritised tap must still be picked when it is all there is"
+        );
+    }
+}
+
+/// And with somewhere better to go, it loses.
+#[test]
+fn a_zero_weighted_connection_loses_to_a_weighted_one() {
+    let states = vec![conn(1, 1.0), conn(2, 1.0)];
+    let mut sampler = DynamicSampler::new();
+
+    for _ in 0..200 {
+        let picked = sampler
+            .next_state_with(&states, |s| Some(if s.connection_id == 1 { 0.0 } else { 1.0 }))
+            .expect("a connection");
+        assert_eq!(picked.connection_id, 2);
+    }
+}
+
+/// The scale comes from a caller, so it is as untrusted as the tap's own
+/// reported weight: `NaN` must not break the loop and infinity must not capture
+/// everything.
+#[test]
+fn a_hostile_scale_cannot_break_selection() {
+    let states = vec![conn(1, 1.0), conn(2, 1.0)];
+    let mut sampler = DynamicSampler::new();
+    let mut counts = HashMap::new();
+
+    for _ in 0..400 {
+        let picked = sampler
+            .next_state_with(&states, |s| {
+                Some(if s.connection_id == 1 {
+                    f32::NAN
+                } else {
+                    f32::INFINITY
+                })
+            })
+            .expect("a connection");
+        *counts.entry(picked.connection_id).or_insert(0) += 1;
+    }
+
+    assert_eq!(counts.values().sum::<usize>(), 400);
+    assert!(
+        counts.get(&2).copied().unwrap_or(0) > 0,
+        "the finite side must still be reachable, got {counts:?}"
+    );
+}

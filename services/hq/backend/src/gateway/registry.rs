@@ -11,6 +11,7 @@ use tokio::sync::oneshot;
 use hq_types::hq::TapId;
 use hq_types::{OnlineTapState, OnlineTapStates};
 use zakofish4_common::event::RequestOutcome;
+use zakofish4_common::messages::ProbeResult;
 use zakofish4_common::model::RequestId;
 use zakofish4_hub::TapHandle;
 
@@ -19,6 +20,13 @@ use zakofish4_hub::TapHandle;
 pub struct Connection {
     pub state: OnlineTapState,
     pub handle: TapHandle,
+    /// Whether this tap speaks a protocol version that understands `Probe`.
+    ///
+    /// A tap that does not would fail to decode the frame and ignore it, and
+    /// the hub cannot tell that apart from a tap that is wedged — so an
+    /// un-upgraded tap must never be asked, or every one of them would read as
+    /// unhealthy the moment this shipped.
+    pub probe_supported: bool,
 }
 
 #[derive(Default)]
@@ -27,6 +35,10 @@ pub struct Registry {
     connections: DashMap<u64, Connection>,
     /// Callers blocked on a dispatched request.
     waiters: DashMap<RequestId, oneshot::Sender<RequestOutcome>>,
+    /// Callers blocked on a probe. Keyed by a per-replica counter, because a
+    /// probe never crosses processes: it asks about a connection this replica
+    /// is holding.
+    probes: DashMap<u64, oneshot::Sender<Option<ProbeResult>>>,
     next_connection_id: AtomicU64,
 }
 
@@ -109,7 +121,44 @@ impl Registry {
         self.waiters.remove(&request_id);
     }
 
+    /// Register interest in a probe's answer before sending it, for the same
+    /// reason requests do it: an answer that arrives immediately must not race
+    /// past the waiter.
+    pub fn await_probe(&self, probe_id: u64) -> oneshot::Receiver<Option<ProbeResult>> {
+        let (tx, rx) = oneshot::channel();
+        self.probes.insert(probe_id, tx);
+        rx
+    }
+
+    /// Deliver a probe's answer. `false` when nobody was waiting, which happens
+    /// for a late answer to a probe already reported as unanswered.
+    pub fn complete_probe(&self, probe_id: u64, result: Option<ProbeResult>) -> bool {
+        match self.probes.remove(&probe_id) {
+            Some((_, tx)) => tx.send(result).is_ok(),
+            None => false,
+        }
+    }
+
+    /// Give up on a probe, so a caller that timed out does not leak a slot.
+    pub fn forget_probe(&self, probe_id: u64) {
+        self.probes.remove(&probe_id);
+    }
+
+    /// Whether this connection can be asked to prove it can synthesize.
+    ///
+    /// Unknown connections answer `false`: a probe aimed at a connection that
+    /// has already gone is not evidence about anything.
+    pub fn probe_supported(&self, connection_id: u64) -> bool {
+        self.get(connection_id)
+            .map(|c| c.probe_supported)
+            .unwrap_or(false)
+    }
+
     pub fn pending_len(&self) -> usize {
         self.waiters.len()
+    }
+
+    pub fn pending_probe_len(&self) -> usize {
+        self.probes.len()
     }
 }

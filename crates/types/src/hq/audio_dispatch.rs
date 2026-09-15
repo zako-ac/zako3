@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cache::AudioCacheItem;
+use crate::hq::TapId;
 use crate::AudioMetaResponse;
 
 /// A sink's claim on one request.
@@ -91,4 +92,27 @@ pub enum StreamReport {
     /// The tap could not reach the sink at all. Distinguished from `Aborted`
     /// because it indicts the network path rather than the tap.
     Undeliverable { reason: String },
+}
+
+/// Everything the sink knows about a transfer, addressed to the tap that
+/// should have produced it.
+///
+/// A report needs the tap id because HQ routes on it — latency is a property of
+/// the tap, not of the request — and because the sink is the only witness to
+/// how long the listener actually waited. The request id alone cannot carry
+/// that: HQ keys its own tables by it, but nothing maps a finished request back
+/// to the tap it was served by.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamOutcomeReport {
+    pub request_id: uuid::Uuid,
+    pub tap_id: TapId,
+    /// From the sink being armed to the first frame the tap sent.
+    ///
+    /// `None` when no frame ever arrived, which is not the same as a slow tap:
+    /// it means the transfer produced nothing at all, and it counts against the
+    /// tap immediately rather than after several samples. This is the only
+    /// measurement of the interval that matters — HQ sees the request leave and
+    /// the tap's answer come back, but never the audio that followed.
+    pub time_to_first_sample_ms: Option<u64>,
+    pub report: StreamReport,
 }

@@ -86,6 +86,9 @@ pub fn register(tools: &mut ToolService, service: &Arc<Service>) {
                         uptime_percent: 0.0,
                         use_rate_history: vec![],
                         cache_hit_rate_history: vec![],
+                        // This tool answers for a tap in a tree listing, which
+                        // has not read its health; `None` is "not asked".
+                        health: None,
                     },
                 };
                 json_ok(&dto)

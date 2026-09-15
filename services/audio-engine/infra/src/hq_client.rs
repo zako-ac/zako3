@@ -16,7 +16,9 @@ use opentelemetry::global;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use zako3_audio_engine_core::error::{ZakoError, ZakoResult};
 use zako3_types::TapHubError;
-use zako3_types::hq::audio_dispatch::{AudioDispatch, MetaDispatch, SinkTicket, StreamReport};
+use zako3_types::hq::audio_dispatch::{
+    AudioDispatch, MetaDispatch, SinkTicket, StreamOutcomeReport,
+};
 use zako3_types::{AudioRequest, CachedAudioRequest};
 
 const ADMIN_TOKEN_HEADER: &str = "x-admin-token";
@@ -75,10 +77,11 @@ impl HqAudioClient {
     /// Report a finished transfer. Best effort: losing it costs visibility, not
     /// correctness, and failing a play because a report did not land would be
     /// strictly worse.
-    pub async fn report_stream_outcome(&self, request_id: uuid::Uuid, report: StreamReport) {
+    pub async fn report_stream_outcome(&self, report: StreamOutcomeReport) {
+        let request_id = report.request_id;
         let res: Result<(), _> = self
             .client
-            .request("report_stream_outcome", rpc_params![request_id, report])
+            .request("report_stream_outcome", rpc_params![report])
             .await;
         if let Err(e) = res {
             tracing::warn!(%e, %request_id, "failed to report the stream outcome to HQ");
