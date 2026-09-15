@@ -16,6 +16,7 @@ members = [
     "services/*/*",
     "workers/*",
     "zakoctl", "crates/tl-protocol", "crates/tl-client",
+    "crates/ae-protocol",
     "crates/metrics",
     "crates/tap-select",
     "crates/opus-jitter",
