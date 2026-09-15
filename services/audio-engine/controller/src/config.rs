@@ -255,7 +255,11 @@ mod tests {
     fn pool_is_indexed_by_pod_ordinal() {
         // The ordinal is read from the environment, so this exercises the
         // documented `HOSTNAME`-shaped fallback rather than a real StatefulSet.
-        // Kept in one test because the process-wide env is shared.
+        // Held under the shared lock: the address-heuristic test sets the same
+        // variable, in the same process, on another thread.
+        let _env = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         unsafe {
             std::env::remove_var("POD_NAME");
             std::env::set_var("HOSTNAME", "zako3-audio-engine-1");
