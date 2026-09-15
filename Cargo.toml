@@ -86,6 +86,7 @@ dashmap = "6"
 envy = "0.4"
 gethostname = "0.4"
 tl-protocol = { path = "crates/tl-protocol" }
+ae-protocol = { path = "crates/ae-protocol" }
 zako3-tl-core = { path = "services/traffic-light/core" }
 zako3-tl-infra = { path = "services/traffic-light/infra" }
 zako3-tl-client = { path = "crates/tl-client" }

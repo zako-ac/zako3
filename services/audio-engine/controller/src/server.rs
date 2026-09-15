@@ -1,12 +1,12 @@
 use std::sync::{Arc, OnceLock};
 
-use async_trait::async_trait;
-use jsonrpsee::core::RpcResult;
-use opentelemetry::global;
-use tl_protocol::{
+use ae_protocol::{
     AudioEngineCommand, AudioEngineCommandRequest, AudioEngineCommandResponse, AudioEngineError,
     AudioEngineRpcServer, AudioEngineSessionCommand,
 };
+use async_trait::async_trait;
+use jsonrpsee::core::RpcResult;
+use opentelemetry::global;
 use tracing::{Instrument as _, error, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -31,15 +31,18 @@ impl AudioEngineRpcServer for AeTransportHandler {
     ) -> RpcResult<AudioEngineCommandResponse> {
         let parent_cx = global::get_text_map_propagator(|p| p.extract(&req.headers));
         let cmd = req.command.operation();
-        let span = tracing::info_span!("ae.execute", otel.name = %format!("ae.{cmd}"), command = cmd);
+        let span =
+            tracing::info_span!("ae.execute", otel.name = %format!("ae.{cmd}"), command = cmd);
         let _ = span.set_parent(parent_cx);
 
-        // Backstop below TL's 30s dispatch timeout so TL always receives a
+        // Backstop below HQ's 30s dispatch timeout so HQ always receives a
         // structured response instead of hitting a transport timeout. This must stay
         // above the worst-case taphub budget of a single command: a normal `play` makes
         // two sequential taphub calls (request_audio_meta + request_audio), each up to
         // MAX_ATTEMPTS × TAPHUB_REQUEST_TIMEOUT_MS. Keep
-        //   2 × MAX_ATTEMPTS(2) × per_attempt(6s) = 24s ≤ 25s < TL dispatch(30s).
+        //   2 × MAX_ATTEMPTS(2) × per_attempt(6s) = 24s ≤ 25s < HQ dispatch(30s).
+        // HQ's side of that bound is AE_DISPATCH_TIMEOUT in
+        // services/hq/core/src/service/ae_registry.rs.
         let response = match tokio::time::timeout(
             std::time::Duration::from_secs(25),
             self.handle_command(req).instrument(span),
@@ -67,7 +70,7 @@ impl AeTransportHandler {
 
         match req.command {
             AudioEngineCommand::FetchDiscordVoiceState => {
-                use tl_protocol::SessionInfo;
+                use ae_protocol::SessionInfo;
                 match session_manager.fetch_discord_voice_state().await {
                     Ok(voice_states) => {
                         let sessions: Vec<SessionInfo> = voice_states
@@ -209,9 +212,9 @@ fn map_engine_err(e: ZakoError) -> AudioEngineCommandResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ae_protocol::SessionInfo;
     use std::collections::HashMap;
     use std::sync::{Arc, OnceLock};
-    use tl_protocol::SessionInfo;
     use zako3_audio_engine_core::engine::session_manager::SessionManager;
     use zako3_audio_engine_core::service::discord::MockDiscordService;
     use zako3_audio_engine_core::service::state::MockStateService;
