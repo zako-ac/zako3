@@ -6,6 +6,24 @@ Zako3 has three kind of settings.
 - Guild Settings: These settings are guild-specific and can be configured by guild administrators.
 - Admin Settings: These settings are global and only for admin.
 
+## Who may write what
+
+The three scopes above are enforced by HQ, not by whichever client renders them:
+
+- **User** — a user writes only their own settings (`PUT /api/v1/users/me/settings`).
+- **Guild** — `PUT /api/v1/guilds/{guild_id}/settings` (and `update_guild_settings` over
+  MCP) requires the caller to hold Discord's `Manage Server` (`MANAGE_GUILD`) in that
+  guild. The web client learns the same flag from `GET /api/v1/guilds/me` (`canManage`)
+  and disables the editor for everyone else; that disabling is a convenience, and the
+  write re-checks the permission against Discord.
+- **Global** — `PUT /api/v1/settings/global` (and `update_global_settings` over MCP)
+  requires an HQ admin (`AdminUser`, i.e. the `admin` permission). The `/admin/settings`
+  page sits behind the same guard in the web client.
+
+Reads are deliberately wider than writes: `GET /api/v1/settings/global` and
+`GET /api/v1/guilds/{guild_id}/settings` are open to every authenticated user, because the
+guild settings page folds both in as the upstream defaults it shows each member.
+
 ## Keys
 Each kind of settings has its own set of keys. Keys has the following attributes:
 - **Identifier** A unique identifier for the setting. It has three attributes separated by dots: `<tab>.<category>.<name>`.

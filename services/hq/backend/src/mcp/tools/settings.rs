@@ -1,10 +1,11 @@
 //! Guild- and global-scope settings tools (mirrors `handlers::settings`).
 
-use crate::mcp::auth::require_user;
+use crate::mcp::auth::{require_admin, require_user};
 use crate::mcp::support::{json_ok, map_core, mk_tool, parse_args, run};
 use hq_core::Service;
 use hq_types::hq::settings::PartialUserSettings;
 use mcpkit::server::capability::tools::ToolService;
+use mcpkit::types::ToolOutput;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -55,8 +56,21 @@ pub fn register(tools: &mut ToolService, service: &Arc<Service>) {
         move |args, _ctx| {
             let svc = svc.clone();
             run(async move {
-                require_user()?;
+                let user_id = require_user()?;
                 let GuildSettingsArgs { guild_id, settings } = parse_args(args)?;
+
+                // Guild settings are the guild's Discord administrators' to set;
+                // the same check the REST handler makes.
+                if !svc
+                    .user_can_manage_guild(&user_id, &guild_id)
+                    .await
+                    .map_err(map_core)?
+                {
+                    return Err(ToolOutput::error(
+                        "guild administrator permissions required",
+                    ));
+                }
+
                 let saved = svc
                     .user_settings
                     .save_guild_settings(&guild_id, settings)
@@ -99,7 +113,7 @@ pub fn register(tools: &mut ToolService, service: &Arc<Service>) {
         move |args, _ctx| {
             let svc = svc.clone();
             run(async move {
-                require_user()?;
+                require_admin()?;
                 let body: PartialUserSettings = parse_args(args)?;
                 let saved = svc
                     .user_settings
