@@ -2,6 +2,7 @@ pub mod ae_registry;
 pub mod audio;
 pub mod auth;
 pub mod discord_resolver;
+pub mod guild_access;
 pub mod mapping;
 pub mod tap;
 pub mod tts_channel;
