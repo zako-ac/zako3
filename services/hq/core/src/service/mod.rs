@@ -41,6 +41,7 @@ use crate::repo::{
     PgUserGuildSettingsRepository, PgUserRepository,
 };
 use crate::{AppConfig, CoreError, CoreResult};
+use hq_types::hq::UserId;
 use hq_types::hq::playback::PlaybackEvent;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -312,6 +313,41 @@ impl Service {
             gateway_presence,
             tap_health,
         })
+    }
+
+    /// Whether `user_id` may edit guild-wide settings for `guild_id`: platform
+    /// admins always may; otherwise the user must hold Manage Guild there.
+    /// Resolved from the DB and Discord, never from anything the client sends.
+    pub async fn can_manage_guild(&self, user_id: &UserId, guild_id: &str) -> CoreResult<bool> {
+        let user = self.auth.get_full_user(&user_id.to_string()).await?;
+        if user.permissions.iter().any(|p| p == "admin") {
+            return Ok(true);
+        }
+
+        let guild_id: u64 = guild_id
+            .parse()
+            .map_err(|_| CoreError::InvalidInput("Invalid guild ID".to_string()))?;
+        let discord_id = user.discord_user_id.0.clone();
+
+        if let Ok(discord_id_num) = discord_id.parse::<u64>()
+            && let Some(resolver) = self.name_resolver_slot.get()
+            && let Some(g) = resolver
+                .guilds_for_user(discord_id_num)
+                .into_iter()
+                .find(|g| g.id == guild_id)
+        {
+            return Ok(g.can_manage);
+        }
+
+        if let Some(token) = &user.oauth_access_token {
+            let guilds = self
+                .auth
+                .fetch_discord_guilds_for_user(&discord_id, token)
+                .await?;
+            return Ok(guilds.iter().any(|g| g.id == guild_id && g.can_manage));
+        }
+
+        Ok(false)
     }
 }
 pub mod notification;

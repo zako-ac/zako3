@@ -63,7 +63,9 @@ export const usersApi = {
     data: Omit<UpdateUserRoleInput, 'userId'>
   ): Promise<UserWithActivity> => {
     return apiCall(
-      apiClient.patch<UserWithActivity>(`/admin/users/${userId}/role`, data)
+      apiClient.patch<UserWithActivity>(`/admin/users/${userId}/role`, {
+        role: data.isAdmin ? 'admin' : 'user',
+      })
     )
   },
 }

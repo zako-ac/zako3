@@ -7,7 +7,6 @@ import type {
   UserFilters,
   UserSort,
   BanUserInput,
-  UpdateUserRoleInput,
 } from '@zako-ac/zako3-data'
 
 const mockUsersStore = [...allMockUsers]
@@ -213,7 +212,7 @@ export const userHandlers = [
   http.patch(`${API_BASE}/admin/users/:userId/role`, async ({ params, request }) => {
     await delay(300)
     const { userId } = params
-    const body = (await request.json()) as UpdateUserRoleInput
+    const body = (await request.json()) as { role: 'admin' | 'user' }
 
     const userIndex = mockUsersStore.findIndex((u) => u.id === userId)
     if (userIndex === -1) {
@@ -225,7 +224,7 @@ export const userHandlers = [
 
     mockUsersStore[userIndex] = {
       ...mockUsersStore[userIndex],
-      isAdmin: body.isAdmin,
+      isAdmin: body.role === 'admin',
       updatedAt: new Date().toISOString(),
     }
 

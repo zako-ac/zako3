@@ -1,10 +1,11 @@
 //! Guild- and global-scope settings tools (mirrors `handlers::settings`).
 
-use crate::mcp::auth::require_user;
+use crate::mcp::auth::{require_admin, require_user};
 use crate::mcp::support::{json_ok, map_core, mk_tool, parse_args, run};
 use hq_core::Service;
 use hq_types::hq::settings::PartialUserSettings;
 use mcpkit::server::capability::tools::ToolService;
+use mcpkit::types::ToolOutput;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -49,14 +50,21 @@ pub fn register(tools: &mut ToolService, service: &Arc<Service>) {
     tools.register(
         mk_tool(
             "update_guild_settings",
-            "Update guild-wide settings. Provide guild_id plus PartialUserSettings fields.",
+            "Update guild-wide settings (platform admin or Manage Guild required). Provide guild_id plus PartialUserSettings fields.",
             json!({"type": "object", "properties": {"guild_id": {"type": "string"}}, "required": ["guild_id"]}),
         ),
         move |args, _ctx| {
             let svc = svc.clone();
             run(async move {
-                require_user()?;
+                let user_id = require_user()?;
                 let GuildSettingsArgs { guild_id, settings } = parse_args(args)?;
+                if !svc
+                    .can_manage_guild(&user_id, &guild_id)
+                    .await
+                    .map_err(map_core)?
+                {
+                    return Err(ToolOutput::error("Manage Guild permission required"));
+                }
                 let saved = svc
                     .user_settings
                     .save_guild_settings(&guild_id, settings)
@@ -93,13 +101,13 @@ pub fn register(tools: &mut ToolService, service: &Arc<Service>) {
     tools.register(
         mk_tool(
             "update_global_settings",
-            "Update the global settings baseline. Body is a PartialUserSettings object.",
+            "Admin: update the global settings baseline. Body is a PartialUserSettings object.",
             json!({"type": "object"}),
         ),
         move |args, _ctx| {
             let svc = svc.clone();
             run(async move {
-                require_user()?;
+                require_admin()?;
                 let body: PartialUserSettings = parse_args(args)?;
                 let saved = svc
                     .user_settings

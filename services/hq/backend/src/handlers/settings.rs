@@ -1,4 +1,4 @@
-use crate::middleware::auth::AuthUser;
+use crate::middleware::auth::{AdminUser, AuthUser};
 use axum::{
     Json,
     extract::{Path, State},
@@ -18,7 +18,7 @@ fn map_error(e: CoreError) -> (axum::http::StatusCode, String) {
     }
 }
 
-// --- Guild scope (admin only) ---
+// --- Guild scope (readable by any user; writable by platform admins or guild managers) ---
 
 #[utoipa::path(
     get,
@@ -52,7 +52,8 @@ pub async fn get_guild_settings(
     params(("guild_id" = String, Path, description = "Discord guild ID")),
     request_body = PartialUserSettings,
     responses(
-        (status = 200, description = "Updated guild-wide settings", body = PartialUserSettings)
+        (status = 200, description = "Updated guild-wide settings", body = PartialUserSettings),
+        (status = 403, description = "Requires platform admin or Manage Guild permission"),
     ),
     security(
         ("bearer_auth" = [])
@@ -60,10 +61,21 @@ pub async fn get_guild_settings(
 )]
 pub async fn update_guild_settings(
     State(service): State<Arc<Service>>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(guild_id): Path<String>,
     Json(body): Json<PartialUserSettings>,
 ) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
+    if !service
+        .can_manage_guild(&user_id, &guild_id)
+        .await
+        .map_err(map_error)?
+    {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            "Manage Guild permission required".to_string(),
+        ));
+    }
+
     let settings = service
         .user_settings
         .save_guild_settings(&guild_id, body)
@@ -72,7 +84,7 @@ pub async fn update_guild_settings(
     Ok(Json(settings))
 }
 
-// --- Global scope (admin only) ---
+// --- Global scope (readable by any user; writable by platform admins) ---
 
 #[utoipa::path(
     get,
@@ -103,7 +115,8 @@ pub async fn get_global_settings(
     path = "/api/v1/settings/global",
     request_body = PartialUserSettings,
     responses(
-        (status = 200, description = "Updated global settings", body = PartialUserSettings)
+        (status = 200, description = "Updated global settings", body = PartialUserSettings),
+        (status = 403, description = "Admin permissions required"),
     ),
     security(
         ("bearer_auth" = [])
@@ -111,7 +124,7 @@ pub async fn get_global_settings(
 )]
 pub async fn update_global_settings(
     State(service): State<Arc<Service>>,
-    AuthUser(_user_id): AuthUser,
+    AdminUser(_admin_id): AdminUser,
     Json(body): Json<PartialUserSettings>,
 ) -> Result<Json<PartialUserSettings>, (axum::http::StatusCode, String)> {
     let settings = service
