@@ -36,7 +36,42 @@ use crate::hq_client::HqAudioClient;
 const PCM_QUEUE: usize = 100;
 
 /// Frames buffered between the UDP receiver and the jitter buffer.
-const INGEST_QUEUE: usize = 256;
+///
+/// This is burst slack, not playback latency: the jitter buffer stops pulling
+/// once it is `max_lead_ms` ahead of the play head, so a deeper queue never puts
+/// more audio in front of the listener than a shallow one did — it only decides
+/// whether a sender that arrives in bursts loses frames.
+///
+/// The arithmetic it has to beat. A tap pauses above 10 s of reported occupancy
+/// (`SenderConfig::buffer_high_water_ms`) but learns that from one of the
+/// endpoint's acknowledgements, which go out every 200 ms
+/// (`ReceiverConfig::ack_interval`). In that window a tap that is not paced to
+/// realtime can deliver `max_outstanding` — 512 frames — per acknowledgement,
+/// i.e. far above realtime, so a second or two of extra audio before the pause
+/// lands is normal. The transport's own channel holds 256 frames and *discards*
+/// (`try_send`, never blocking) whatever arrives while it is full. At 256 the
+/// whole pipeline held 10.24 s — less than the point at which the tap is asked
+/// to stop — so every burst overshot straight into a drop. On 2026-09-29 a
+/// one-hour YouTube track lost ~13 % of its frames that way, ~1.5 s every 10 s,
+/// which the listener hears as constant stutter.
+const INGEST_QUEUE: usize = 1024;
+
+/// The receiver bounds this engine asks for.
+///
+/// [`ReceiverConfig::audio_engine`] except for the reliable lane's stall
+/// budget. That lane feeds the cache copy, and nobody is waiting on it, but the
+/// first frame of a cold track can take far longer than five seconds — on
+/// 2026-09-29 a YouTube tap that had to fetch metadata and then download before
+/// it could encode anything produced nothing for 14.8 s, and the default
+/// five-second budget aborted the copy before its first frame. The entry was
+/// then never committed, so every play re-streamed the whole track live and no
+/// second play ever got cheaper.
+fn receiver_config() -> ReceiverConfig {
+    ReceiverConfig {
+        rel_stall_timeout: Duration::from_secs(30),
+        ..ReceiverConfig::audio_engine()
+    }
+}
 
 /// Sleep until `ts_ms` of the track has actually elapsed.
 ///
@@ -263,7 +298,7 @@ impl TapHubService for HqAudioService {
             .arm(
                 protofish4::RequestId(ticket.request_id),
                 key,
-                ReceiverConfig::audio_engine(),
+                receiver_config(),
             )
             .await
             .map_err(|e| ZakoError::TapHub(TapHubError::Internal(e.to_string())))?;
