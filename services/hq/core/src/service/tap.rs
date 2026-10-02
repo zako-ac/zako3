@@ -735,6 +735,10 @@ impl TapService {
             changes.insert("base_volume".to_string(), serde_json::json!(base_volume));
             tap.base_volume = base_volume;
         }
+        if let Some(gateway_v4) = dto.gateway_v4 {
+            changes.insert("gateway_v4".to_string(), serde_json::json!(gateway_v4));
+            tap.gateway_v4 = gateway_v4;
+        }
         tap.timestamp.updated_at = chrono::Utc::now();
 
         Ok((tap.clone(), changes))

@@ -332,7 +332,8 @@ export const UpdateTapDtoSchema = z.object({
   userIds: z.array(z.string())
 })]).nullable(),
   roles: z.array(z.union([z.literal('music'), z.literal('tts')])).nullable(),
-  baseVolume: z.number().nullable()
+  baseVolume: z.number().nullable(),
+  gatewayV4: z.boolean().nullable()
 });
 export type UpdateTapDto = z.infer<typeof UpdateTapDtoSchema>;
 
