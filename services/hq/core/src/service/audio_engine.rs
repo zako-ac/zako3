@@ -203,6 +203,20 @@ impl AudioEngineService {
 
         let candidates = rank_engines(&entries, &session, &occupied, already_serving.as_deref());
         if candidates.is_empty() {
+            // A bot already in the channel whose engine is not in the registry
+            // is the one case worth naming: nothing may be dispatched, because
+            // any other engine would put a second Zako in the room.
+            if let Some(bot) = already_serving.as_deref() {
+                warn!(
+                    guild_id = ?guild_id,
+                    channel_id = ?channel_id,
+                    bot,
+                    "a Zako bot is already in this channel but its engine is not registered; not placing a second bot"
+                );
+                return Err(CoreError::Internal(
+                    "A Zako bot is already in this channel but its engine is unavailable".into(),
+                ));
+            }
             warn!(
                 guild_id = ?guild_id,
                 total_engines = entries.len(),
@@ -215,7 +229,9 @@ impl AudioEngineService {
 
         // Walk the deterministic ranking, stopping at the first engine that
         // accepts. `AlreadyJoined` counts as success: the bot is already in the
-        // channel, which is exactly what the caller asked for.
+        // channel, which is exactly what the caller asked for. When a bot is
+        // already in the channel the ranking holds only its own engine, so this
+        // loop cannot place a second bot beside it.
         for candidate in candidates {
             match dispatch(
                 &candidate,

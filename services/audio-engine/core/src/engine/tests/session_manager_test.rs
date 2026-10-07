@@ -16,6 +16,12 @@ async fn test_session_manager_join() {
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
 
+    // 0. Not connected yet -> the join has to open a connection.
+    mock_discord
+        .expect_get_active_voice_connections()
+        .times(1)
+        .returning(|| Ok(vec![]));
+
     // 1. Join voice channel
     mock_discord
         .expect_join_voice_channel()
@@ -36,6 +42,93 @@ async fn test_session_manager_join() {
         .with(eq(guild_id), always())
         .times(1)
         .returning(|_, _| Ok(()));
+
+    let manager = SessionManager::new(
+        Arc::new(mock_discord),
+        Arc::new(mock_state),
+        Arc::new(mock_taphub),
+    );
+
+    let res = manager.join(guild_id, channel_id).await;
+    assert!(res.is_ok());
+}
+
+/// A bot that is connected to the channel but has no session (a "zombie": the
+/// connection survived, the session record did not) must be repaired by
+/// re-creating the session — *without* asking Discord to join the channel
+/// again, which is what makes the zombie permanent.
+#[tokio::test]
+async fn test_session_manager_join_repairs_a_connected_bot_without_a_session() {
+    let guild_id = GuildId::from(4);
+    let channel_id = ChannelId::from(400);
+
+    let mut mock_discord = MockDiscordService::new();
+    let mut mock_state = MockStateService::new();
+    let mock_taphub = MockTapHubService::new();
+
+    mock_discord
+        .expect_get_active_voice_connections()
+        .times(1)
+        .returning(move || Ok(vec![(guild_id, channel_id)]));
+
+    // No `expect_join_voice_channel`: a second join would be the bug.
+    mock_discord
+        .expect_play_audio()
+        .with(eq(guild_id), always())
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    mock_state
+        .expect_save_session()
+        .withf(move |s| s.guild_id == guild_id && s.channel_id == channel_id)
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let manager = SessionManager::new(
+        Arc::new(mock_discord),
+        Arc::new(mock_state),
+        Arc::new(mock_taphub),
+    );
+
+    let res = manager.join(guild_id, channel_id).await;
+    assert!(res.is_ok());
+}
+
+/// A bot connected to a *different* channel of the same guild still has to
+/// connect — songbird moves the existing connection — and that is not a repair
+/// of the target channel.
+#[tokio::test]
+async fn test_session_manager_join_moves_a_bot_connected_to_another_channel() {
+    let guild_id = GuildId::from(5);
+    let other_channel_id = ChannelId::from(500);
+    let channel_id = ChannelId::from(501);
+
+    let mut mock_discord = MockDiscordService::new();
+    let mut mock_state = MockStateService::new();
+    let mock_taphub = MockTapHubService::new();
+
+    mock_discord
+        .expect_get_active_voice_connections()
+        .times(1)
+        .returning(move || Ok(vec![(guild_id, other_channel_id)]));
+
+    mock_discord
+        .expect_join_voice_channel()
+        .with(eq(guild_id), eq(channel_id))
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    mock_discord
+        .expect_play_audio()
+        .with(eq(guild_id), always())
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    mock_state
+        .expect_save_session()
+        .withf(move |s| s.guild_id == guild_id && s.channel_id == channel_id)
+        .times(1)
+        .returning(|_| Ok(()));
 
     let manager = SessionManager::new(
         Arc::new(mock_discord),

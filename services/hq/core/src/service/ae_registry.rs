@@ -281,10 +281,17 @@ fn hrw_weight(sink_id: &str, session: &SessionInfo) -> u64 {
 /// An engine is eligible when it (a) is permitted for the session's guild,
 /// (b) is not already serving a *different* channel in that guild — Discord
 /// allows a bot token one voice connection per guild — and (c) is still
-/// heartbeating. `already_serving` is the bot Discord says is *in this very
-/// channel*; it is moved to the front so a re-Join lands on the bot that is
-/// already there and comes back as `AlreadyJoined` rather than allocating a
-/// second one.
+/// heartbeating.
+///
+/// `already_serving` is the bot Discord says is *in this very channel*. When
+/// one is given, the result is that bot's engine **and nothing else**: the
+/// channel already has a Zako in it, so only the engine that owns that bot may
+/// serve it. This is what keeps a second physical bot out of the room — any
+/// other engine handed a Join would put one there — and it is also the repair
+/// path, because a Join on the incumbent re-establishes a session an engine has
+/// lost while its bot stayed connected. An empty result therefore means "the
+/// bot in the channel has no registered engine", which the caller reports
+/// rather than routing around.
 pub fn rank_engines(
     entries: &[AeEntry],
     session: &SessionInfo,
@@ -298,6 +305,13 @@ pub fn rank_engines(
         .cloned()
         .collect();
 
+    if let Some(serving) = already_serving {
+        return eligible
+            .into_iter()
+            .filter(|e| e.client_id == serving)
+            .collect();
+    }
+
     // Descending weight; ties broken by sink_id so the order is total and
     // independent of the registry's iteration order.
     eligible.sort_by(|a, b| {
@@ -305,15 +319,6 @@ pub fn rank_engines(
             .cmp(&hrw_weight(&a.sink_id, session))
             .then_with(|| a.sink_id.cmp(&b.sink_id))
     });
-
-    // The bot Discord says is already in the channel wins the placement, so a
-    // re-Join answers `AlreadyJoined` instead of allocating a second bot.
-    if let Some(pos) = already_serving
-        .and_then(|client_id| eligible.iter().position(|e| e.client_id == client_id))
-    {
-        let entry = eligible.remove(pos);
-        eligible.insert(0, entry);
-    }
 
     eligible
 }
@@ -418,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn placement_reuses_the_bot_already_in_the_channel() {
+    fn placement_gives_the_channel_to_the_bot_already_in_it() {
         let entries = vec![
             entry("ae-0", "1", 1),
             entry("ae-1", "2", 1),
@@ -426,8 +431,8 @@ mod tests {
         ];
         let s = session(1, 100);
         let base = rank_engines(&entries, &s, &HashSet::new(), None);
-        // Pick whichever engine is NOT already first, so "existing wins" is a
-        // real assertion rather than a coincidence.
+        // Pick whichever engine is NOT already first, so "the incumbent wins"
+        // is a real assertion rather than a coincidence.
         let other = base
             .iter()
             .find(|e| e.sink_id != base[0].sink_id)
@@ -435,7 +440,31 @@ mod tests {
             .client_id
             .clone();
         let ranked = rank_engines(&entries, &s, &HashSet::new(), Some(&other));
+        assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].client_id, other);
+    }
+
+    #[test]
+    fn placement_places_no_bot_when_the_incumbent_has_no_engine() {
+        // Discord says a bot is in the channel but HQ has no live engine for
+        // it. Nothing may be dispatched: another engine's Join would put a
+        // second Zako in the room.
+        let entries = vec![entry("ae-0", "1", 1), entry("ae-1", "2", 1)];
+        let s = session(1, 100);
+        let ranked = rank_engines(&entries, &s, &HashSet::new(), Some("999"));
+        assert!(ranked.is_empty());
+    }
+
+    #[test]
+    fn placement_ignores_the_incumbent_when_it_is_busy_elsewhere() {
+        // `already_serving` and `occupied` come from two separate reads of
+        // Discord's voice state and can disagree; when they do, nothing is
+        // placed rather than a second bot.
+        let entries = vec![entry("ae-0", "1", 1), entry("ae-1", "2", 1)];
+        let s = session(1, 100);
+        let busy: HashSet<String> = ["1".to_string()].into_iter().collect();
+        let ranked = rank_engines(&entries, &s, &busy, Some("1"));
+        assert!(ranked.is_empty());
     }
 
     #[test]
