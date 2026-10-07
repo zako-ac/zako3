@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::instrument;
 use zako3_audio_engine_audio::{create_opus_ringbuf_pair, metrics};
 
@@ -18,6 +19,11 @@ pub struct SessionManager {
     taphub_service: ArcTapHubService,
 
     sessions: DashMap<(GuildId, ChannelId), Arc<SessionControl>>,
+
+    /// Serialises the voice-connection work for one guild. A bot token gets a
+    /// single voice connection per guild, so joining, moving and leaving are
+    /// all operations on the same connection and must not overlap. See `join`.
+    voice_ops: DashMap<GuildId, Arc<AsyncMutex<()>>>,
 }
 
 impl SessionManager {
@@ -31,7 +37,26 @@ impl SessionManager {
             state_service,
             taphub_service,
             sessions: DashMap::new(),
+            voice_ops: DashMap::new(),
         }
+    }
+
+    /// The lock that every voice-connection operation in `guild_id` holds.
+    fn guild_voice_lock(&self, guild_id: GuildId) -> Arc<AsyncMutex<()>> {
+        let entry = self
+            .voice_ops
+            .entry(guild_id)
+            .or_insert_with(|| Arc::new(AsyncMutex::new(())));
+        Arc::clone(&entry)
+    }
+
+    /// Whether songbird already holds a connection to this channel.
+    async fn is_connected_to(&self, guild_id: GuildId, channel_id: ChannelId) -> bool {
+        self.discord_service
+            .get_active_voice_connections()
+            .await
+            .map(|connections| connections.contains(&(guild_id, channel_id)))
+            .unwrap_or(false)
     }
 
     #[instrument(skip(self), fields(guild_id = %guild_id, channel_id = %channel_id))]
@@ -66,9 +91,27 @@ impl SessionManager {
     pub async fn join(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
         tracing::info!("Joining voice channel");
 
-        self.discord_service
-            .join_voice_channel(guild_id, channel_id)
-            .await?;
+        // One voice-connection operation at a time per guild. A bot token gets
+        // one voice connection per guild, so a join for one channel and a join
+        // for another are operations on the same connection; letting them race
+        // in songbird is what left a bot connected at Discord's side with no
+        // session — neither attempt finished, and HQ could then only "repair"
+        // that by letting a *second* bot into the room.
+        let join_lock = self.guild_voice_lock(guild_id);
+        let _guard = join_lock.lock_owned().await;
+
+        // If the bot is already connected to the channel there is nothing to
+        // connect — and asking songbird to join again is actively harmful: a
+        // second join on a connection that is still coming up makes it abandon
+        // that one and start over, which is how the bot ended up connected with
+        // no session recorded. Keep the connection and (re)create the session.
+        if self.is_connected_to(guild_id, channel_id).await {
+            tracing::info!("Already connected to this channel; re-establishing the session");
+        } else {
+            self.discord_service
+                .join_voice_channel(guild_id, channel_id)
+                .await?;
+        }
 
         let session = SessionState {
             guild_id,
@@ -87,9 +130,19 @@ impl SessionManager {
     pub async fn rejoin(&self, session: &SessionState) -> ZakoResult<()> {
         tracing::info!("Rejoining voice channel");
 
-        self.discord_service
-            .join_voice_channel(session.guild_id, session.channel_id)
-            .await?;
+        let join_lock = self.guild_voice_lock(session.guild_id);
+        let _guard = join_lock.lock_owned().await;
+
+        if self
+            .is_connected_to(session.guild_id, session.channel_id)
+            .await
+        {
+            tracing::info!("Already connected to this channel; re-establishing the session");
+        } else {
+            self.discord_service
+                .join_voice_channel(session.guild_id, session.channel_id)
+                .await?;
+        }
 
         self.initiate_session(session.guild_id, session.channel_id)
             .await?;
@@ -109,6 +162,12 @@ impl SessionManager {
     #[instrument(skip(self), fields(guild_id = %guild_id, channel_id = %channel_id))]
     pub async fn leave(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
         tracing::info!("Leaving voice channel");
+
+        // Same lock as joining: a leave that lands while a join is still coming
+        // up tears the connection out from under it, and the session the join
+        // then records belongs to a connection that no longer exists.
+        let voice_lock = self.guild_voice_lock(guild_id);
+        let _guard = voice_lock.lock_owned().await;
 
         self.discord_service.leave_voice_channel(guild_id).await?;
         self.state_service
