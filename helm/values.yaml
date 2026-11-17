@@ -151,6 +151,13 @@ audioEngine:
   # for a stalled track, not a track-length limit: reconcile only runs on a
   # command, so without it one stalled track blocks its whole queue forever.
   trackWatchdogSecs: "60"
+  # How long a queued TTS may wait for its turn before the engine drops it
+  # rather than plays it (seconds; "0" disables). Nothing else bounds a queue
+  # length, and the audit found backlogs playing one to two minutes late. The
+  # median TTS track is 1.78s, so a healthy queue never reaches this; tune it
+  # against `audio_queue_stale_skipped_total` in ClickStack and the engine's
+  # "Dropping stale queued track" log, which carries the age.
+  queueMaxAgeSecs: "90"
 
 # --- Web frontend ---
 web:

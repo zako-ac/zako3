@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     sync::atomic::AtomicBool,
     sync::{Arc, Weak},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use tokio::sync::{Mutex, mpsc::Sender};
@@ -25,6 +25,30 @@ use zako3_types::hq::{DiscordUserId, TapId};
 /// Default for [`SessionConfig::track_watchdog`].
 pub const DEFAULT_TRACK_WATCHDOG_SECS: u64 = 60;
 
+/// Default for [`SessionConfig::queue_max_age`]: how long a queued TTS may wait
+/// for its turn before it is dropped instead of played.
+///
+/// 90s is chosen from what the queues actually look like. The median TTS track
+/// is 1.78s, so a healthy per-user queue drains in single-digit seconds even at
+/// several messages a second, and 90s is roughly fifty tracks deep: a user
+/// would have to be fifty messages behind before it fires on their own traffic.
+/// What it has to catch is the pathological case the audit found: a stalled
+/// track holding a user's queue until the backlog reaches 15+ messages, where
+/// the tail would have been played a minute or two after it was said. Nothing
+/// that late is worth hearing (it answers a question the user has moved past),
+/// and dropping it is what lets the fresh messages behind it through.
+///
+/// Settable without a code change: `QUEUE_MAX_AGE_SECS` in the environment
+/// (chart value `audioEngine.queueMaxAgeSecs`). Zero disables the cap. Tune it
+/// against `audio_queue_stale_skipped_total` plus the `Dropping stale queued
+/// track` log (which carries the age): raise it if users report messages that
+/// were never read, lower it if audio still arrives too late to be useful.
+pub const DEFAULT_QUEUE_MAX_AGE_SECS: u64 = 90;
+
+/// How many stale heads one `reconcile` will drop before it hands the rest to
+/// the next one, so a backlog of thousands cannot make a single reconcile loop.
+const MAX_STALE_SKIP_ROUNDS: usize = 8;
+
 /// Knobs for one session's control loop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionConfig {
@@ -36,12 +60,23 @@ pub struct SessionConfig {
     /// song that is still producing audio is not touched however far past the
     /// window it runs.
     pub track_watchdog: Duration,
+
+    /// How long a queued track may wait for its turn before it is dropped
+    /// instead of played. Zero disables the cap. See
+    /// [`DEFAULT_QUEUE_MAX_AGE_SECS`] for why 90 seconds and how to tune it.
+    ///
+    /// This is the answer to a stalled queue that the watchdog cannot give: the
+    /// watchdog ends the stuck *track*, but by then the messages behind it have
+    /// already waited, and playing them minutes late is worse than skipping
+    /// them.
+    pub queue_max_age: Duration,
 }
 
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             track_watchdog: Duration::from_secs(DEFAULT_TRACK_WATCHDOG_SECS),
+            queue_max_age: Duration::from_secs(DEFAULT_QUEUE_MAX_AGE_SECS),
         }
     }
 }
@@ -200,6 +235,7 @@ impl SessionControl {
                     volume: effective_volume,
                     queue_name: queue_name.clone(),
                     paused: false,
+                    queued_at_ms: Some(now_unix_ms()),
                 };
 
                 upsert_track(&mut session.queues, queue_name.clone(), track);
@@ -283,6 +319,10 @@ impl SessionControl {
             move |session| {
                 if let Some(track) = session.find_track_mut(track_id) {
                     track.paused = false;
+                    // A resume is the user saying "play this now": the time it
+                    // spent paused is not time it waited for its turn, so it must
+                    // not count against the queue age cap.
+                    track.queued_at_ms = Some(now_unix_ms());
                 }
             },
         )
@@ -485,15 +525,27 @@ impl SessionControl {
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
-    async fn reconcile(&self) -> ZakoResult<()> {
+    pub(crate) async fn reconcile(&self) -> ZakoResult<()> {
         let _guard = self.reconcile_guard.lock().await;
 
-        let session = self
-            .state_service
-            .get_session(self.guild_id, self.channel_id)
-            .await?;
+        // Normally one pass. A pass that dropped a stale head re-reads instead
+        // of playing, so the track behind it gets its turn in this same call;
+        // bounded so a long backlog cannot spin here; the rest waits for the
+        // next reconcile.
+        for _ in 0..=MAX_STALE_SKIP_ROUNDS {
+            let session = self
+                .state_service
+                .get_session(self.guild_id, self.channel_id)
+                .await?;
 
-        if let Some(session) = session {
+            let Some(session) = session else {
+                return Ok(());
+            };
+
+            if self.drop_stale_heads(&session).await? {
+                continue;
+            }
+
             let active_tracks = session.get_active_tracks();
 
             let non_paused_ids: Vec<TrackId> = active_tracks
@@ -532,9 +584,79 @@ impl SessionControl {
                     }
                 }
             }
+
+            return Ok(());
         }
 
+        tracing::warn!(
+            max_age_secs = self.config.queue_max_age.as_secs(),
+            rounds = MAX_STALE_SKIP_ROUNDS,
+            "Stopped dropping stale tracks at the per-reconcile round limit; the rest is re-checked on the next reconcile"
+        );
+
         Ok(())
+    }
+
+    /// Drops the stale heads of this session, returning whether anything was
+    /// dropped.
+    ///
+    /// Only a head can be stale in a way that matters: it is the only track
+    /// that could have played and did not. The tracks behind it have not been
+    /// denied anything yet (they are waiting their turn), so they are left
+    /// alone until they reach the front, which is where the age is judged.
+    async fn drop_stale_heads(&self, session: &SessionState) -> ZakoResult<bool> {
+        let max_age_secs = self.config.queue_max_age.as_secs();
+        if self.config.queue_max_age.is_zero() {
+            return Ok(false);
+        }
+
+        let now_ms = now_unix_ms();
+        let stale: Vec<(Track, u64)> = session
+            .get_active_tracks()
+            .into_iter()
+            .filter(|track| !track.paused)
+            .filter_map(|track| {
+                stale_age_secs(&track, now_ms, max_age_secs).map(|age| (track, age))
+            })
+            .collect();
+
+        if stale.is_empty() {
+            return Ok(false);
+        }
+
+        for (track, age_secs) in &stale {
+            tracing::warn!(
+                track_id = %track.track_id,
+                queue_name = %track.queue_name,
+                tap_id = %track.request.tap_id.0,
+                discord_user_id = %track.request.discord_user_id,
+                age_secs,
+                max_age_secs,
+                guild_id = %self.guild_id,
+                channel_id = %self.channel_id,
+                "Dropping stale queued track instead of playing it"
+            );
+            metrics::record_queue_stale_skipped(&normalize_queue_name(&track.queue_name));
+            // A head should never be in the mixer without having played, but a
+            // source left behind after we remove the track would keep mixing.
+            self.mixer.remove_source(track.track_id);
+            self.started.lock().await.remove(&track.track_id);
+        }
+
+        let ids: Vec<TrackId> = stale.iter().map(|(track, _)| track.track_id).collect();
+        modify_state_session(
+            &self.state_service,
+            self.guild_id,
+            self.channel_id,
+            move |session| {
+                for id in ids {
+                    session.remove_track(id);
+                }
+            },
+        )
+        .await?;
+
+        Ok(true)
     }
 
     /// Stops tracks whose end event never arrived.
@@ -754,6 +876,46 @@ impl SessionControl {
         metrics::record_preload("miss");
         Ok(())
     }
+}
+
+fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
+}
+
+/// Whether a queue is a per-user TTS queue, the only kind the age cap applies
+/// to.
+///
+/// A TTS queue is one user's speech and it expires: a message read a minute
+/// late is worse than a message not read. Music queues are playlists: a track
+/// sitting there for ten minutes is waiting its turn as intended, and dropping
+/// it would be a bug, not a fix.
+fn is_tts_queue(queue_name: &QueueName) -> bool {
+    let name: String = queue_name.clone().into();
+    name.starts_with("tts_")
+}
+
+/// The age in seconds of a track that is too old to play, or `None` when it
+/// should play. Pure, so the rule is testable without a state service.
+pub(crate) fn stale_age_secs(track: &Track, now_ms: i64, max_age_secs: u64) -> Option<u64> {
+    if max_age_secs == 0 || !is_tts_queue(&track.queue_name) {
+        return None;
+    }
+
+    // No enqueue time means the age is unknown: state written before the field
+    // existed, or a track restored from such state. Playing it is the safe
+    // direction: silently dropping audio we cannot date loses messages.
+    let queued_at_ms = track.queued_at_ms?;
+    let age_ms = now_ms.checked_sub(queued_at_ms)?;
+    if age_ms < 0 {
+        // The wall clock stepped backwards; we cannot claim the track is old.
+        return None;
+    }
+
+    let age_secs = (age_ms / 1000) as u64;
+    (age_secs > max_age_secs).then_some(age_secs)
 }
 
 fn normalize_queue_name(queue_name: &QueueName) -> String {

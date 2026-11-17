@@ -37,6 +37,9 @@ fn create_dummy_track(id: u64, queue: &str) -> Track {
         volume: Volume::from(1.0),
         queue_name: QueueName::from(queue.to_string()),
         paused: false,
+        // Undated on purpose: these fixtures predate the queue age cap, and an
+        // undated track must never be treated as stale.
+        queued_at_ms: None,
     }
 }
 
@@ -990,6 +993,7 @@ async fn test_watchdog_stops_stalled_track_and_starts_next() {
         Arc::new(mock_taphub),
         SessionConfig {
             track_watchdog: Duration::from_millis(50),
+            ..Default::default()
         },
         Arc::new(AtomicBool::new(true)),
     );
@@ -1074,6 +1078,7 @@ async fn test_watchdog_leaves_a_playing_track_alone() {
         Arc::new(mock_taphub),
         SessionConfig {
             track_watchdog: Duration::from_millis(50),
+            ..Default::default()
         },
         Arc::new(AtomicBool::new(true)),
     );

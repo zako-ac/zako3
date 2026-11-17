@@ -104,6 +104,18 @@ pub struct Track {
     pub volume: Volume,
     pub queue_name: QueueName,
     pub paused: bool,
+    /// When this track entered the queue, as unix milliseconds.
+    ///
+    /// The engine uses it to drop stale TTS before it is played: a busy user's
+    /// queue can otherwise hold a message for a minute or two and then play it
+    /// long after it was said, which is worse than not playing it at all.
+    ///
+    /// `None` means "unknown": state written by an engine that predates this
+    /// field, or a track restored from such state. An unknown age is never
+    /// treated as stale — silently dropping audio we cannot date is the worse
+    /// failure, so an undated track plays.
+    #[serde(default)]
+    pub queued_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

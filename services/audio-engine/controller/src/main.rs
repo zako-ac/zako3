@@ -207,6 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         SessionManager::new(discord_service, state_service, taphub_service).with_session_config(
             SessionConfig {
                 track_watchdog: Duration::from_secs(config.track_watchdog_secs),
+                queue_max_age: Duration::from_secs(config.queue_max_age_secs),
             },
         ),
     );

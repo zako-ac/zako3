@@ -55,6 +55,7 @@ struct AudioOtelMetrics {
     jitter_drops: Counter<u64>,
     duplicate_mixer_adds: Counter<u64>,
     track_watchdog_fired: Counter<u64>,
+    queue_stale_skipped: Counter<u64>,
     // Keep alive so the callback is not unregistered
     _mixer_buffer_depth_gauge: ObservableGauge<i64>,
 }
@@ -147,6 +148,12 @@ fn otel() -> &'static AudioOtelMetrics {
                     "Tracks stopped by the session watchdog because no end event arrived",
                 )
                 .build(),
+            queue_stale_skipped: meter
+                .u64_counter("audio_queue_stale_skipped_total")
+                .with_description(
+                    "Queued tracks dropped before playback because they waited too long",
+                )
+                .build(),
             _mixer_buffer_depth_gauge: buffer_depth_gauge,
         }
     })
@@ -230,6 +237,19 @@ pub fn record_preload(result: &str) {
     otel()
         .preload
         .add(1, &[KeyValue::new("result", result.to_string())]);
+}
+
+/// A track that reached the front of its queue too late to be worth playing.
+///
+/// Nonzero on a TTS queue means users are being starved: something upstream (a
+/// stalled track, a slow tap) held the queue past the age cap. Read it together
+/// with `audio_track_lifecycle_total{event="start"}`: a rising skip count with
+/// a flat start count is a queue discarding, not draining.
+pub fn record_queue_stale_skipped(queue_name: &str) {
+    #[cfg(feature = "telemetry")]
+    otel()
+        .queue_stale_skipped
+        .add(1, &[KeyValue::new("queue_name", queue_name.to_string())]);
 }
 
 pub fn record_taphub_request_duration(duration_secs: f64) {
