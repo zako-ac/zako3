@@ -36,8 +36,8 @@ zako3-emoji-matcher-proto = { workspace = true }
 zako3-cache-client.workspace = true
 zakofish4-common.workspace = true
 zako3-preload-cache.workspace = true
-opentelemetry = "0.32.0"
-tracing-opentelemetry = "0.33.0"
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"
 
 [dev-dependencies]
 chrono.workspace = true

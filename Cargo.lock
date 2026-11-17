@@ -3119,7 +3119,7 @@ dependencies = [
  "jsonrpsee",
  "jsonwebtoken",
  "mcpkit",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3203,7 +3203,7 @@ dependencies = [
  "jsonwebtoken",
  "mockall 0.12.1",
  "oauth2",
- "opentelemetry 0.32.0",
+ "opentelemetry",
  "reqwest 0.11.27",
  "rustc-hash",
  "serde",
@@ -3213,7 +3213,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.33.0",
+ "tracing-opentelemetry",
  "urlencoding",
  "uuid",
  "zako3-cache-client",
@@ -5269,26 +5269,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0142c63252a9e054e68a4c61a5778f7b14f576274d593f8ce883d191a099682"
-dependencies = [
- "futures-core",
- "futures-sink",
- "js-sys",
- "pin-project-lite",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
 name = "opentelemetry-appender-tracing"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef6a1ac5ca3accf562b8c306fa8483c85f4390f768185ab775f242f7fe8fdcc2"
 dependencies = [
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "tracing",
  "tracing-core",
  "tracing-subscriber",
@@ -5303,7 +5289,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "http 1.4.2",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "reqwest 0.12.28",
 ]
 
@@ -5314,7 +5300,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f69cd6acbb9af919df949cd1ec9e5e7fdc2ef15d234b6b795aaa525cc02f71f"
 dependencies = [
  "http 1.4.2",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-proto",
  "opentelemetry_sdk",
@@ -5333,7 +5319,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14095eb06b569eb5d538fa4555969f7e8a410ed7910c903bfd295f9e1a50d7ea"
 dependencies = [
  "once_cell",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opentelemetry_sdk",
  "prometheus",
  "tracing",
@@ -5345,7 +5331,7 @@ version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7175df06de5eaee9909d4805a3d07e28bb752c34cab57fa9cff549da596b30f"
 dependencies = [
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opentelemetry_sdk",
  "prost",
  "tonic",
@@ -5361,7 +5347,7 @@ dependencies = [
  "futures-channel",
  "futures-executor",
  "futures-util",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "percent-encoding",
  "rand 0.9.5",
  "thiserror 2.0.18",
@@ -9166,23 +9152,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ac28f2d093c6c477eaa76b23525478f38de514fa9aeb1285738d4b97a9552fc"
 dependencies = [
  "js-sys",
- "opentelemetry 0.31.0",
- "smallvec",
- "tracing",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber",
- "web-time",
-]
-
-[[package]]
-name = "tracing-opentelemetry"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adbc64cba7137545b8044cb1fe9814f7aacf3c6b5f9b45be8bb5db538befdb26"
-dependencies = [
- "js-sys",
- "opentelemetry 0.32.0",
+ "opentelemetry",
  "smallvec",
  "tracing",
  "tracing-core",
@@ -10769,7 +10739,7 @@ dependencies = [
  "derive_more 2.1.1",
  "lazy_static",
  "mockall 0.14.0",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opus",
  "os_pipe",
  "parking_lot 0.12.5",
@@ -10795,12 +10765,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-nats",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "zako3-audio-engine-core",
 ]
 
@@ -10815,7 +10785,7 @@ dependencies = [
  "envy",
  "gethostname",
  "jsonrpsee",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "protofish4",
  "rustls 0.23.42",
  "serde",
@@ -10823,7 +10793,7 @@ dependencies = [
  "songbird",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "zako3-audio-engine-core",
  "zako3-audio-engine-infra",
  "zako3-cache-client",
@@ -10872,7 +10842,7 @@ dependencies = [
  "bytes",
  "dashmap 6.2.1",
  "jsonrpsee",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "protofish4",
  "rand 0.10.2",
  "redis 0.27.6",
@@ -10883,7 +10853,7 @@ dependencies = [
  "songbird",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "uuid",
  "zako3-audio-engine-audio",
  "zako3-audio-engine-core",
@@ -10901,7 +10871,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-prometheus",
  "opentelemetry_sdk",
@@ -10909,7 +10879,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
@@ -11105,7 +11075,7 @@ dependencies = [
  "http 1.4.2",
  "jsonrpsee",
  "mockall 0.12.1",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opus",
  "parking_lot 0.12.5",
  "rustls 0.23.42",
@@ -11117,7 +11087,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
  "zako3-cache-client",
@@ -11190,7 +11160,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
- "opentelemetry 0.31.0",
+ "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry-prometheus",
@@ -11199,7 +11169,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tracing",
- "tracing-opentelemetry 0.32.1",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
