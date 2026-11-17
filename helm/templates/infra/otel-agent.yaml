@@ -96,6 +96,11 @@ spec:
         {{- include "zako3.selectorLabels" (dict "component" "otel-agent" "Release" .Release) | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      # The image's default user cannot write the node state dir kubelet
+      # creates for the offsets, and this pod's whole job is reading host files.
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
       containers:
         - name: otel-agent
           image: {{ .Values.logAgent.image | quote }}
