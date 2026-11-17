@@ -39,8 +39,10 @@ data:
         # Not its own logs: while the gateway is down this pod logs an export
         # failure per retry, and feeding that back into the failing pipeline is
         # a loop with nothing to gain.
+        # The pod directory is <namespace>_<pod-name>_<uid>, and the pod name
+        # carries the release prefix, so the glob has to match both.
         exclude:
-          - /var/log/pods/{{ .Release.Namespace }}_otel-agent-*/*/*.log
+          - /var/log/pods/{{ .Release.Namespace }}_{{ $fullname }}-otel-agent-*/*/*.log
         include_file_path: true
         include_file_name: false
         start_at: beginning
