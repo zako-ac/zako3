@@ -1,5 +1,5 @@
 {{- $fullname := include "zako3.fullname" . -}}
-{{- $pvc := dict "root" . "persistence" .Values.clickstack.persistence "default" "clickstack-data" "size" (.Values.clickstack.storageSize | default "20Gi") "accessMode" "ReadWriteOnce" -}}
+{{- $pvc := dict "root" . "persistence" .Values.clickstack.persistence "default" "clickstack-data" "size" (.Values.clickstack.storageSize | default "100Gi") "accessMode" "ReadWriteOnce" -}}
 {{- include "zako3.pvc" $pvc }}
 ---
 apiVersion: apps/v1
@@ -51,6 +51,28 @@ spec:
                     "secretName" (printf "%s-clickstack-secret" $fullname)
                     "existingName" .Values.clickstack.existingSecret.name
                     "key" .Values.clickstack.existingSecret.apiKeyKey) | nindent 16 }}
+          # The all-in-one entrypoint sits in `Waiting for ClickHouse to be
+          # ready...` forever if clickhouse-server dies, and the pod still
+          # reports Ready because nothing probed it. That is how a full volume
+          # on 2026-10-14 turned into six weeks of `Connection refused` with no
+          # alert. Startup gets a wide window because the first boot runs the
+          # ClickStack schema migration (minutes, not seconds); readiness gates
+          # the Service so the gateway's exporter queues instead of erroring.
+          #
+          # No livenessProbe on purpose: a restart landing in the middle of a
+          # schema migration or a large merge loses more than it recovers, and
+          # the pod being unready is already enough for the gateway to hold
+          # telemetry.
+          startupProbe:
+            tcpSocket:
+              port: 4317
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            tcpSocket:
+              port: 4317
+            periodSeconds: 10
+            failureThreshold: 3
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse

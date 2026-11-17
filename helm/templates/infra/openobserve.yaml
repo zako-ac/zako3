@@ -25,17 +25,38 @@ data:
         headers:
           authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
         compression: gzip
+        # The queue is half the reason every service exports here instead of to
+        # ClickStack directly: a ClickStack restart, or a ClickHouse merge that
+        # stalls ingest for a couple of minutes, costs a delay instead of the
+        # telemetry. 5000 batches is several minutes of the current volume.
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 600s
+        sending_queue:
+          enabled: true
+          queue_size: 512
+
+    processors:
+      # ClickStack writes into ClickHouse, which dislikes one insert per span.
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
 
     service:
       pipelines:
         traces:
           receivers: [otlp]
+          processors: [batch]
           exporters: [otlphttp/clickstack]
         metrics:
           receivers: [otlp]
+          processors: [batch]
           exporters: [otlphttp/clickstack]
         logs:
           receivers: [otlp]
+          processors: [batch]
           exporters: [otlphttp/clickstack]
 ---
 apiVersion: apps/v1
@@ -137,6 +158,14 @@ spec:
                     "secretName" (printf "%s-clickstack-secret" $fullname)
                     "existingName" .Values.clickstack.existingSecret.name
                     "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 16 }}
+          # Every service plus the node log agent now funnel through this pod,
+          # so it gets a floor and a ceiling instead of BestEffort.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 2Gi
           volumeMounts:
             - name: config
               mountPath: /etc/otel-config.yaml

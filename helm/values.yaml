@@ -292,7 +292,18 @@ clickstack:
     name: ""
     existingClaim: ""
     storageClass: ""
+    # Empty means the template default, 100Gi (it was 20Gi, which filled on
+    # 2026-10-14 and left ClickHouse unable to start for six weeks). Growing it
+    # further needs only a PVC resize: hdd-sc allows expansion.
     size: ""
     accessModes: []
     annotations: {}
     volumeName: ""
+
+# --- Node log shipper (tails /var/log/pods for this namespace into ClickStack) ---
+# kubelet keeps roughly eight hours of container logs on a 10Mi x 5 rotation;
+# this is what makes a log still searchable a day later. Retention is otel_logs'
+# ClickHouse TTL (30 days), not this pod's.
+logAgent:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib:latest
