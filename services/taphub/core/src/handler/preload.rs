@@ -7,6 +7,7 @@ use zakofish_taphub::ZakofishError;
 
 use crate::hub::TapHub;
 
+use super::cancel::{Waited, wait_for_tap};
 use super::{cache::build_cache_item, cache::resolve_metadata, stream::bridge_rel};
 
 pub(crate) async fn handle_preload_audio_inner(
@@ -19,6 +20,8 @@ pub(crate) async fn handle_preload_audio_inner(
     let _enter = span.enter();
 
     let tap_id = req.tap_id.clone();
+    // The budget covers the whole request, not just the tap leg.
+    let deadline = std::time::Instant::now() + tap_hub.request_timeout;
 
     let (tap_result, conn_result) = tokio::join!(
         super::tap_lookup::resolve_tap(tap_hub, &tap_id),
@@ -47,38 +50,39 @@ pub(crate) async fn handle_preload_audio_inner(
     }
 
     // Connection selection
-    let (connection_id, disconnect_rx) = conn_result?;
+    let (connection_id, mut disconnect_rx) = conn_result?;
 
-    // Request audio from zakofish
-    let zf_result = tokio::time::timeout(
-        tap_hub.request_timeout,
-        tap_hub.zf_hub.request_audio(
-            tap_id.clone(),
-            connection_id,
-            req.audio_request.clone(),
-            req.headers.clone(),
-        ),
-    )
-    .await
-    .map_err(|_| {
-        TapHubError::Internal(format!(
-            "Tap preload timed out after {:?}",
-            tap_hub.request_timeout
-        ))
-    })?;
+    // Request audio from zakofish, bounded by what is left of the request budget
+    // and by the tap connection's life.
+    let request_fut = tap_hub.zf_hub.request_audio(
+        tap_id.clone(),
+        connection_id,
+        req.audio_request.clone(),
+        req.headers.clone(),
+    );
 
-    let (succ, rel, unrel) = match zf_result {
-        Ok(triple) => triple,
-        Err(ZakofishError::TapRequestFailure { reason, try_others }) => {
-            return Err(TapHubError::TapScript { reason, try_others });
-        }
-        Err(e) => {
-            return Err(TapHubError::Internal(format!(
-                "Failed to request audio from tap: {}",
-                e
-            )));
-        }
-    };
+    let (succ, rel, unrel) =
+        match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
+            Waited::Done(Ok(triple)) => triple,
+            Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
+                return Err(TapHubError::TapScript { reason, try_others });
+            }
+            Waited::Done(Err(e)) => {
+                return Err(TapHubError::Internal(format!(
+                    "Failed to request audio from tap: {}",
+                    e
+                )));
+            }
+            Waited::TimedOut => {
+                return Err(TapHubError::Internal(format!(
+                    "Tap preload timed out after {:?}",
+                    tap_hub.request_timeout
+                )));
+            }
+            Waited::Disconnected => {
+                return Err(TapHubError::TapUnavailable);
+            }
+        };
 
     // consume unrel frames to avoid buildup (but don't wait for them)
     tokio::spawn(async move {

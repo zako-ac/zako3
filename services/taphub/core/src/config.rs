@@ -14,6 +14,15 @@ pub struct AppConfig {
     pub redis_url: String,
     pub cache_rpc_url: String,
     pub cache_rpc_admin_token: Option<String>,
+    /// Per-request tap budget, in milliseconds, for the whole request.
+    ///
+    /// It stays *below* the audio engine's per-attempt taphub timeout
+    /// (`TAPHUB_REQUEST_TIMEOUT_MS`, 6000ms; two attempts make a 12s engine
+    /// budget) so the hub answers before its caller gives up, rather than
+    /// holding a request the engine has already abandoned and reset its
+    /// connection over. The `DriverGone` reconnects seen on the tap side are
+    /// what prompted this ordering; they are not something this change proves
+    /// fixed, only something it removes one condition for.
     pub request_timeout_ms: u64,
     /// TTL (seconds) for published tap connection-state leases in Redis. The hub
     /// refreshes them on a heartbeat at roughly `ttl / 3`; if the process dies the
@@ -65,7 +74,7 @@ impl AppConfig {
             request_timeout_ms: env::var("ZK_TH_REQUEST_TIMEOUT_MS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(10_000),
+                .unwrap_or(5_000),
             connection_lease_ttl_secs: env::var("ZK_TH_CONNECTION_LEASE_TTL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())

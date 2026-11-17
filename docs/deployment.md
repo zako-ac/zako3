@@ -233,7 +233,7 @@ Source: `services/taphub/core/.env.example`
 | `ZK_TH_ZAKOFISH_BIND_ADDR` | | `0.0.0.0:1028` | Zakofish (protofish3) tap listener bind address |
 | `ZK_TH_CACHE_RPC_URL` | | `http://cache:4100` | Base URL of the cache server (replaces direct PVC access) |
 | `ZK_TH_CACHE_RPC_ADMIN_TOKEN` | | — | Token to authenticate against the cache server (must match `ZK_CACHE_ADMIN_TOKEN`). Empty disables auth |
-| `ZK_TH_REQUEST_TIMEOUT_MS` | | `13000` | Request timeout in milliseconds |
+| `ZK_TH_REQUEST_TIMEOUT_MS` | | `5000` | Budget in milliseconds for a whole request (tap lookup, permission check, cache query, tap call). Must stay below the audio engine's per-attempt taphub timeout (`TAPHUB_REQUEST_TIMEOUT_MS`, 6000ms) so the hub answers before its caller gives up instead of holding a request the engine has already abandoned |
 | `ZK_TH_OTLP_ENDPOINT` | | `http://otel-lgtm:4317` | OpenTelemetry collector endpoint (set by compose) |
 | `ZK_TH_METRICS_PORT` | | `9092` | Prometheus metrics port |
 

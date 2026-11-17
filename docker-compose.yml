@@ -100,7 +100,8 @@ services:
       ZK_TH_KEY_FILE: ${ZK_TH_KEY_FILE:-key.pem}
       ZK_TH_CACHE_RPC_URL: http://cache:4100
       ZK_TH_CACHE_RPC_ADMIN_TOKEN: ${ZK_TH_CACHE_RPC_ADMIN_TOKEN:-}
-      ZK_TH_REQUEST_TIMEOUT_MS: "13000"
+      # Below the engine's per-attempt taphub timeout (6000ms).
+      ZK_TH_REQUEST_TIMEOUT_MS: "5000"
       ZK_TH_OTLP_ENDPOINT: http://otel-lgtm:4317
       ZK_TH_METRICS_PORT: "9092"
     ports:
