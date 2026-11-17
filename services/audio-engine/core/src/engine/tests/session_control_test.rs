@@ -799,7 +799,6 @@ async fn test_end_of_track_handling_and_preload() {
 // Track watchdog (P0-2)
 // ---------------------------------------------------------------------------
 
-use std::collections::HashSet;
 use std::sync::atomic::Ordering as AtomicOrdering;
 use zako3_audio_engine_audio::metrics::AUDIO_METRICS;
 
