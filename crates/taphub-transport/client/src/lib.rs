@@ -11,13 +11,15 @@ use std::io::BufReader;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use zako3_opus_jitter::{JitterConfig, OpusJitterBuffer};
+use zako3_opus_jitter::{JitterConfig, JitterError, OpusJitterBuffer};
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
-use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
+use zako3_types::{
+    AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError,
+};
 
 const RESET_CLOSE_CODE: u64 = 1;
 const MAX_ATTEMPTS: usize = 2;
@@ -26,6 +28,9 @@ const MAX_ATTEMPTS: usize = 2;
 /// connection a failing request landed on, so it never tears down siblings on the other
 /// pooled connections — the whole point of the pool.
 const POOL_SIZE: usize = 4;
+/// How long the abort path waits for the peer to acknowledge the end of the receive
+/// side of a transfer. Cleanup must never outlive the track that needed it.
+const XFER_END_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct TransportClient {
     /// Pool of independent reconnecting connections. Requests round-robin across them via
@@ -33,6 +38,15 @@ pub struct TransportClient {
     conns: Vec<Arc<ReconnectingClient>>,
     cursor: AtomicUsize,
     request_timeout: Duration,
+    /// Per-track jitter buffer settings. Production runs the defaults; tests shorten
+    /// `stall_timeout` so a stall can be observed in a second instead of fifteen.
+    jitter: JitterConfig,
+    /// Pooled connections this client has reset since it was built.
+    ///
+    /// A reset tears down every stream multiplexed over that connection, so it is a
+    /// last resort kept for a transport that is really broken — a request that merely
+    /// timed out must not move this counter.
+    resets: AtomicU64,
 }
 
 impl TransportClient {
@@ -88,6 +102,8 @@ impl TransportClient {
             conns,
             cursor: AtomicUsize::new(0),
             request_timeout,
+            jitter: JitterConfig::default(),
+            resets: AtomicU64::new(0),
         })
     }
 
@@ -96,12 +112,31 @@ impl TransportClient {
     /// The server observes this as the client going away, so any request still
     /// in flight for this client is cancelled there instead of being served into
     /// a connection nobody reads. The tests use it for exactly that; a shutdown
-    /// path could use it too. The per-request timeout path resets only the one
-    /// connection it landed on.
+    /// path could use it too. It is not what a slow request does — that one
+    /// abandons its own channel and leaves the connection up.
     pub async fn close(&self) {
         for conn in &self.conns {
+            self.resets.fetch_add(1, Ordering::Relaxed);
             conn.reset(RESET_CLOSE_CODE).await;
         }
+    }
+
+    /// Replace the jitter buffer settings used for every track this client streams.
+    ///
+    /// Tuning and tests only; production takes the defaults. A shorter
+    /// `stall_timeout` is how a stall is reproduced in a test without waiting the
+    /// fifteen seconds the audit measured.
+    pub fn with_jitter_config(mut self, jitter: JitterConfig) -> Self {
+        self.jitter = jitter;
+        self
+    }
+
+    /// Reset attempts this client has made, on `close()` or on a transport failure.
+    ///
+    /// Stays at zero while requests only time out or tracks only stall: neither
+    /// resets a connection now.
+    pub fn resets_total(&self) -> u64 {
+        self.resets.load(Ordering::Relaxed)
     }
 
     /// Round-robin one connection out of the pool for a single request.
@@ -123,10 +158,11 @@ impl TransportClient {
     /// One request/response exchange with a per-attempt timeout, isolated to a single
     /// pooled connection so a failure here never disturbs sibling requests on the other
     /// pooled connections. Recovery is scoped:
-    /// - **Timeout**: the request's own QUIC stream is dropped when the future is
-    ///   cancelled, and we reset *this* pooled connection before retrying so a wedged
-    ///   connection (one that accepts the channel but never answers) is evicted from
-    ///   the pool instead of being reused forever. Sibling connections are untouched.
+    /// - **Timeout**: only this request's channel is abandoned, by dropping it. The
+    ///   connection stays up — every track streaming over it would die with a reset —
+    ///   and the retry moves to the next connection in the pool instead. A connection
+    ///   that is genuinely dead is already evicted by the transport keepalive (5s
+    ///   interval, 15s timeout), so there is nothing for a reset to accomplish here.
     /// - **Transport error**: reset only *this* pooled connection, then retry.
     ///
     /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
@@ -136,10 +172,19 @@ impl TransportClient {
     async fn round_trip(
         &self,
         payload: Vec<u8>,
-    ) -> Result<(Arc<ReconnectingClient>, ChanSender, ChanReceiver, TapHubResponse), TapHubError>
-    {
-        let conn = self.pick_conn();
+    ) -> Result<
+        (
+            Arc<ReconnectingClient>,
+            ChanSender,
+            ChanReceiver,
+            TapHubResponse,
+        ),
+        TapHubError,
+    > {
         for attempt in 1..=MAX_ATTEMPTS {
+            // Picked per attempt, not once per exchange: a retry after a timeout must
+            // not go back onto the connection that just failed to answer.
+            let conn = self.pick_conn();
             match tokio::time::timeout(self.request_timeout, Self::round_trip_once(&conn, &payload))
                 .await
             {
@@ -155,6 +200,7 @@ impl TransportClient {
                         "taphub request failed on transport; resetting this pooled connection and retrying"
                     );
                     // Scoped to this one pooled connection — siblings are untouched.
+                    self.resets.fetch_add(1, Ordering::Relaxed);
                     conn.reset(RESET_CLOSE_CODE).await;
                 }
                 Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
@@ -162,12 +208,11 @@ impl TransportClient {
                     tracing::warn!(
                         timeout_ms = self.request_timeout.as_millis() as u64,
                         attempt,
-                        "taphub request timed out; resetting this pooled connection and retrying"
+                        "taphub request timed out; abandoning only this request's channel and retrying on another pooled connection"
                     );
-                    // A connection that accepts a channel but never answers is wedged;
-                    // leaving it intact (as before) kept routing requests to a dead
-                    // connection forever. Reset it so the retry lands on a fresh one.
-                    conn.reset(RESET_CLOSE_CODE).await;
+                    // Deliberately no `conn.reset` here: dropping the timed-out future
+                    // closes this request's channel, while a reset would cut off every
+                    // other track multiplexed over the same connection.
                 }
                 Err(_) => {
                     return Err(TapHubError::Internal(format!(
@@ -187,7 +232,10 @@ impl TransportClient {
         Ok(resp)
     }
 
-    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, TapHubError> {
+    pub async fn request_audio(
+        &self,
+        req: CachedAudioRequest,
+    ) -> Result<AudioResponse, TapHubError> {
         let req_clone = req.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
@@ -200,6 +248,7 @@ impl TransportClient {
                 let conn_clone = conn;
                 let xfer_timeout = self.request_timeout;
                 let invalidate_timeout = self.request_timeout;
+                let jitter_config = self.jitter.clone();
 
                 tokio::spawn(async move {
                     // Keep the sender alive for the duration of the transfer so the
@@ -231,47 +280,99 @@ impl TransportClient {
                     };
 
                     let (frame_tx, frame_rx) = mpsc::channel(jitter::CHANNEL_CAP);
-                    let mut jitter =
-                        match OpusJitterBuffer::new(frame_rx, JitterConfig::default()) {
-                            Ok(j) => j,
-                            Err(e) => {
-                                tracing::error!("Failed to create jitter buffer: {:?}", e);
-                                return;
-                            }
-                        };
-
-                    // Both halves run in this task: the transfer borrows the
-                    // channel receiver above, so the pump cannot be spawned
-                    // separately.
-                    let pump = jitter::pump(&mut single, frame_tx);
-                    let consume = async {
-                        loop {
-                            match jitter.yield_pcm().await {
-                                Ok(Some(pcm)) => {
-                                    if tx.send(pcm).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Ok(None) => break, // Stream ended
-                                Err(e) => {
-                                    tracing::error!("Jitter buffer error: {:?}", e);
-                                    if e.to_string().contains("InvalidPacket") {
-                                        tracing::warn!(
-                                            "Invalid opus packet detected; invalidating cache"
-                                        );
-                                        send_invalidate_cache(
-                                            conn_clone,
-                                            req_clone,
-                                            invalidate_timeout,
-                                        )
-                                        .await;
-                                    }
-                                    break;
-                                }
-                            }
+                    let stall_timeout = jitter_config.stall_timeout;
+                    let mut jitter = match OpusJitterBuffer::new(frame_rx, jitter_config) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            tracing::error!("Failed to create jitter buffer: {:?}", e);
+                            return;
                         }
                     };
-                    tokio::join!(pump, consume);
+
+                    // The pump and the consumer race for the life of the track, and the
+                    // task ends when either is done with it. `join!` here was the bug:
+                    // a consumer that gave up on a stalled source left the pump alive,
+                    // the PCM sender was never dropped, the decoder never saw EOF and
+                    // the mixer never ended the track. Aborting the pump is what ends
+                    // it — the transfer borrows the channel receiver, so the pump cannot
+                    // be a task of its own.
+                    let end = {
+                        let pump = jitter::pump(&mut single, frame_tx);
+                        tokio::pin!(pump);
+
+                        let consume = async {
+                            loop {
+                                match jitter.yield_pcm().await {
+                                    Ok(Some(pcm)) => {
+                                        if tx.send(pcm).await.is_err() {
+                                            return TrackEnd::ConsumerGone;
+                                        }
+                                    }
+                                    Ok(None) => return TrackEnd::Eof, // Stream ended
+                                    Err(e) => {
+                                        if matches!(e, JitterError::Stalled(_)) {
+                                            // The source went quiet for longer than the
+                                            // buffer waits: a wedge upstream, not the end
+                                            // of the stream. This is the case that used to
+                                            // leave the track hanging forever.
+                                            tracing::warn!(
+                                                stall_ms = stall_timeout.as_millis() as u64,
+                                                "jitter buffer stalled; ending the track"
+                                            );
+                                            return TrackEnd::Stalled;
+                                        }
+                                        tracing::error!("Jitter buffer error: {:?}", e);
+                                        if e.to_string().contains("InvalidPacket") {
+                                            tracing::warn!(
+                                                "Invalid opus packet detected; invalidating cache"
+                                            );
+                                            send_invalidate_cache(
+                                                conn_clone,
+                                                req_clone,
+                                                invalidate_timeout,
+                                            )
+                                            .await;
+                                            return TrackEnd::InvalidPacket;
+                                        }
+                                        return TrackEnd::DecodeFailure;
+                                    }
+                                }
+                            }
+                        };
+                        tokio::pin!(consume);
+
+                        tokio::select! {
+                            end = consume.as_mut() => end,
+                            // The transfer finished before playback did. That is not a
+                            // reason to cut off the audio still buffered: its sender is
+                            // gone, so the channel is closed and the consumer drains
+                            // what is left and reports the end of the stream itself.
+                            _ = pump.as_mut() => consume.as_mut().await,
+                        }
+                    };
+                    // The pinned futures die with that block, which releases the borrow
+                    // on the transfer so it can be ended cleanly here.
+
+                    if !matches!(end, TrackEnd::Eof) {
+                        // Stopping mid-stream leaves the peer pushing frames into
+                        // nothing, so tell it the receive side is over rather than let
+                        // it find out from a send that never completes.
+                        if tokio::time::timeout(XFER_END_TIMEOUT, single.end())
+                            .await
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                reason = end.reason(),
+                                "timed out ending the receive side of an abandoned transfer"
+                            );
+                        }
+                    }
+
+                    tracing::info!(
+                        reason = end.reason(),
+                        dropped_frames = jitter.dropped_frames(),
+                        "audio track finished; the PCM sender is being dropped"
+                    );
 
                     if jitter.dropped_frames() > 0 {
                         // The pf3 path has no back channel to the tap, so the
@@ -329,6 +430,37 @@ impl TransportClient {
                 "Unexpected response to RequestAudioMeta: {:?}",
                 resp
             ))),
+        }
+    }
+}
+
+/// Why a track's task stopped.
+///
+/// Logged as `reason=` so a stall in production is distinguishable from a listener
+/// that went away and from a clean end of stream — the audit could not tell those
+/// apart from the logs, which is part of why the 15-second silence went unexplained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrackEnd {
+    /// The transfer ended and playback reached the end of the stream.
+    Eof,
+    /// The listener dropped the PCM receiver; there was nothing left to send to.
+    ConsumerGone,
+    /// Nothing arrived for the stall timeout: the source wedged mid-stream.
+    Stalled,
+    /// A frame could not be decoded.
+    DecodeFailure,
+    /// The buffer rejected a packet as invalid; the cache was invalidated.
+    InvalidPacket,
+}
+
+impl TrackEnd {
+    fn reason(&self) -> &'static str {
+        match self {
+            TrackEnd::Eof => "eof",
+            TrackEnd::ConsumerGone => "consumer-gone",
+            TrackEnd::Stalled => "stalled",
+            TrackEnd::DecodeFailure => "decode-failure",
+            TrackEnd::InvalidPacket => "invalid-packet",
         }
     }
 }

@@ -25,11 +25,17 @@ pub const CHANNEL_CAP: usize = 64;
 pub async fn pump(xfer: &mut RecvXfer<'_>, tx: mpsc::Sender<TimedFrame>) {
     while let Some(data) = xfer.recv().await {
         let Some((ts, body)) = parse_chunk(&data) else {
-            tracing::warn!(len = data.len(), "pf3 chunk shorter than its timestamp prefix");
+            tracing::warn!(
+                len = data.len(),
+                "pf3 chunk shorter than its timestamp prefix"
+            );
             continue;
         };
         if tx
-            .send(TimedFrame { ts_ms: ts.0, payload: body.to_vec() })
+            .send(TimedFrame {
+                ts_ms: ts.0,
+                payload: body.to_vec(),
+            })
             .await
             .is_err()
         {
