@@ -7,9 +7,11 @@ use sha2::Digest;
 use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use zako3_audio_probe::{Stage, UpstreamHopWriter, dropping, hop_record_key, hop_record_ttl_secs};
 use zako3_preload_cache::NextFrame;
-use zako3_types::{AudioMetaResponse, CachedAudioRequest, TapHubError};
+use zako3_states::CacheRepositoryRef;
 use zako3_taphub_transport_server::Timestamp;
+use zako3_types::{AudioMetaResponse, CachedAudioRequest, TapHubError};
 use zakofish_taphub::ZakofishError;
 
 use crate::hub::TapHub;
@@ -25,6 +27,9 @@ pub(crate) async fn handle_request_audio_inner(
     let parent_cx = global::get_text_map_propagator(|p| p.extract(&request.headers));
 
     let ars = request.audio_request.to_string();
+    // The id both ends derive from the request, so the engine can find this
+    // stream's hop record by key without either side telling the other.
+    let stream_id = zako3_audio_probe::request_stream_id(&request.tap_id.0.to_string(), &ars);
 
     let span = tracing::info_span!(
         "audio.request",
@@ -92,15 +97,28 @@ pub(crate) async fn handle_request_audio_inner(
             tracing::info!(tap_id = %tap_id.0, cache_key = %item.key, cache_hit = true, "Cache hit");
 
             let (tx, rx) = mpsc::channel(100);
+            let writer = Arc::new(UpstreamHopWriter::new(
+                stream_id.clone(),
+                tap_id.0.to_string(),
+                "cache",
+            ));
+            let hop_repo = tap_hub.app.cache_repository.clone();
             tokio::spawn(async move {
                 let mut reader = reader;
                 let mut frame_count = 0u64;
                 while let Ok(NextFrame::Frame(bytes)) = reader.next_frame().await {
                     let ts = Timestamp(frame_count * 20);
                     frame_count += 1;
+                    writer.on_source_frame();
+                    if dropping(writer.stream(), Stage::TaphubSend) {
+                        zako3_audio_probe::record_injected_drop(Stage::TaphubSend, 1);
+                        continue;
+                    }
                     if tx.send((ts, bytes)).await.is_err() {
                         break;
                     }
+                    writer.on_send();
+                    publish_hops(&hop_repo, &writer);
                 }
             });
             let meta = AudioMetaResponse {
@@ -277,14 +295,27 @@ pub(crate) async fn handle_request_audio_inner(
     metrics::record_audio_request(&tap_id.0.to_string(), false, duration, true);
 
     let (tx, rx) = mpsc::channel(100);
+    let writer = Arc::new(UpstreamHopWriter::new(
+        stream_id.clone(),
+        tap_id.0.to_string(),
+        "tap",
+    ));
+    let hop_repo = tap_hub.app.cache_repository.clone();
     tokio::spawn(async move {
         // `unrel` (zakofish) yields zakofish's `Timestamp`; re-wrap it in the
         // transport's own `Timestamp` for the pf3 transfer.
         while let Some((ts, bytes)) = unrel.recv().await {
+            writer.on_source_frame();
+            if dropping(writer.stream(), Stage::TaphubSend) {
+                zako3_audio_probe::record_injected_drop(Stage::TaphubSend, 1);
+                continue;
+            }
             if let Err(e) = tx.send((Timestamp(ts.0), bytes)).await {
                 tracing::warn!(%e, "Failed to send audio chunk to channel");
                 return;
             }
+            writer.on_send();
+            publish_hops(&hop_repo, &writer);
         }
     });
 
@@ -312,4 +343,24 @@ pub(crate) async fn handle_request_audio_inner(
     }
 
     Ok((meta, rx))
+}
+
+/// Republish this stream's hop record, at most once per publish interval.
+///
+/// Written off the frame path: the record is a diagnostic, and a slow Redis must
+/// never be what makes an audio stream late. The TTL is short, so a stream that
+/// ends simply stops being visible to a reader rather than leaving a stale
+/// record that looks like a live-but-quiet hop.
+fn publish_hops(repo: &CacheRepositoryRef, writer: &UpstreamHopWriter) {
+    if !writer.should_publish() {
+        return;
+    }
+    let key = hop_record_key(writer.stream());
+    let Ok(json) = serde_json::to_string(&writer.snapshot()) else {
+        return;
+    };
+    let repo = Arc::clone(repo);
+    tokio::spawn(async move {
+        repo.set_ex(&key, &json, hop_record_ttl_secs()).await;
+    });
 }

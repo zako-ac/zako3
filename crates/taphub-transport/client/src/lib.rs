@@ -15,10 +15,14 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-use zako3_opus_jitter::{JitterConfig, JitterError, OpusJitterBuffer};
+use zako3_audio_probe::{
+    BufferView, RequestView, StallInputs, StreamProbe, StreamTrace, UpstreamHopSource,
+    build_report, current_trace, emit, now_unix_ms, request_stream_id,
+};
+use zako3_opus_jitter::{BufferStats, JitterConfig, JitterError, OpusJitterBuffer};
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
 use zako3_types::{
-    AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError,
+    AudioCacheType, AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError,
 };
 
 const RESET_CLOSE_CODE: u64 = 1;
@@ -63,6 +67,10 @@ pub struct TransportClient {
     conns: Vec<Arc<ReconnectingClient>>,
     cursor: AtomicUsize,
     request_timeout: Duration,
+    /// Where to read taphub's side of a stalled stream's hop record. `None`
+    /// leaves the two upstream hops out of a stall report, which the report
+    /// then says rather than guessing at.
+    upstream_hops: Option<Arc<dyn UpstreamHopSource>>,
     /// Consecutive timeouts per pooled connection, parallel to `conns`.
     timeouts: Vec<AtomicU32>,
     /// When a wedged connection may be tried again, in milliseconds since `started`.
@@ -134,6 +142,7 @@ impl TransportClient {
             conns,
             cursor: AtomicUsize::new(0),
             request_timeout,
+            upstream_hops: None,
             timeouts: (0..POOL_SIZE).map(|_| AtomicU32::new(0)).collect(),
             wedged_until_ms: (0..POOL_SIZE).map(|_| AtomicU64::new(0)).collect(),
             started: Instant::now(),
@@ -163,6 +172,14 @@ impl TransportClient {
     /// fifteen seconds the audit measured.
     pub fn with_jitter_config(mut self, jitter: JitterConfig) -> Self {
         self.jitter = jitter;
+        self
+    }
+
+    /// Attach the reader for taphub's hop record.
+    ///
+    /// Set once, at construction; a stall report is the only reader.
+    pub fn with_upstream_hops(mut self, source: Arc<dyn UpstreamHopSource>) -> Self {
+        self.upstream_hops = Some(source);
         self
     }
 
@@ -306,11 +323,44 @@ impl TransportClient {
         Ok(resp)
     }
 
+    /// Request a stream, taking the track identity from the task-local trace the
+    /// session layer scoped around this call (see `zako3_audio_probe::with_trace`).
     pub async fn request_audio(
         &self,
         req: CachedAudioRequest,
     ) -> Result<AudioResponse, TapHubError> {
+        self.request_audio_tagged(req, current_trace()).await
+    }
+
+    /// `request_audio` with an explicit trace, for a caller that has one without
+    /// a task-local.
+    pub async fn request_audio_tagged(
+        &self,
+        req: CachedAudioRequest,
+        trace: Option<StreamTrace>,
+    ) -> Result<AudioResponse, TapHubError> {
         let req_clone = req.clone();
+        // The stream id both ends derive from the request, so taphub's hop
+        // record for this stream can be found by key.
+        let stream = request_stream_id(
+            &req.tap_id.0,
+            &req.discord_user_id.0.to_string(),
+            &req.audio_request.to_string(),
+        );
+        let request_view = RequestView {
+            tap_id: req.tap_id.0.to_string(),
+            cache_policy: Some(match &req.cache_key.cache_type {
+                AudioCacheType::None => "none".to_string(),
+                AudioCacheType::ARHash => "ar_hash".to_string(),
+                AudioCacheType::CacheKey(k) => format!("key:{k}"),
+            }),
+            ars_hash: stream
+                .rsplit_once('-')
+                .map(|(_, h)| h.to_string())
+                .unwrap_or_default(),
+            ars_len: req.audio_request.to_string().len(),
+        };
+        let upstream_hops = self.upstream_hops.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
         let (conn, sender, mut receiver, resp) = self.round_trip(payload).await?;
@@ -353,6 +403,7 @@ impl TransportClient {
                         }
                     };
 
+                    let probe = Arc::new(StreamProbe::new(stream.clone()));
                     let (frame_tx, frame_rx) = mpsc::channel(jitter::CHANNEL_CAP);
                     let stall_timeout = jitter_config.stall_timeout;
                     let mut jitter = match OpusJitterBuffer::new(frame_rx, jitter_config) {
@@ -363,6 +414,43 @@ impl TransportClient {
                         }
                     };
 
+                    // The stall reporter is a task of its own: assembling a
+                    // report reads another process's hop record, which must
+                    // never sit in the playback path.
+                    let (stall_tx, mut stall_rx) = mpsc::unbounded_channel();
+                    jitter.set_stall_notifier(stall_tx);
+                    {
+                        let probe = Arc::clone(&probe);
+                        let upstream_hops = upstream_hops.clone();
+                        let request_view = request_view.clone();
+                        let trace = trace.clone();
+                        let stream = stream.clone();
+                        tokio::spawn(async move {
+                            while let Some(event) = stall_rx.recv().await {
+                                // Read the probe *before* the round trip to
+                                // taphub: the report describes the instant the
+                                // buffer gave up, and a probe read afterwards
+                                // would describe a later one.
+                                let snapshot = probe.snapshot();
+                                let now = now_unix_ms();
+                                let upstream = match &upstream_hops {
+                                    Some(source) => source.read(&stream).await,
+                                    None => None,
+                                };
+                                let report = build_report(StallInputs {
+                                    stall_ms: event.stalled_ms,
+                                    now_unix_ms: now,
+                                    probe: snapshot,
+                                    buffer: buffer_view(&event.stats),
+                                    trace: trace.clone(),
+                                    request: request_view.clone(),
+                                    upstream,
+                                });
+                                emit(&report);
+                            }
+                        });
+                    }
+
                     // The pump and the consumer race for the life of the track, and the
                     // task ends when either is done with it. `join!` here was the bug:
                     // a consumer that gave up on a stalled source left the pump alive,
@@ -371,7 +459,8 @@ impl TransportClient {
                     // it — the transfer borrows the channel receiver, so the pump cannot
                     // be a task of its own.
                     let end = {
-                        let pump = jitter::pump(&mut single, frame_tx);
+                        let pump =
+                            jitter::pump(&mut single, frame_tx, Some(Arc::clone(&probe)));
                         tokio::pin!(pump);
 
                         let consume = async {
@@ -569,6 +658,23 @@ impl TrackEnd {
             TrackEnd::DecodeFailure => "decode-failure",
             TrackEnd::InvalidPacket => "invalid-packet",
         }
+    }
+}
+
+/// The jitter buffer's own numbers, in the shape the report serializes.
+fn buffer_view(stats: &BufferStats) -> BufferView {
+    BufferView {
+        depth: stats.depth,
+        capacity: stats.capacity,
+        max_lead_frames: stats.max_lead_frames,
+        buffered_ms: stats.buffered_ms,
+        playhead_ms: stats.playhead_ms,
+        inserted: stats.inserted,
+        dropped: stats.dropped,
+        late: stats.late,
+        concealed: stats.concealed,
+        stall_events: stats.stall_events,
+        last_insert_unix_ms: stats.last_insert_unix_ms,
     }
 }
 

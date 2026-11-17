@@ -65,6 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 {
                     Ok(t) => {
                         tracing::info!("Connected to taphub");
+                        // Let a stall report carry taphub's two hops as well as
+                        // the engine's own: the reader is best-effort and a
+                        // missing Redis only costs the report its upstream half.
+                        let t = t.with_upstream_hops(
+                            zako3_audio_engine_infra::RedisUpstreamHops::new(&config.redis_url),
+                        );
                         *cell.lock().await = Some(Arc::new(t));
                         break;
                     }

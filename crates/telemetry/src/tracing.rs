@@ -25,6 +25,17 @@ pub(crate) fn build_metadata(headers_env: Option<String>) -> MetadataMap {
     metadata
 }
 
+/// A boolean-ish env var: set and not `0`/`false`/`no`/empty.
+fn truthy_env(key: &str) -> bool {
+    match std::env::var(key) {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            !(v.is_empty() || v == "0" || v == "false" || v == "no" || v == "off")
+        }
+        Err(_) => false,
+    }
+}
+
 pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -37,8 +48,19 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
         default_hook(info);
     }));
 
-    let console_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // `protofish3` debug logging is a diagnosis-only switch: it is verbose
+    // enough that leaving it on for normal traffic is its own problem. It is
+    // turned on for an investigation window with one env var rather than by
+    // editing RUST_LOG, so the rest of the filter stays exactly as deployed.
+    let mut filter_directives = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    if truthy_env("ZAKO_PROTOFISH3_DEBUG") {
+        if !filter_directives.trim().is_empty() {
+            filter_directives.push(',');
+        }
+        filter_directives.push_str("protofish3=debug");
+        tracing::info!("ZAKO_PROTOFISH3_DEBUG is set: protofish3 debug logging enabled");
+    }
+    let console_filter = EnvFilter::new(filter_directives);
     let fmt_layer = fmt::layer()
         .with_target(true)
         .with_level(true)

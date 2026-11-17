@@ -10830,6 +10830,7 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing",
  "zako3-audio-engine-audio",
+ "zako3-audio-probe",
  "zako3-types",
 ]
 
@@ -10857,6 +10858,7 @@ dependencies = [
  "uuid",
  "zako3-audio-engine-audio",
  "zako3-audio-engine-core",
+ "zako3-audio-probe",
  "zako3-cache-client",
  "zako3-opus-jitter",
  "zako3-preload-cache",
@@ -10881,6 +10883,20 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "zako3-audio-probe"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "hex",
+ "opentelemetry 0.31.0",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -11090,6 +11106,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
+ "zako3-audio-probe",
  "zako3-cache-client",
  "zako3-metrics",
  "zako3-preload-cache",
@@ -11117,6 +11134,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "zako3-audio-probe",
  "zako3-opus-jitter",
  "zako3-taphub-transport-lib",
  "zako3-taphub-transport-server",

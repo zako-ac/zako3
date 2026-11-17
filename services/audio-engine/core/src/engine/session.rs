@@ -782,10 +782,18 @@ impl SessionControl {
             "Starting playback"
         );
 
-        let response = self
-            .taphub_service
-            .request_audio(track.request.clone())
-            .await?;
+        // Scope the track's identity around the request so the transport can
+        // name it in a stall report. A task-local rather than a parameter: the
+        // request type is a shared wire type, and a track id is local detail.
+        let response = zako3_audio_probe::with_trace(
+            zako3_audio_probe::StreamTrace::new(
+                format!("{}", track.track_id),
+                format!("{}", self.guild_id),
+                format!("{}", self.channel_id),
+            ),
+            self.taphub_service.request_audio(track.request.clone()),
+        )
+        .await?;
 
         let consumer = self
             .decoder

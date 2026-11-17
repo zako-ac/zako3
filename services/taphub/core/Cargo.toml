@@ -38,3 +38,4 @@ hex = "0.4"
 chrono.workspace = true
 tracing-opentelemetry = "0.32"
 zako3-tap-select.workspace = true
+zako3-audio-probe.workspace = true

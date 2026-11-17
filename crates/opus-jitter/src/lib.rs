@@ -24,7 +24,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, mpsc::UnboundedSender};
 
 /// Nominal Opus frame length, in milliseconds.
 ///
@@ -39,6 +39,49 @@ const DROP_WARN_INTERVAL: Duration = Duration::from_secs(5);
 pub struct TimedFrame {
     pub ts_ms: u64,
     pub payload: Vec<u8>,
+}
+
+/// What the buffer has done to the frames it was given.
+///
+/// `inserted` is counted here and nowhere else, and it is deliberately separate
+/// from the transport's own "read a frame off the socket" counter: the two
+/// diverging is what says a frame arrived at the process and never reached the
+/// buffer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BufferStats {
+    /// Frames accepted into the reorder map.
+    pub inserted: u64,
+    /// Frames that arrived after their slot had already been played past.
+    pub late: u64,
+    /// Frames discarded because the buffer was at its hard ceiling.
+    pub dropped: u64,
+    /// Frames Opus had to conceal because the one due had not arrived.
+    pub concealed: u64,
+    /// Times the source went quiet for longer than the stall timeout.
+    pub stall_events: u64,
+    /// Frames currently held in the reorder map.
+    pub depth: usize,
+    /// The hard ceiling those frames are held under.
+    pub capacity: usize,
+    /// How far ahead of the play head frames are accepted.
+    pub max_lead_frames: usize,
+    /// Milliseconds of audio held ahead of the play head.
+    pub buffered_ms: u64,
+    /// The next timestamp to play, once playback has started.
+    pub playhead_ms: Option<u64>,
+    /// Wall-clock (unix ms) of the last accepted frame; 0 before the first.
+    pub last_insert_unix_ms: u64,
+}
+
+/// Emitted once per stall, before the buffer decides whether to recover or give
+/// up. The caller turns it into a report; the buffer itself knows nothing about
+/// hop records or Redis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StallEvent {
+    /// How long the buffer waited with nothing to play.
+    pub stalled_ms: u64,
+    /// The buffer's state at the moment it gave up waiting.
+    pub stats: BufferStats,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -121,6 +164,20 @@ pub struct OpusJitterBuffer {
     is_eof: bool,
     dropped: u64,
     last_drop_warn: Option<Instant>,
+    inserted: u64,
+    late: u64,
+    concealed: u64,
+    stall_events: u64,
+    last_insert_unix_ms: u64,
+    stall_notifier: Option<UnboundedSender<StallEvent>>,
+}
+
+/// Wall-clock milliseconds since the epoch, for the last-insert stamp.
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl OpusJitterBuffer {
@@ -136,6 +193,12 @@ impl OpusJitterBuffer {
             is_eof: false,
             dropped: 0,
             last_drop_warn: None,
+            inserted: 0,
+            late: 0,
+            concealed: 0,
+            stall_events: 0,
+            last_insert_unix_ms: 0,
+            stall_notifier: None,
         })
     }
 
@@ -145,6 +208,29 @@ impl OpusJitterBuffer {
     /// it is the shape of a pacing failure rather than a network one.
     pub fn dropped_frames(&self) -> u64 {
         self.dropped
+    }
+
+    /// Send a [`StallEvent`] here whenever the source goes quiet past the stall
+    /// timeout, before recovery is attempted.
+    pub fn set_stall_notifier(&mut self, tx: UnboundedSender<StallEvent>) {
+        self.stall_notifier = Some(tx);
+    }
+
+    /// A snapshot of what the buffer has done and what it is holding.
+    pub fn stats(&self) -> BufferStats {
+        BufferStats {
+            inserted: self.inserted,
+            late: self.late,
+            dropped: self.dropped,
+            concealed: self.concealed,
+            stall_events: self.stall_events,
+            depth: self.buffer.len(),
+            capacity: self.cfg.max_buffered_frames,
+            max_lead_frames: self.max_lead_frames(),
+            buffered_ms: self.buffered_ms(),
+            playhead_ms: self.next_play_ts,
+            last_insert_unix_ms: self.last_insert_unix_ms,
+        }
     }
 
     /// The timestamp playback has reached, if it has started.
@@ -278,6 +364,15 @@ impl OpusJitterBuffer {
                 Ok(())
             }
             Err(_) => {
+                self.stall_events += 1;
+                if let Some(tx) = &self.stall_notifier {
+                    // Best effort: a closed receiver means nobody is watching,
+                    // not that the stall did not happen.
+                    let _ = tx.send(StallEvent {
+                        stalled_ms: self.cfg.stall_timeout.as_millis() as u64,
+                        stats: self.stats(),
+                    });
+                }
                 if self.recover_from_stall() {
                     Ok(())
                 } else {
@@ -334,6 +429,7 @@ impl OpusJitterBuffer {
         if let Some(next) = self.next_play_ts
             && frame.ts_ms < next
         {
+            self.late += 1;
             return;
         }
 
@@ -362,6 +458,8 @@ impl OpusJitterBuffer {
         if self.first_frame_at.is_none() {
             self.first_frame_at = Some(Instant::now());
         }
+        self.inserted += 1;
+        self.last_insert_unix_ms = now_unix_ms();
         self.buffer.insert(frame.ts_ms, frame.payload);
     }
 
@@ -381,7 +479,10 @@ impl OpusJitterBuffer {
             // size *is* the duration. Sizing it to the maximum — as the
             // protofish3 version did — makes Opus conceal 120 ms for a 20 ms
             // gap, shifting everything after it later by 100 ms per loss.
-            None => self.concealment_samples(),
+            None => {
+                self.concealed += 1;
+                self.concealment_samples()
+            }
         };
 
         let mut pcm = vec![0f32; decoded * channels];
