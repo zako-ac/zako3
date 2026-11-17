@@ -11,7 +11,7 @@ use std::io::BufReader;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -39,6 +39,16 @@ const POOL_SIZE: usize = 4;
 const XFER_DRAIN_GRACE: Duration = Duration::from_millis(500);
 /// Bound on the handshake that ends the receive side.
 const XFER_END_TIMEOUT: Duration = Duration::from_secs(1);
+/// How many exchanges in a row may time out on one pooled connection before
+/// `pick_conn` stops handing it requests.
+///
+/// Without a reset there is nothing else that evicts a *wedged* connection — one
+/// whose peer still answers QUIC keepalives but never answers an application
+/// request. Left in the round-robin it would make one exchange in `POOL_SIZE` pay
+/// the full timeout for the life of the process. A single success on the
+/// connection clears the count, so a connection that is merely slow for a moment
+/// comes straight back.
+const WEDGED_AFTER: u32 = 2;
 
 pub struct TransportClient {
     /// Pool of independent reconnecting connections. Requests round-robin across them via
@@ -46,6 +56,11 @@ pub struct TransportClient {
     conns: Vec<Arc<ReconnectingClient>>,
     cursor: AtomicUsize,
     request_timeout: Duration,
+    /// Consecutive timeouts per pooled connection, parallel to `conns`.
+    ///
+    /// `WEDGED_AFTER` of them takes the connection out of `pick_conn`'s rotation
+    /// until an exchange on it succeeds again.
+    timeouts: Vec<AtomicU32>,
     /// Per-track jitter buffer settings. Production runs the defaults; tests shorten
     /// `stall_timeout` so a stall can be observed in a second instead of fifteen.
     jitter: JitterConfig,
@@ -110,6 +125,7 @@ impl TransportClient {
             conns,
             cursor: AtomicUsize::new(0),
             request_timeout,
+            timeouts: (0..POOL_SIZE).map(|_| AtomicU32::new(0)).collect(),
             jitter: JitterConfig::default(),
             resets: AtomicU64::new(0),
         })
@@ -147,10 +163,18 @@ impl TransportClient {
         self.resets.load(Ordering::Relaxed)
     }
 
-    /// Round-robin one connection out of the pool for a single attempt.
-    fn pick_conn(&self) -> Arc<ReconnectingClient> {
-        let idx = self.cursor.fetch_add(1, Ordering::Relaxed) % self.conns.len();
-        Arc::clone(&self.conns[idx])
+    /// Round-robin one connection out of the pool for a single attempt, skipping
+    /// connections that have timed out `WEDGED_AFTER` times in a row.
+    ///
+    /// When every connection is wedged the rotation is used anyway: refusing to
+    /// send would turn a taphub-wide slowdown into an outage of our own.
+    fn pick_conn(&self) -> (usize, Arc<ReconnectingClient>) {
+        let n = self.conns.len();
+        let start = self.cursor.fetch_add(1, Ordering::Relaxed) % n;
+        let idx = pick_index(start, n, |i| {
+            self.timeouts[i].load(Ordering::Relaxed) >= WEDGED_AFTER
+        });
+        (idx, Arc::clone(&self.conns[idx]))
     }
 
     async fn round_trip_once(
@@ -170,7 +194,8 @@ impl TransportClient {
     ///   connection stays up — every track streaming over it would die with a reset —
     ///   and the retry moves to the next connection in the pool instead. A connection
     ///   that is genuinely dead is already evicted by the transport keepalive (5s
-    ///   interval, 15s timeout), so there is nothing for a reset to accomplish here.
+    ///   interval, 15s timeout); one that stays alive but never answers is counted and
+    ///   dropped out of the rotation by `pick_conn` after `WEDGED_AFTER` timeouts.
     /// - **Transport error**: reset only *this* pooled connection, then retry.
     ///
     /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
@@ -192,13 +217,15 @@ impl TransportClient {
         for attempt in 1..=MAX_ATTEMPTS {
             // Picked per attempt, not once per exchange: a retry after a timeout must
             // not go back onto the connection that just failed to answer.
-            let conn = self.pick_conn();
+            let (idx, conn) = self.pick_conn();
             match tokio::time::timeout(self.request_timeout, Self::round_trip_once(&conn, &payload))
                 .await
             {
                 Ok(Ok((sender, receiver, resp_payload))) => {
                     let resp: TapHubResponse = rmp_serde::from_slice(&resp_payload)
                         .map_err(|e| TapHubError::Internal(e.to_string()))?;
+                    // It answered, so whatever made it slow before is gone.
+                    self.timeouts[idx].store(0, Ordering::Relaxed);
                     return Ok((conn, sender, receiver, resp));
                 }
                 Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
@@ -210,6 +237,8 @@ impl TransportClient {
                     // Scoped to this one pooled connection — siblings are untouched.
                     self.resets.fetch_add(1, Ordering::Relaxed);
                     conn.reset(RESET_CLOSE_CODE).await;
+                    // A fresh connection has no history of timing out.
+                    self.timeouts[idx].store(0, Ordering::Relaxed);
                 }
                 Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
                 Err(_) if attempt < MAX_ATTEMPTS => {
@@ -220,9 +249,12 @@ impl TransportClient {
                     );
                     // Deliberately no `conn.reset` here: dropping the timed-out future
                     // closes this request's channel, while a reset would cut off every
-                    // other track multiplexed over the same connection.
+                    // other track multiplexed over the same connection. Blame the
+                    // connection instead, so a wedged one leaves the rotation.
+                    self.timeouts[idx].fetch_add(1, Ordering::Relaxed);
                 }
                 Err(_) => {
+                    self.timeouts[idx].fetch_add(1, Ordering::Relaxed);
                     return Err(TapHubError::Internal(format!(
                         "taphub request timed out after {} attempts ({}ms each)",
                         MAX_ATTEMPTS,
@@ -381,7 +413,7 @@ impl TransportClient {
                             // leave the peer pushing frames into nothing.
                             match tokio::time::timeout(XFER_END_TIMEOUT, single.end()).await {
                                 Ok(Ok(())) => {}
-                                Ok(Err(e)) => tracing::debug!(
+                                Ok(Err(e)) => tracing::warn!(
                                     reason = end.reason(),
                                     error = %e,
                                     "peer refused the end of the receive side"
@@ -457,6 +489,22 @@ impl TransportClient {
             ))),
         }
     }
+}
+
+/// The index of the pooled connection the next attempt should use.
+///
+/// Starts at the round-robin cursor and takes the first connection that has not
+/// timed out `WEDGED_AFTER` times in a row. When every connection is wedged the
+/// rotation is used anyway: refusing to send would turn a taphub-wide slowdown into
+/// an outage of our own.
+fn pick_index(start: usize, n: usize, is_wedged: impl Fn(usize) -> bool) -> usize {
+    for offset in 0..n {
+        let idx = (start + offset) % n;
+        if !is_wedged(idx) {
+            return idx;
+        }
+    }
+    start
 }
 
 /// Why a track's task stopped.
@@ -543,4 +591,21 @@ pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
     Ok(certs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_index;
+
+    /// A wedged connection leaves the rotation, and the rotation is never refused.
+    #[test]
+    fn pick_index_skips_wedged_connections() {
+        assert_eq!(pick_index(0, 4, |_| false), 0);
+        assert_eq!(pick_index(0, 4, |i| i == 0), 1);
+        // Wraps around the end of the pool.
+        assert_eq!(pick_index(3, 4, |i| i == 3), 0);
+        assert_eq!(pick_index(0, 4, |i| i < 3), 3);
+        // Everything wedged: keep sending rather than fail.
+        assert_eq!(pick_index(2, 4, |_| true), 2);
+    }
 }
