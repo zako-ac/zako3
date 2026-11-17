@@ -83,6 +83,11 @@ spec:
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: TAPHUB_REQUEST_TIMEOUT_MS
               value: "6000"
+            # Safety net for a track that stalls after it starts: nothing else
+            # in the engine re-examines a playing track, so one stalled track
+            # otherwise blocks every message queued behind it.
+            - name: TRACK_WATCHDOG_SECS
+              value: "{{ .Values.audioEngine.trackWatchdogSecs | default 60 }}"
             # HQ is where this engine registers, and HQ both dispatches audio
             # commands back to the address this engine advertises and (when the
             # v4 plane is on) resolves taps. Registration is not optional:

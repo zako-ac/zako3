@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use crossbeam::channel::{Receiver, Sender};
@@ -15,12 +16,25 @@ use crate::{
     types::TrackId,
 };
 
+/// How long a caller waits for the mixer thread to answer a question before
+/// giving up. The mixer thread answers between frames, so anything near this
+/// budget means it is wedged rather than busy.
+const MIXER_REPLY_TIMEOUT: Duration = Duration::from_secs(2);
+
 pub enum MixerCommand {
     AddSource(TrackId, RingCons, TokioSender<TrackId>),
     RemoveSource(TrackId),
     SetVolume(TrackId, f32),
     HasSource(TrackId, tokio::sync::oneshot::Sender<bool>),
     HasSources(Vec<TrackId>, tokio::sync::oneshot::Sender<HashSet<TrackId>>),
+    /// Which of `track_ids` have mixed no samples for at least the given idle
+    /// time. Used by the session watchdog to tell a stalled track from a long
+    /// one: a three-minute song is not stuck, it is three minutes long.
+    IdleSources(
+        Vec<TrackId>,
+        Duration,
+        tokio::sync::oneshot::Sender<HashSet<TrackId>>,
+    ),
 }
 
 struct ManagedSource {
@@ -29,6 +43,44 @@ struct ManagedSource {
     consumer: RingCons,
     current_volume: f32,
     target_volume: f32,
+    /// Last time this source handed samples to the mix. A source that stops
+    /// handing over samples while it is not finished is stalled.
+    last_progress: Instant,
+}
+
+/// Insert a source unless that track is already being mixed.
+///
+/// Returns `false` when the add was ignored, having recorded and logged it.
+/// A duplicate add is not harmless: the same track would be mixed twice (the
+/// audio doubles) and would push two end events, and it happens whenever
+/// reconcile's `has_sources` probe times out and reports "not playing".
+fn insert_source(
+    sources: &mut Vec<ManagedSource>,
+    track_id: TrackId,
+    consumer: RingCons,
+    end_tx: TokioSender<TrackId>,
+) -> bool {
+    if sources.iter().any(|s| s.track_id == track_id) {
+        tracing::warn!(
+            track_id = %track_id,
+            active_sources = sources.len(),
+            "Ignoring duplicate add: track is already being mixed"
+        );
+        metrics::record_duplicate_mixer_add();
+        return false;
+    }
+
+    tracing::debug!(track_id = %track_id, "Adding source to mixer");
+    sources.push(ManagedSource {
+        track_id,
+        consumer,
+        end_tx,
+        current_volume: 1.0,
+        target_volume: 1.0,
+        last_progress: Instant::now(),
+    });
+    metrics::inc_mixer_active_sources();
+    true
 }
 
 fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
@@ -45,15 +97,7 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 MixerCommand::AddSource(track_id, consumer, end_tx) => {
-                    tracing::debug!(track_id = %track_id, "Adding source to mixer");
-                    sources.push(ManagedSource {
-                        track_id,
-                        consumer,
-                        end_tx,
-                        current_volume: 1.0,
-                        target_volume: 1.0,
-                    });
-                    metrics::inc_mixer_active_sources();
+                    insert_source(&mut sources, track_id, consumer, end_tx);
                 }
                 MixerCommand::RemoveSource(track_id) => {
                     let prev_len = sources.len();
@@ -79,6 +123,18 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
                         .collect();
                     let _ = resp_tx.send(present);
                 }
+                MixerCommand::IdleSources(track_ids, idle, resp_tx) => {
+                    let now = Instant::now();
+                    let idle_tracks: HashSet<TrackId> = track_ids
+                        .into_iter()
+                        .filter(|id| {
+                            sources.iter().any(|s| {
+                                s.track_id == *id && now.duration_since(s.last_progress) >= idle
+                            })
+                        })
+                        .collect();
+                    let _ = resp_tx.send(idle_tracks);
+                }
             }
         }
 
@@ -101,6 +157,10 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
             }
 
             let c = source.consumer.pop_slice(&mut source_buffer);
+
+            if c > 0 {
+                source.last_progress = Instant::now();
+            }
 
             let start_vol = source.current_volume;
             let end_vol = source.target_volume;
@@ -175,6 +235,12 @@ pub trait Mixer: Send + Sync + 'static {
     fn set_volume(&self, track_id: TrackId, volume: f32);
     async fn has_source(&self, track_id: TrackId) -> bool;
     async fn has_sources(&self, track_ids: Vec<TrackId>) -> HashSet<TrackId>;
+    /// The subset of `track_ids` that has mixed no samples for at least `idle`.
+    ///
+    /// A track with no end event is only a fault if it is also not playing: a
+    /// long music track legitimately runs far past any watchdog window without
+    /// ending, and stopping it would cut the song.
+    async fn idle_sources(&self, track_ids: Vec<TrackId>, idle: Duration) -> HashSet<TrackId>;
 }
 
 pub struct ThreadMixer {
@@ -210,18 +276,147 @@ impl Mixer for ThreadMixer {
     async fn has_source(&self, track_id: TrackId) -> bool {
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
         let _ = self.cmd_tx.send(MixerCommand::HasSource(track_id, resp_tx));
-        match tokio::time::timeout(std::time::Duration::from_secs(2), resp_rx).await {
+        match tokio::time::timeout(MIXER_REPLY_TIMEOUT, resp_rx).await {
             Ok(Ok(has_source)) => has_source,
-            _ => false,
+            Ok(Err(_)) => {
+                tracing::warn!(
+                    track_id = %track_id,
+                    "Mixer dropped the has_source reply channel"
+                );
+                false
+            }
+            Err(_) => {
+                tracing::warn!(
+                    track_id = %track_id,
+                    timeout_ms = MIXER_REPLY_TIMEOUT.as_millis(),
+                    "Mixer did not answer has_source in time; assuming the track is not playing"
+                );
+                false
+            }
         }
     }
 
     async fn has_sources(&self, track_ids: Vec<TrackId>) -> HashSet<TrackId> {
+        let asked = track_ids.len();
         let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
-        let _ = self.cmd_tx.send(MixerCommand::HasSources(track_ids, resp_tx));
-        match tokio::time::timeout(std::time::Duration::from_secs(2), resp_rx).await {
+        let _ = self
+            .cmd_tx
+            .send(MixerCommand::HasSources(track_ids, resp_tx));
+        match tokio::time::timeout(MIXER_REPLY_TIMEOUT, resp_rx).await {
             Ok(Ok(present)) => present,
-            _ => HashSet::new(),
+            Ok(Err(_)) => {
+                tracing::warn!(asked, "Mixer dropped the has_sources reply channel");
+                HashSet::new()
+            }
+            Err(_) => {
+                // Reporting "none of them are playing" makes reconcile try to
+                // start every one of them again. That is safe only because the
+                // mixer now ignores an add for a track it is already mixing —
+                // hence the log here, which is how a timeout would otherwise go
+                // unnoticed.
+                tracing::warn!(
+                    asked,
+                    timeout_ms = MIXER_REPLY_TIMEOUT.as_millis(),
+                    "Mixer did not answer has_sources in time; treating every track as not playing (duplicate adds will be ignored)"
+                );
+                HashSet::new()
+            }
         }
+    }
+
+    async fn idle_sources(&self, track_ids: Vec<TrackId>, idle: Duration) -> HashSet<TrackId> {
+        let asked = track_ids.len();
+        let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+        let _ = self
+            .cmd_tx
+            .send(MixerCommand::IdleSources(track_ids, idle, resp_tx));
+        match tokio::time::timeout(MIXER_REPLY_TIMEOUT, resp_rx).await {
+            Ok(Ok(idle_tracks)) => idle_tracks,
+            Ok(Err(_)) => {
+                tracing::warn!(asked, "Mixer dropped the idle_sources reply channel");
+                HashSet::new()
+            }
+            Err(_) => {
+                // No answer means we cannot prove a track is stuck, and
+                // stopping a track that is in fact playing is worse than
+                // leaving a stuck one for the next sweep.
+                tracing::warn!(
+                    asked,
+                    timeout_ms = MIXER_REPLY_TIMEOUT.as_millis(),
+                    "Mixer did not answer idle_sources in time; treating no track as stalled"
+                );
+                HashSet::new()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::create_ringbuf_pair;
+
+    fn source_pair() -> (RingCons, TokioSender<TrackId>) {
+        let (_prod, cons) = create_ringbuf_pair();
+        let (end_tx, _end_rx) = tokio::sync::mpsc::channel(16);
+        (cons, end_tx)
+    }
+
+    #[test]
+    fn duplicate_add_is_ignored() {
+        let mut sources: Vec<ManagedSource> = Vec::new();
+        let (cons, end_tx) = source_pair();
+
+        assert!(insert_source(&mut sources, TrackId::from(7), cons, end_tx));
+        assert_eq!(sources.len(), 1);
+
+        let (cons2, end_tx2) = source_pair();
+        assert!(!insert_source(
+            &mut sources,
+            TrackId::from(7),
+            cons2,
+            end_tx2
+        ));
+        assert_eq!(
+            sources.len(),
+            1,
+            "a duplicate add for the same track must not add a second source"
+        );
+
+        // A different track still gets in.
+        let (cons3, end_tx3) = source_pair();
+        assert!(insert_source(
+            &mut sources,
+            TrackId::from(8),
+            cons3,
+            end_tx3
+        ));
+        assert_eq!(sources.len(), 2);
+    }
+
+    #[test]
+    fn duplicate_add_moves_the_failure_counter() {
+        let before = metrics::AUDIO_METRICS
+            .duplicate_mixer_adds
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let mut sources: Vec<ManagedSource> = Vec::new();
+        let (cons, end_tx) = source_pair();
+        assert!(insert_source(&mut sources, TrackId::from(9), cons, end_tx));
+        let (cons2, end_tx2) = source_pair();
+        assert!(!insert_source(
+            &mut sources,
+            TrackId::from(9),
+            cons2,
+            end_tx2
+        ));
+        // `>` rather than an exact delta: the counter is process-wide, and the
+        // other test in this module bumps it too when the tests run in parallel.
+        assert!(
+            metrics::AUDIO_METRICS
+                .duplicate_mixer_adds
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > before,
+            "the duplicate-add counter must move"
+        );
     }
 }

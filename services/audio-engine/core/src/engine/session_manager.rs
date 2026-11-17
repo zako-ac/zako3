@@ -9,7 +9,7 @@ use crate::{
     audio::{PcmDecoder, create_thread_mixer},
     error::ZakoResult,
     service::{ArcDiscordService, ArcStateService, ArcTapHubService},
-    session::{SessionControl, create_session_control},
+    session::{SessionConfig, SessionControl, create_session_control},
     types::{ChannelId, GuildId, SessionState},
 };
 
@@ -24,6 +24,9 @@ pub struct SessionManager {
     /// single voice connection per guild, so joining, moving and leaving are
     /// all operations on the same connection and must not overlap. See `join`.
     voice_ops: DashMap<GuildId, Arc<AsyncMutex<()>>>,
+
+    /// Applied to every session this manager creates.
+    session_config: SessionConfig,
 }
 
 impl SessionManager {
@@ -38,7 +41,14 @@ impl SessionManager {
             taphub_service,
             sessions: DashMap::new(),
             voice_ops: DashMap::new(),
+            session_config: SessionConfig::default(),
         }
+    }
+
+    /// Override the per-session tunables (currently the track watchdog window).
+    pub fn with_session_config(mut self, session_config: SessionConfig) -> Self {
+        self.session_config = session_config;
+        self
     }
 
     /// The lock that every voice-connection operation in `guild_id` holds.
@@ -75,6 +85,7 @@ impl SessionManager {
             Arc::new(decoder),
             self.state_service.clone(),
             self.taphub_service.clone(),
+            self.session_config,
         );
 
         self.discord_service.play_audio(guild_id, cons).await?;

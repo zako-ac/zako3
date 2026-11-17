@@ -202,11 +202,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // is unavailable.
     let state_service = Arc::new(RedisStateService::new(&config.redis_url, &token_str).await);
 
-    let session_manager = Arc::new(SessionManager::new(
-        discord_service,
-        state_service,
-        taphub_service,
-    ));
+    let session_manager = Arc::new(
+        SessionManager::new(discord_service, state_service, taphub_service).with_session_config(
+            SessionConfig {
+                track_watchdog: Duration::from_secs(config.track_watchdog_secs),
+            },
+        ),
+    );
 
     // Fill the OnceLock now that session_manager is constructed
     let _ = sm_cell.set(session_manager.clone());

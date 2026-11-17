@@ -141,6 +141,11 @@ audioEngine:
   # >= taphub.requestTimeoutMs (13s) or the AE gives up on requests the hub
   # would still answer, making every slow tap look like a stall.
   requestTimeoutMs: "13000"
+  # How long a track may run with no end event and no audio progress before the
+  # session watchdog stops it (seconds; "0" disables it). This is a safety net
+  # for a stalled track, not a track-length limit: reconcile only runs on a
+  # command, so without it one stalled track blocks its whole queue forever.
+  trackWatchdogSecs: "60"
 
 # --- Web frontend ---
 web:

@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Weak},
+    time::{Duration, Instant},
+};
 
 use tokio::sync::{Mutex, mpsc::Sender};
 use tracing::instrument;
@@ -15,7 +19,40 @@ use crate::{
     },
     util::id_gen,
 };
-use zako3_types::hq::TapId;
+use zako3_types::hq::{DiscordUserId, TapId};
+
+/// Default for [`SessionConfig::track_watchdog`].
+pub const DEFAULT_TRACK_WATCHDOG_SECS: u64 = 60;
+
+/// Knobs for one session's control loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionConfig {
+    /// How long a track may run without its end event before the watchdog
+    /// stops it. Zero disables the watchdog.
+    ///
+    /// This is the window in which a track makes *no progress at all*, not the
+    /// length of the track: a stalled track is stopped after this long, a long
+    /// song that is still producing audio is not touched however far past the
+    /// window it runs.
+    pub track_watchdog: Duration,
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            track_watchdog: Duration::from_secs(DEFAULT_TRACK_WATCHDOG_SECS),
+        }
+    }
+}
+
+/// What the watchdog needs to say whose stuck track it just stopped.
+#[derive(Debug, Clone)]
+struct StartedTrack {
+    started_at: Instant,
+    queue_name: QueueName,
+    tap_id: TapId,
+    discord_user_id: DiscordUserId,
+}
 
 pub struct SessionControl {
     pub guild_id: GuildId,
@@ -32,6 +69,12 @@ pub struct SessionControl {
     // Serializes reconcile() to prevent concurrent check-then-act races where
     // two callers both see a track as "not in mixer" and both call play_now().
     reconcile_guard: Mutex<()>,
+
+    config: SessionConfig,
+
+    // Tracks the mixer has been told to play whose end event has not arrived
+    // yet. The watchdog reads this to find tracks that overstay.
+    started: Mutex<HashMap<TrackId, StartedTrack>>,
 }
 
 impl SessionControl {
@@ -43,6 +86,7 @@ impl SessionControl {
         decoder: ArcDecoder,
         state_service: ArcStateService,
         taphub_service: ArcTapHubService,
+        config: SessionConfig,
     ) -> Self {
         SessionControl {
             guild_id,
@@ -53,6 +97,8 @@ impl SessionControl {
             state_service,
             taphub_service,
             reconcile_guard: Mutex::new(()),
+            config,
+            started: Mutex::new(HashMap::new()),
         }
     }
 
@@ -193,6 +239,7 @@ impl SessionControl {
 
         self.mixer.remove_source(track_id);
         self.decoder.stop_track(track_id);
+        self.started.lock().await.remove(&track_id);
         modify_state_session(
             &self.state_service,
             self.guild_id,
@@ -236,6 +283,7 @@ impl SessionControl {
         for track_id in track_ids {
             self.mixer.remove_source(track_id);
             self.decoder.stop_track(track_id);
+            self.started.lock().await.remove(&track_id);
 
             if let Some(session) = session.as_mut() {
                 if let Some(track) = session.find_track(track_id) {
@@ -286,6 +334,7 @@ impl SessionControl {
         tracing::info!(track_id = %current_track_id, "Skipping to next track");
 
         self.mixer.remove_source(current_track_id);
+        self.started.lock().await.remove(&current_track_id);
         modify_state_session(
             &self.state_service,
             self.guild_id,
@@ -403,6 +452,7 @@ impl SessionControl {
                             "Failed to start playback, removing track from queue"
                         );
                         self.mixer.remove_source(track.track_id);
+                        self.started.lock().await.remove(&track.track_id);
                         let tid = track.track_id;
                         let qn = track.queue_name.clone();
                         modify_state_session(
@@ -423,6 +473,119 @@ impl SessionControl {
         Ok(())
     }
 
+    /// Stops tracks whose end event never arrived.
+    ///
+    /// `reconcile` only runs when a command comes in (play/stop/stop_many/
+    /// next_music), so nothing in the engine ever re-examines a track that is
+    /// already playing. A track that stalls after it starts therefore stays at
+    /// the head of its queue forever, and because `get_active_tracks` only
+    /// plays the head, every message queued behind it is silently never played.
+    /// This sweep is the time-based check that closes that hole, and it runs on
+    /// its own clock rather than on those four callers.
+    ///
+    /// A track is stopped only when it is also making no progress (the mixer
+    /// reports it idle), so a long track that is still playing through the
+    /// window is left alone.
+    pub(crate) async fn watchdog_sweep(&self) -> ZakoResult<()> {
+        if self.config.track_watchdog.is_zero() {
+            return Ok(());
+        }
+
+        let now = Instant::now();
+        let overdue = self.overdue_tracks(now).await;
+        if overdue.is_empty() {
+            return Ok(());
+        }
+
+        // One state read per sweep, and only when something is actually past
+        // the window: a paused track is not stuck, and a track that is no
+        // longer in the session has nothing to stop.
+        let session = self
+            .state_service
+            .get_session(self.guild_id, self.channel_id)
+            .await?;
+
+        let Some(session) = session else {
+            self.started.lock().await.clear();
+            return Ok(());
+        };
+
+        {
+            let mut started = self.started.lock().await;
+            started.retain(|track_id, _| session.find_track(*track_id).is_some());
+        }
+
+        let overdue: Vec<(TrackId, StartedTrack)> = self
+            .overdue_tracks(now)
+            .await
+            .into_iter()
+            .filter(|(track_id, _)| {
+                session
+                    .find_track(*track_id)
+                    .map(|track| !track.paused)
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if overdue.is_empty() {
+            return Ok(());
+        }
+
+        let track_ids: Vec<TrackId> = overdue.iter().map(|(track_id, _)| *track_id).collect();
+        let idle = self
+            .mixer
+            .idle_sources(track_ids, self.config.track_watchdog)
+            .await;
+
+        for (track_id, started) in overdue {
+            if !idle.contains(&track_id) {
+                tracing::debug!(
+                    track_id = %track_id,
+                    elapsed_secs = now.duration_since(started.started_at).as_secs(),
+                    "Track is past the watchdog window but still mixing; leaving it alone"
+                );
+                continue;
+            }
+
+            metrics::record_track_watchdog_fired();
+            tracing::warn!(
+                track_id = %track_id,
+                elapsed_secs = now.duration_since(started.started_at).as_secs(),
+                watchdog_secs = self.config.track_watchdog.as_secs(),
+                idle_secs = self.config.track_watchdog.as_secs(),
+                queue_name = %started.queue_name,
+                tap_id = %started.tap_id,
+                discord_user_id = %started.discord_user_id.0,
+                guild_id = %self.guild_id,
+                channel_id = %self.channel_id,
+                "Track watchdog fired: no end event and no audio progress within the window; stopping the track so the queue can move on"
+            );
+
+            // stop() removes the track from the session and reconciles, which
+            // is what starts the next track in the queue.
+            if let Err(e) = self.stop(track_id).await {
+                tracing::warn!(
+                    track_id = %track_id,
+                    error = %e,
+                    "Track watchdog failed to stop the stalled track"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Started tracks whose watchdog window has passed, newest bookkeeping read
+    /// under the lock and returned.
+    async fn overdue_tracks(&self, now: Instant) -> Vec<(TrackId, StartedTrack)> {
+        let started = self.started.lock().await;
+        started
+            .iter()
+            .filter(|(_, s)| now.duration_since(s.started_at) >= self.config.track_watchdog)
+            .map(|(track_id, s)| (*track_id, s.clone()))
+            .collect()
+    }
+
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     async fn play_now(&self, track: Track) -> ZakoResult<()> {
         tracing::info!(
@@ -431,7 +594,10 @@ impl SessionControl {
             "Starting playback"
         );
 
-        let response = self.taphub_service.request_audio(track.request.clone()).await?;
+        let response = self
+            .taphub_service
+            .request_audio(track.request.clone())
+            .await?;
 
         let consumer = self
             .decoder
@@ -441,6 +607,19 @@ impl SessionControl {
         self.mixer
             .add_source(track.track_id, consumer, self.end_tx.clone());
         self.mixer.set_volume(track.track_id, track.volume.into());
+
+        // The watchdog's clock starts when the mixer is told to play: after
+        // that, the only thing that can end the track is an end event from the
+        // mixer (or a stall, which is what the watchdog is for).
+        self.started.lock().await.insert(
+            track.track_id,
+            StartedTrack {
+                started_at: Instant::now(),
+                queue_name: track.queue_name.clone(),
+                tap_id: track.request.tap_id.clone(),
+                discord_user_id: track.request.discord_user_id.clone(),
+            },
+        );
 
         metrics::record_track_lifecycle("start", &normalize_queue_name(&track.queue_name));
 
@@ -539,6 +718,7 @@ pub fn create_session_control(
     decoder: ArcDecoder,
     state_service: ArcStateService,
     taphub_service: ArcTapHubService,
+    config: SessionConfig,
 ) -> Arc<SessionControl> {
     let (end_tx, end_rx) = tokio::sync::mpsc::channel(16);
 
@@ -550,6 +730,7 @@ pub fn create_session_control(
         decoder,
         state_service,
         taphub_service,
+        config,
     ));
 
     let sc_clone = session_control.clone();
@@ -571,5 +752,34 @@ pub fn create_session_control(
         }
     });
 
+    spawn_track_watchdog(Arc::downgrade(&session_control), config.track_watchdog);
+
     session_control
+}
+
+/// Runs `watchdog_sweep` on its own clock for as long as the session lives.
+///
+/// The driver holds a `Weak` so the watchdog never keeps a dropped session (and
+/// its mixer thread) alive, and the tick scales with the window so a short
+/// window is checked often enough to fire inside it.
+fn spawn_track_watchdog(session: Weak<SessionControl>, watchdog: Duration) {
+    if watchdog.is_zero() {
+        return;
+    }
+
+    let tick = (watchdog / 10).clamp(Duration::from_millis(200), Duration::from_secs(1));
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tick).await;
+
+            let Some(control) = session.upgrade() else {
+                break;
+            };
+
+            if let Err(e) = control.watchdog_sweep().await {
+                tracing::warn!(error = %e, "Track watchdog sweep failed");
+            }
+        }
+    });
 }
