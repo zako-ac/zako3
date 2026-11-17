@@ -17,6 +17,8 @@ pub struct AudioMetrics {
     pub stream_underruns: AtomicU64,
     pub mixer_buffer_depth: AtomicI64,
     pub jitter_drops: AtomicU64,
+    pub duplicate_mixer_adds: AtomicU64,
+    pub track_watchdog_fired: AtomicU64,
 }
 
 impl AudioMetrics {
@@ -28,6 +30,8 @@ impl AudioMetrics {
             stream_underruns: AtomicU64::new(0),
             mixer_buffer_depth: AtomicI64::new(0),
             jitter_drops: AtomicU64::new(0),
+            duplicate_mixer_adds: AtomicU64::new(0),
+            track_watchdog_fired: AtomicU64::new(0),
         }
     }
 }
@@ -49,6 +53,8 @@ struct AudioOtelMetrics {
     taphub_request_duration: Histogram<f64>,
     taphub_errors: Counter<u64>,
     jitter_drops: Counter<u64>,
+    duplicate_mixer_adds: Counter<u64>,
+    track_watchdog_fired: Counter<u64>,
     // Keep alive so the callback is not unregistered
     _mixer_buffer_depth_gauge: ObservableGauge<i64>,
 }
@@ -127,8 +133,18 @@ fn otel() -> &'static AudioOtelMetrics {
                 .build(),
             jitter_drops: meter
                 .u64_counter("audio_jitter_dropped_frames_total")
+                .with_description("Opus frames discarded because the jitter buffer was full")
+                .build(),
+            duplicate_mixer_adds: meter
+                .u64_counter("audio_mixer_duplicate_add_total")
                 .with_description(
-                    "Opus frames discarded because the jitter buffer was full",
+                    "AddSource commands ignored because that track was already being mixed",
+                )
+                .build(),
+            track_watchdog_fired: meter
+                .u64_counter("audio_track_watchdog_fired_total")
+                .with_description(
+                    "Tracks stopped by the session watchdog because no end event arrived",
                 )
                 .build(),
             _mixer_buffer_depth_gauge: buffer_depth_gauge,
@@ -227,7 +243,9 @@ pub fn record_taphub_request_duration(duration_secs: f64) {
 /// it has no room to hold — so this is the metric that says the audio path is
 /// decimating a track rather than playing it.
 pub fn record_jitter_dropped(frames: u64) {
-    AUDIO_METRICS.jitter_drops.fetch_add(frames, Ordering::Relaxed);
+    AUDIO_METRICS
+        .jitter_drops
+        .fetch_add(frames, Ordering::Relaxed);
     #[cfg(feature = "telemetry")]
     otel().jitter_drops.add(frames, &[]);
 }
@@ -237,4 +255,28 @@ pub fn record_taphub_error(endpoint: &str) {
     otel()
         .taphub_errors
         .add(1, &[KeyValue::new("endpoint", endpoint.to_string())]);
+}
+
+/// A track was stopped by the session watchdog because its end event never
+/// arrived. Any value above zero is a track that would otherwise have sat at
+/// the head of its queue forever, blocking every message behind it.
+pub fn record_track_watchdog_fired() {
+    AUDIO_METRICS
+        .track_watchdog_fired
+        .fetch_add(1, Ordering::Relaxed);
+    #[cfg(feature = "telemetry")]
+    otel().track_watchdog_fired.add(1, &[]);
+}
+
+/// An `AddSource` was ignored because the mixer was already mixing that track.
+///
+/// Nonzero means reconcile believed a track was not playing when it was — the
+/// `has_sources` probe timed out, or two reconciles raced — and without the
+/// guard the same track would be mixed twice (doubled audio, two end events).
+pub fn record_duplicate_mixer_add() {
+    AUDIO_METRICS
+        .duplicate_mixer_adds
+        .fetch_add(1, Ordering::Relaxed);
+    #[cfg(feature = "telemetry")]
+    otel().duplicate_mixer_adds.add(1, &[]);
 }

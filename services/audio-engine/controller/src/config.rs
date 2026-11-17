@@ -46,6 +46,16 @@ pub struct AppConfig {
     #[serde(default = "default_taphub_request_timeout_ms")]
     pub taphub_request_timeout_ms: u64,
 
+    /// How long a track may run with no end event *and no audio progress*
+    /// before the session watchdog stops it. Zero disables the watchdog.
+    ///
+    /// This is a safety net, not a track-length limit: a long song that keeps
+    /// producing audio is never stopped by it. It exists because nothing else
+    /// in the engine re-examines a playing track over time, so one stalled
+    /// track otherwise blocks its queue forever.
+    #[serde(default = "default_track_watchdog_secs")]
+    pub track_watchdog_secs: u64,
+
     /// Where this engine receives audio over UDP. Only used when the v4 audio
     /// plane is enabled.
     #[serde(default = "default_udp_bind_addr")]
@@ -117,6 +127,13 @@ fn default_taphub_transport_cert_file() -> String {
 /// holding.
 fn default_taphub_request_timeout_ms() -> u64 {
     6_000
+}
+
+/// The track watchdog window. A minute is far longer than any TTS utterance
+/// (the audit's tracks had a 1.8s median) and far shorter than the user's
+/// patience, and it only fires on a track that is also making no progress.
+fn default_track_watchdog_secs() -> u64 {
+    60
 }
 
 fn default_service_name() -> String {

@@ -20,6 +20,8 @@ This document describes the Prometheus metrics exported by the Audio Engine.
 | `audio_stream_underruns_total` | Counter | Total number of output stream underruns. |
 | `audio_jitter_dropped_frames_total` | Counter | Opus frames discarded because the jitter buffer was full (a sender outran playback). |
 | `audio_decode_errors_total` | Counter | Total number of audio decoding errors. |
+| `audio_mixer_duplicate_add_total` | Counter | `AddSource` commands ignored because that track was already being mixed. Nonzero means `has_sources` timed out or two reconciles raced. |
+| `audio_track_watchdog_fired_total` | Counter | Tracks stopped by the session watchdog: no end event, and no audio progress for `track_watchdog_secs`. Nonzero means a track stalled and would otherwise have blocked its queue. |
 
 ### Labels for `audio_decode_errors_total`
 - `error_type`: `io`, `codec`, `format_probe`, `no_track`, `codec_init`, `sender_dropped`, `startup_timeout`.
