@@ -28,8 +28,16 @@ const MAX_ATTEMPTS: usize = 2;
 /// connection a failing request landed on, so it never tears down siblings on the other
 /// pooled connections — the whole point of the pool.
 const POOL_SIZE: usize = 4;
-/// How long the abort path waits for the peer to acknowledge the end of the receive
-/// side of a transfer. Cleanup must never outlive the track that needed it.
+/// How long an abandoned track waits for the peer to end the transfer on its own
+/// before the receive side is ended by hand.
+///
+/// Sending `RecvEnd` while the peer's own end-of-transfer frame is already in flight
+/// is a protocol violation, and the driver treats one as fatal for the whole
+/// connection — the very thing this abort path exists to avoid. Waiting one round
+/// trip lets the common case (a listener that left while the tap was finishing)
+/// resolve itself with nothing on the wire.
+const XFER_DRAIN_GRACE: Duration = Duration::from_millis(500);
+/// Bound on the handshake that ends the receive side.
 const XFER_END_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct TransportClient {
@@ -43,9 +51,9 @@ pub struct TransportClient {
     jitter: JitterConfig,
     /// Pooled connections this client has reset since it was built.
     ///
-    /// A reset tears down every stream multiplexed over that connection, so it is a
-    /// last resort kept for a transport that is really broken — a request that merely
-    /// timed out must not move this counter.
+    /// Counts reset attempts: a reset tears down every stream multiplexed over that
+    /// connection, so it is a last resort kept for a transport that is really broken —
+    /// a request that merely timed out must not move this counter.
     resets: AtomicU64,
 }
 
@@ -139,7 +147,7 @@ impl TransportClient {
         self.resets.load(Ordering::Relaxed)
     }
 
-    /// Round-robin one connection out of the pool for a single request.
+    /// Round-robin one connection out of the pool for a single attempt.
     fn pick_conn(&self) -> Arc<ReconnectingClient> {
         let idx = self.cursor.fetch_add(1, Ordering::Relaxed) % self.conns.len();
         Arc::clone(&self.conns[idx])
@@ -322,6 +330,12 @@ impl TransportClient {
                                             return TrackEnd::Stalled;
                                         }
                                         tracing::error!("Jitter buffer error: {:?}", e);
+                                        // Defensive: no `JitterError` variant reaches
+                                        // this branch today (the buffer reports only
+                                        // `Opus` and `Stalled`), so a corrupt packet
+                                        // currently ends as `decode-failure`. Kept so
+                                        // the cache-invalidation path is already here
+                                        // if the buffer grows that variant.
                                         if e.to_string().contains("InvalidPacket") {
                                             tracing::warn!(
                                                 "Invalid opus packet detected; invalidating cache"
@@ -354,23 +368,34 @@ impl TransportClient {
                     // on the transfer so it can be ended cleanly here.
 
                     if !matches!(end, TrackEnd::Eof) {
-                        // Stopping mid-stream leaves the peer pushing frames into
-                        // nothing, so tell it the receive side is over rather than let
-                        // it find out from a send that never completes.
-                        if tokio::time::timeout(XFER_END_TIMEOUT, single.end())
-                            .await
-                            .is_err()
-                        {
-                            tracing::warn!(
-                                reason = end.reason(),
-                                "timed out ending the receive side of an abandoned transfer"
-                            );
+                        // Let the peer end the transfer itself where it can. Frames
+                        // that land here are discarded: the consumer is gone.
+                        let peer_finished = tokio::time::timeout(XFER_DRAIN_GRACE, async {
+                            while single.recv().await.is_some() {}
+                        })
+                        .await
+                        .is_ok();
+
+                        if !peer_finished {
+                            // Still open, so say the receive side is over rather than
+                            // leave the peer pushing frames into nothing.
+                            match tokio::time::timeout(XFER_END_TIMEOUT, single.end()).await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(e)) => tracing::debug!(
+                                    reason = end.reason(),
+                                    error = %e,
+                                    "peer refused the end of the receive side"
+                                ),
+                                Err(_) => tracing::warn!(
+                                    reason = end.reason(),
+                                    "timed out ending the receive side of an abandoned transfer"
+                                ),
+                            }
                         }
                     }
 
                     tracing::info!(
                         reason = end.reason(),
-                        dropped_frames = jitter.dropped_frames(),
                         "audio track finished; the PCM sender is being dropped"
                     );
 
