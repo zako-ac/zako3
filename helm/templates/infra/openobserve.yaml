@@ -11,67 +11,7 @@ metadata:
     {{- include "zako3.labels" . | nindent 4 }}
 data:
   otel-config.yaml: |
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-            endpoint: 0.0.0.0:4317
-          http:
-            endpoint: 0.0.0.0:4318
-
-    exporters:
-      otlphttp/clickstack:
-        endpoint: "http://{{ $fullname }}-clickstack:4318"
-        headers:
-          authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
-        compression: gzip
-        # The queue is half the reason every service exports here instead of to
-        # ClickStack directly: a ClickStack restart, or a ClickHouse merge that
-        # stalls ingest, costs a delay instead of the telemetry. 512 batches at
-        # 5s is 5 to 10 minutes of cushion; max_elapsed_time bounds a longer
-        # outage at 10 minutes per batch.
-        retry_on_failure:
-          enabled: true
-          initial_interval: 5s
-          max_interval: 30s
-          max_elapsed_time: 600s
-        sending_queue:
-          enabled: true
-          queue_size: 512
-
-    extensions:
-      health_check:
-        endpoint: 0.0.0.0:13133
-
-    processors:
-      # First in every pipeline: the queue is in memory, so without this the
-      # exact scenario the queue exists for (ClickStack down for minutes) grows
-      # the heap until the OOM killer takes the pod and the buffered telemetry
-      # with it. Refusing new data under pressure loses less than dying.
-      memory_limiter:
-        check_interval: 1s
-        limit_percentage: 75
-        spike_limit_percentage: 20
-      # ClickStack writes into ClickHouse, which dislikes one insert per span.
-      batch:
-        timeout: 5s
-        send_batch_size: 1024
-
-    service:
-      extensions: [health_check]
-      pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlphttp/clickstack]
-        metrics:
-          receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlphttp/clickstack]
-        logs:
-          receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlphttp/clickstack]
+    {{- include "zako3.otelCollectorConfig" . | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -155,6 +95,9 @@ spec:
     metadata:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 8 }}
+      annotations:
+        # A ConfigMap edit alone leaves the running pods on the old config.
+        checksum/config: {{ include "zako3.otelCollectorConfig" . | sha256sum }}
     spec:
       {{- include "zako3.nodeAffinity" (dict "global" .Values.nodeAffinity "local" .Values.openobserve.nodeAffinity) | nindent 6 }}
       containers:

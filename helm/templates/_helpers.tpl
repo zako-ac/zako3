@@ -207,3 +207,137 @@ OTLP + Redis shared env vars
 - name: REDIS_URL
   value: "redis://{{ include "zako3.fullname" . }}-redis:6379"
 {{- end }}
+
+{{/*
+Node log agent config. Kept in a helper so the DaemonSet can hash it into a
+pod annotation: a ConfigMap update alone does not restart the pods that read it,
+and an agent running yesterday's config is indistinguishable from one running
+today's until something breaks.
+*/}}
+{{- define "zako3.otelAgentConfig" -}}
+extensions:
+  # Offsets live on the node, not on an emptyDir: an emptyDir only survives a
+  # container restart, and a pod delete (node reboot, eviction, a template
+  # change) would make every agent re-read the whole of /var/log/pods straight
+  # into a 30-day table. With them, `start_at: beginning` means "backfill what
+  # the node still has, once".
+  file_storage:
+    directory: /var/lib/otel-agent/storage
+    create_directory: true
+
+receivers:
+  file_log/zako3:
+    include:
+      - /var/log/pods/{{ .Release.Namespace }}_*/*/*.log
+    # Not its own logs: while the gateway is down this pod logs an export
+    # failure per retry, and feeding that back into the failing pipeline is a
+    # loop with nothing to gain. Kubelet names the directory
+    # <namespace>_<pod-name>_<uid>, and the pod name carries the release prefix.
+    exclude:
+      - /var/log/pods/{{ .Release.Namespace }}_{{ include "zako3.fullname" . }}-otel-agent-*/*/*.log
+    include_file_path: true
+    include_file_name: false
+    start_at: beginning
+    storage: file_storage
+    operators:
+      # Parses the CRI header and lifts namespace / pod / container /
+      # restart_count out of the file path into resource attributes.
+      - type: container
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  otlp/collector:
+    endpoint: "{{ include "zako3.fullname" . }}-otel-collector:4317"
+    tls:
+      insecure: true
+    headers:
+      authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 600s
+    sending_queue:
+      enabled: true
+      queue_size: 512
+
+service:
+  extensions: [file_storage]
+  pipelines:
+    logs:
+      receivers: [file_log/zako3]
+      processors: [batch]
+      exporters: [otlp/collector]
+{{- end }}
+
+{{/*
+Collector gateway config. Same reason as the agent's: rendered into a hash so a
+config-only change rolls the pods instead of waiting for someone to notice.
+*/}}
+{{- define "zako3.otelCollectorConfig" -}}
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  otlphttp/clickstack:
+    endpoint: "http://{{ include "zako3.fullname" . }}-clickstack:4318"
+    headers:
+      authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
+    compression: gzip
+    # The queue is half the reason every service exports here instead of to
+    # ClickStack directly: a ClickStack restart, or a ClickHouse merge that
+    # stalls ingest, costs a delay instead of the telemetry. 512 batches at 5s
+    # is 5 to 10 minutes of cushion; max_elapsed_time bounds a longer outage at
+    # 10 minutes per batch.
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 600s
+    sending_queue:
+      enabled: true
+      queue_size: 512
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+processors:
+  # First in every pipeline: the queue is in memory, so without this the exact
+  # scenario the queue exists for (ClickStack down for minutes) grows the heap
+  # until the OOM killer takes the pod and the buffered telemetry with it.
+  # Refusing new data under pressure loses less than dying.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+  # ClickStack writes into ClickHouse, which dislikes one insert per span.
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/clickstack]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/clickstack]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/clickstack]
+{{- end }}
