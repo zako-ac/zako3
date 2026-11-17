@@ -282,10 +282,36 @@ async fn test_fetch_discord_voice_state_propagates_error() {
 /// session behind. The old code registered one anyway: nothing ever consumed
 /// the mixer, every later `play` answered `Ok`, and the channel was silently
 /// dead until the bot was kicked.
+///
+/// Every reason `play_audio` can give is covered, because a join that only
+/// handled one of them would still register a dead session for the others.
 #[tokio::test]
 async fn test_session_manager_join_without_a_consumer_registers_no_session() {
-    let guild_id = GuildId::from(6);
-    let channel_id = ChannelId::from(600);
+    use NoConsumerReason::*;
+
+    for (reason, guild, channel) in [
+        (ManagerMissing, 6u64, 600u64),
+        (CallLockTimeout, 7, 700),
+        (NoConnection, 8, 800),
+    ] {
+        let err = join_expecting_failure(guild, channel, reason).await;
+        match err {
+            ZakoError::NoConsumer(got) => assert_eq!(
+                got, reason,
+                "the reason the engine refused with must survive the join"
+            ),
+            other => panic!("expected NoConsumer({reason:?}), got {other:?}"),
+        }
+    }
+}
+
+async fn join_expecting_failure(
+    guild: u64,
+    channel: u64,
+    reason: NoConsumerReason,
+) -> ZakoError {
+    let guild_id = GuildId::from(guild);
+    let channel_id = ChannelId::from(channel);
 
     let mut mock_discord = MockDiscordService::new();
     // No `expect_save_session` on the state service: mockall panics if the join
@@ -308,7 +334,7 @@ async fn test_session_manager_join_without_a_consumer_registers_no_session() {
         .expect_play_audio()
         .with(eq(guild_id), always())
         .times(1)
-        .returning(|_, _| Err(ZakoError::NoConsumer(NoConsumerReason::ManagerMissing)));
+        .returning(move |_, _| Err(ZakoError::NoConsumer(reason)));
 
     let manager = SessionManager::new(
         Arc::new(mock_discord),
@@ -321,13 +347,10 @@ async fn test_session_manager_join_without_a_consumer_registers_no_session() {
         .await
         .expect_err("a join with no consumer has to fail");
 
-    match err {
-        ZakoError::NoConsumer(reason) => assert_eq!(reason, NoConsumerReason::ManagerMissing),
-        other => panic!("expected NoConsumer(ManagerMissing), got {other:?}"),
-    }
-
     assert!(
         manager.get_session(guild_id, channel_id).is_none(),
         "a session with no consumer must not be registered"
     );
+
+    err
 }

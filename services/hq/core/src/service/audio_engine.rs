@@ -263,6 +263,19 @@ impl AudioEngineService {
                     );
                     return Ok(true);
                 }
+                // A "no consumer" answer is not a reason to try the next
+                // engine: the engine is telling us this channel cannot be
+                // played into, and retrying elsewhere (on a lock timeout, say)
+                // risks placing a second bot in the same channel. It goes back
+                // to the caller as itself so the failure is visible.
+                Err(e @ AeError::NoConsumer(_)) => {
+                    warn!(
+                        sink_id = %candidate.sink_id,
+                        error = %e,
+                        "join failed: no audio consumer"
+                    );
+                    return Err(map_ae_err(e));
+                }
                 Err(e) => {
                     warn!(
                         sink_id = %candidate.sink_id,

@@ -161,8 +161,10 @@ impl DiscordService for SongbirdDiscordService {
             }
         };
 
-        // A `Call` with no current connection has no driver, so `play_direct_opus`
-        // would queue against nothing and the audio would never leave the buffer.
+        // Belt and braces: a successful `Songbird::join` only completes once the
+        // connection is live, so this should never fire on the normal path. It
+        // fires when the connection dropped between the join and here, and then
+        // `play_direct_opus` would queue against a driver that is gone.
         if call.current_connection().is_none() {
             tracing::error!(
                 guild_id = %guild_id,

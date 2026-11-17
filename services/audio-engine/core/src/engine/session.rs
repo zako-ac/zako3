@@ -120,6 +120,15 @@ impl SessionControl {
     /// in the queue, the mixer thread was gone, and the channel went silent
     /// while the caller believed the message had been read. Failing here is what
     /// turns that silence into a visible play failure at HQ.
+    /// Whether this session still has something that will play what it is given.
+    ///
+    /// `false` means the mixer thread is gone: the session is registered and its
+    /// queue is readable, but nothing it accepts would ever be heard. `Join`
+    /// uses this to repair such a session instead of answering `AlreadyJoined`.
+    pub fn has_consumer(&self) -> bool {
+        self.mixer_alive.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     fn ensure_consumer(&self) -> ZakoResult<()> {
         if self.mixer_alive.load(std::sync::atomic::Ordering::SeqCst) {
             return Ok(());
@@ -199,6 +208,22 @@ impl SessionControl {
         .await?;
 
         metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
+
+        // The mixer can exit during the taphub round trip above. Re-checking
+        // here is what keeps the window between "it was alive" and "the track is
+        // in the queue" from becoming another silent success: `add_source`
+        // swallows its send error, so nothing downstream would notice.
+        if let Err(e) = self.ensure_consumer() {
+            let tid = track_id;
+            modify_state_session(
+                &self.state_service,
+                self.guild_id,
+                self.channel_id,
+                move |session| session.remove_track(tid),
+            )
+            .await?;
+            return Err(e);
+        }
 
         self.reconcile().await?;
 
