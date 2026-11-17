@@ -59,7 +59,7 @@ clickstack:
     name: ""                  # PVC name override (default: <release>-clickstack-data)
     existingClaim: ""         # use a PVC managed outside the chart; the chart creates none
     storageClass: "fast-ssd"  # overrides the global storageClass
-    size: "20Gi"
+    size: "100Gi"
     accessModes: []           # overrides the component default
     annotations: {}
     volumeName: ""            # bind to a specific PV
@@ -153,7 +153,7 @@ logAgent:
 Access the HyperDX UI via port-forward:
 
 ```bash
-kubectl port-forward svc/<release>-clickstack 8080:8080
+kubectl port-forward pod/<release>-clickstack-0 8080:8080
 ```
 
 **OpenObserve** is retained in the chart but turned off by default (`openobserve.replicas: 0`).

@@ -104,7 +104,7 @@ storageClassName: {{ $sc | quote }}
 PersistentVolumeClaim for a component. Renders nothing when persistence.existingClaim
 is set, since that claim is managed outside the chart.
 Usage: include "zako3.pvc" (dict "root" . "persistence" .Values.clickstack.persistence
-         "default" "clickstack-data" "size" "20Gi" "accessMode" "ReadWriteOnce")
+         "default" "clickstack-data" "size" "100Gi" "accessMode" "ReadWriteOnce")
 */}}
 {{- define "zako3.pvc" -}}
 {{- $p := .persistence | default dict -}}

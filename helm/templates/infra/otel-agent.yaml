@@ -23,17 +23,24 @@ metadata:
 data:
   agent-config.yaml: |
     extensions:
-      # Offsets survive a container restart, so `start_at: beginning` means
-      # "backfill what the node still has, once" rather than "re-read 50Mi of
-      # every container every time the agent restarts".
+      # Offsets live on the node, not on an emptyDir: an emptyDir only survives
+      # a container restart, and a pod delete (node reboot, eviction, a
+      # template change) would make every agent re-read the whole of
+      # /var/log/pods straight into a 30-day table. With them, `start_at:
+      # beginning` means "backfill what the node still has, once".
       file_storage:
         directory: /var/lib/otel-agent/storage
         create_directory: true
 
     receivers:
-      filelog/zako3:
+      file_log/zako3:
         include:
           - /var/log/pods/{{ .Release.Namespace }}_*/*/*.log
+        # Not its own logs: while the gateway is down this pod logs an export
+        # failure per retry, and feeding that back into the failing pipeline is
+        # a loop with nothing to gain.
+        exclude:
+          - /var/log/pods/{{ .Release.Namespace }}_otel-agent-*/*/*.log
         include_file_path: true
         include_file_name: false
         start_at: beginning
@@ -68,7 +75,7 @@ data:
       extensions: [file_storage]
       pipelines:
         logs:
-          receivers: [filelog/zako3]
+          receivers: [file_log/zako3]
           processors: [batch]
           exporters: [otlp/collector]
 ---
@@ -88,6 +95,7 @@ spec:
       labels:
         {{- include "zako3.selectorLabels" (dict "component" "otel-agent" "Release" .Release) | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: otel-agent
           image: {{ .Values.logAgent.image | quote }}
@@ -122,5 +130,7 @@ spec:
           hostPath:
             path: /var/log/pods
         - name: storage
-          emptyDir: {}
+          hostPath:
+            path: /var/lib/zako3-otel-agent
+            type: DirectoryOrCreate
 {{- end }}

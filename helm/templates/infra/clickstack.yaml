@@ -66,8 +66,13 @@ spec:
           startupProbe:
             tcpSocket:
               port: 4317
-            periodSeconds: 10
-            failureThreshold: 90
+            # 30 x 60s = 30 minutes. A startup probe still restarts the
+            # container when it expires, so the window has to be long enough to
+            # cover a migration on a volume that is no longer empty; the coarse
+            # period is deliberate, so a kill lands after a whole minute of no
+            # listener rather than mid-flush.
+            periodSeconds: 60
+            failureThreshold: 30
           readinessProbe:
             tcpSocket:
               port: 4317
