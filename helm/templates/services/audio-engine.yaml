@@ -87,14 +87,17 @@ spec:
             # in the engine re-examines a playing track, so one stalled track
             # otherwise blocks every message queued behind it.
             - name: TRACK_WATCHDOG_SECS
-              value: "{{ .Values.audioEngine.trackWatchdogSecs | default 60 }}"
+              value: '{{ .Values.audioEngine.trackWatchdogSecs | toString | default "60" }}'
             # How long a TTS may wait for its turn before it is dropped instead
             # of played (seconds; "0" disables). Nothing else bounds a queue:
             # one stalled track otherwise leaves a user hearing minute-old
             # messages. Read once at startup, so a change here rolls the
             # StatefulSet.
+            # `toString | default "90"`, not `default 90`: --set turns an
+            # unquoted 0 into a number, and 0 is the "disabled" value here, so
+            # a numeric default would silently turn "disable" back into 90.
             - name: QUEUE_MAX_AGE_SECS
-              value: "{{ .Values.audioEngine.queueMaxAgeSecs | default 90 }}"
+              value: '{{ .Values.audioEngine.queueMaxAgeSecs | toString | default "90" }}'
             # HQ is where this engine registers, and HQ both dispatches audio
             # commands back to the address this engine advertises and (when the
             # v4 plane is on) resolves taps. Registration is not optional:
