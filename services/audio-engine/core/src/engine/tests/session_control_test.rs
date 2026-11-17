@@ -1,18 +1,21 @@
 // warn: AI generated
 
 use mockall::predicate::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zako3_audio_engine_audio::{MockDecoder, MockMixer, create_ringbuf_pair};
 
 use crate::engine::session::{SessionConfig, create_session_control};
+use crate::error::ZakoError;
 use crate::service::{state::MockStateService, taphub::MockTapHubService};
 use crate::types::{
     AudioCachePolicy, AudioCacheType, AudioMetaResponse, AudioMetadata, AudioRequestString,
     AudioResponse, CachedAudioRequest, ChannelId, GuildId, QueueName, SessionState, Track, TrackId,
     Volume,
 };
+use zako3_types::NoConsumerReason;
 use zako3_types::hq::DiscordUserId;
 use zako3_types::hq::TapId;
 
@@ -95,7 +98,7 @@ async fn test_play_success() {
             Ok(Some(s))
         });
 
-    // 5. reconcile -> has_sources (Not playing)
+    // 5. reconcile -> has_sources (nothing in the mixer yet)
     mock_mixer
         .expect_has_sources()
         .times(1)
@@ -134,6 +137,7 @@ async fn test_play_success() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
 
     let res = control
@@ -205,7 +209,7 @@ async fn test_play_queued() {
             Ok(Some(s))
         });
 
-    // 4. Reconcile -> has_source(T1) -> True
+    // 4. Reconcile -> has_sources([T1]) -> T1 is already playing
     mock_mixer
         .expect_has_sources()
         .times(1)
@@ -222,6 +226,7 @@ async fn test_play_queued() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
 
     let res = control
@@ -245,6 +250,11 @@ async fn test_stop_success() {
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(100);
+
+    // reconcile() always asks, even when the queue it reads turns out to be empty.
+    mock_mixer
+        .expect_has_sources()
+        .returning(|_| HashSet::new());
 
     mock_mixer
         .expect_remove_source()
@@ -322,6 +332,7 @@ async fn test_stop_success() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
     assert!(control.stop(track_id).await.is_ok());
 }
@@ -334,6 +345,10 @@ async fn test_stop_non_existent() {
     let mut mock_state = MockStateService::new();
     let mock_taphub = MockTapHubService::new();
     let track_id = TrackId::from(999);
+
+    mock_mixer
+        .expect_has_sources()
+        .returning(|_| HashSet::new());
 
     mock_mixer
         .expect_remove_source()
@@ -400,6 +415,7 @@ async fn test_stop_non_existent() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
     assert!(control.stop(track_id).await.is_ok());
 }
@@ -447,6 +463,7 @@ async fn test_set_volume() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
     assert!(
         control
@@ -561,6 +578,7 @@ async fn test_next_music_success() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
     assert!(control.next_music().await.is_ok());
 }
@@ -600,6 +618,7 @@ async fn test_next_music_last_track() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
     assert!(control.next_music().await.is_ok());
 }
@@ -660,11 +679,10 @@ async fn test_end_of_track_handling_and_preload() {
         })
     });
 
-    // Mixer has_source
-    // 1. First call during play() -> reconcile() for Track 1. Return false to trigger add_source.
-    // 2. Second call during play() -> reconcile() for Track 2 (queued). Not active, so not called?
-    //    Actually reconcile only checks active tracks. Track 1 is active.
-    // 3. Later call during next track transition -> reconcile() for Track 2.
+    // Mixer has_sources
+    // reconcile() asks once per pass for every active (head-of-queue) track and
+    // gets back the set already in the mixer. Nothing is playing here, so every
+    // pass feeds the head track to play_now.
     mock_mixer
         .expect_has_sources()
         .times(1) // Only during first reconcile
@@ -750,6 +768,7 @@ async fn test_end_of_track_handling_and_preload() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
 
     // 1. Play (Triggers Track 1 start)
@@ -973,6 +992,7 @@ async fn test_watchdog_stops_stalled_track_and_starts_next() {
         SessionConfig {
             track_watchdog: Duration::from_millis(50),
         },
+        Arc::new(AtomicBool::new(true)),
     );
 
     // Queueing a message reconciles, which starts the track at the head: 1.
@@ -1056,6 +1076,7 @@ async fn test_watchdog_leaves_a_playing_track_alone() {
         SessionConfig {
             track_watchdog: Duration::from_millis(50),
         },
+        Arc::new(AtomicBool::new(true)),
     );
 
     control
@@ -1097,4 +1118,44 @@ async fn test_watchdog_leaves_a_playing_track_alone() {
         before,
         "the watchdog must not fire for a playing track"
     );
+}
+
+/// A session whose mixer thread has exited has no reader for its ring buffer:
+/// anything queued on it would be played to nobody. `play` must say so instead
+/// of answering `Ok`. That silent `Ok` is how a channel went permanently quiet
+/// while HQ believed the message had been read.
+#[tokio::test]
+async fn test_play_with_a_dead_mixer_fails_with_no_consumer() {
+    let guild_id = GuildId::from(70);
+    let channel_id = ChannelId::from(700);
+
+    // Every collaborator is an empty mock: mockall panics if `play` reaches the
+    // taphub, the mixer or the state store, which is exactly the assertion that
+    // the refusal happens before anything is queued.
+    let control = create_session_control(
+        guild_id,
+        channel_id,
+        Arc::new(MockMixer::new()),
+        Arc::new(MockDecoder::new()),
+        Arc::new(MockStateService::new()),
+        Arc::new(MockTapHubService::new()),
+        SessionConfig::default(),
+        Arc::new(AtomicBool::new(false)),
+    );
+
+    let err = control
+        .play(
+            QueueName::from("tts_123".to_string()),
+            TapId("test_tap_id".to_string()),
+            AudioRequestString::from("hello".to_string()),
+            Volume::from(1.0),
+            DiscordUserId::from("123".to_string()),
+        )
+        .await
+        .expect_err("a session with no consumer must refuse the play");
+
+    match err {
+        ZakoError::NoConsumer(reason) => assert_eq!(reason, NoConsumerReason::MixerDead),
+        other => panic!("expected NoConsumer(MixerDead), got {other:?}"),
+    }
 }

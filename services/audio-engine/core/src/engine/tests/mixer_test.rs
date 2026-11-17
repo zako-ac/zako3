@@ -9,8 +9,15 @@ use zako3_audio_engine_audio::{
 #[tokio::test]
 async fn test_mixer_add_remove_source() {
     let (output_prod, mut output_cons) = create_opus_ringbuf_pair();
-    // Drain output to prevent blocking the mixer thread
-    tokio::spawn(async move { while Consumer::try_pop(&mut output_cons).is_some() {} });
+    // Drain the output so the mixer never blocks, and keep the consumer alive for
+    // the whole test: a dropped consumer is what ends the mixer thread (see
+    // `test_mixer_reports_dead_once_the_output_consumer_is_dropped`).
+    let _drain = tokio::spawn(async move {
+        loop {
+            while Consumer::try_pop(&mut output_cons).is_some() {}
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    });
     let mixer = create_thread_mixer(output_prod);
 
     let track_id = TrackId::from(1);
@@ -31,4 +38,29 @@ async fn test_mixer_add_remove_source() {
 
     // Verify source is removed
     assert!(!mixer.has_source(track_id).await);
+}
+
+/// The mixer thread exits when its output consumer is dropped: nothing can
+/// carry its frames any more. That has to be observable from outside, because
+/// the session uses it to refuse to queue audio nothing will play.
+#[tokio::test]
+async fn test_mixer_reports_dead_once_the_output_consumer_is_dropped() {
+    let (output_prod, output_cons) = create_opus_ringbuf_pair();
+    let mixer = create_thread_mixer(output_prod);
+    let alive = mixer.alive();
+    assert!(
+        alive.load(std::sync::atomic::Ordering::SeqCst),
+        "a fresh mixer is alive"
+    );
+
+    drop(output_cons);
+
+    // The thread checks at the top of each loop; it sleeps 10ms when idle.
+    for _ in 0..100 {
+        if !alive.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the mixer kept reporting itself alive after its consumer was dropped");
 }

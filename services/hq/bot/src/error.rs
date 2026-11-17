@@ -94,6 +94,9 @@ fn core_error_message(err: &CoreError) -> Cow<'_, str> {
         CoreError::Conflict(msg) => msg.as_str().into(),
         CoreError::InvalidInput(msg) => msg.as_str().into(),
         CoreError::TapHub(t) => tap_hub_error_message(t),
+        // The engine had nothing to play into. The old behaviour was silence
+        // and a claimed success; the user is told the playback failed instead.
+        CoreError::NoConsumer(_) => "오디오를 재생하지 못했어요 (음성 연결에 문제가 있어요).".into(),
         _ => "서버에서 문제가 발생했어요. 다시 시도해 주세요.".into(),
     }
 }

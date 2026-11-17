@@ -100,7 +100,9 @@ impl AeTransportHandler {
                     .await
                 {
                     Ok(_) => AudioEngineCommandResponse::Ok,
-                    Err(e) => err(&e.to_string()),
+                    // Structured like `play`: a join that found no consumer has
+                    // to reach HQ as one, not as an anonymous internal error.
+                    Err(e) => map_engine_err(e),
                 }
             }
 
@@ -204,6 +206,15 @@ fn map_engine_err(e: ZakoError) -> AudioEngineCommandResponse {
         ZakoError::TapHub(t) => {
             tracing::warn!(error = %t, "AudioEngine TapHub error");
             AudioEngineCommandResponse::Error(AudioEngineError::Tap(t))
+        }
+        // Kept structured, with the reason, so HQ logs the same cause code the
+        // engine did instead of flattening it into a string.
+        ZakoError::NoConsumer(reason) => {
+            tracing::error!(
+                reason = reason.as_str(),
+                "AudioEngine refused the command: no audio consumer"
+            );
+            AudioEngineCommandResponse::Error(AudioEngineError::NoConsumer(reason))
         }
         e => err(&e.to_string()),
     }

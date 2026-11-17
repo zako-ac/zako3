@@ -76,6 +76,10 @@ impl SessionManager {
         let (prod, cons) = create_opus_ringbuf_pair();
 
         let mixer = create_thread_mixer(prod);
+        // Taken before the mixer is wrapped in `Arc<dyn Mixer>`: the thread flips
+        // this to `false` when it exits, and the session uses that to refuse
+        // plays nothing would consume.
+        let mixer_alive = mixer.alive();
         let decoder = PcmDecoder::new();
 
         let control = create_session_control(
@@ -86,8 +90,13 @@ impl SessionManager {
             self.state_service.clone(),
             self.taphub_service.clone(),
             self.session_config,
+            mixer_alive,
         );
 
+        // Fails when songbird has nothing to play into. The session is
+        // deliberately not registered in that case: registering one here is how
+        // the channel used to go permanently silent while every play answered
+        // `Ok`.
         self.discord_service.play_audio(guild_id, cons).await?;
 
         self.sessions.insert((guild_id, channel_id), control);
