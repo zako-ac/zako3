@@ -25,17 +25,52 @@ data:
         headers:
           authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
         compression: gzip
+        # The queue is half the reason every service exports here instead of to
+        # ClickStack directly: a ClickStack restart, or a ClickHouse merge that
+        # stalls ingest, costs a delay instead of the telemetry. 512 batches at
+        # 5s is 5 to 10 minutes of cushion; max_elapsed_time bounds a longer
+        # outage at 10 minutes per batch.
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 600s
+        sending_queue:
+          enabled: true
+          queue_size: 512
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    processors:
+      # First in every pipeline: the queue is in memory, so without this the
+      # exact scenario the queue exists for (ClickStack down for minutes) grows
+      # the heap until the OOM killer takes the pod and the buffered telemetry
+      # with it. Refusing new data under pressure loses less than dying.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 20
+      # ClickStack writes into ClickHouse, which dislikes one insert per span.
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
 
     service:
+      extensions: [health_check]
       pipelines:
         traces:
           receivers: [otlp]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/clickstack]
         metrics:
           receivers: [otlp]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/clickstack]
         logs:
           receivers: [otlp]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/clickstack]
 ---
 apiVersion: apps/v1
@@ -110,7 +145,9 @@ metadata:
     {{- include "zako3.labels" . | nindent 4 }}
     app.kubernetes.io/component: otel-collector
 spec:
-  replicas: 1
+  # Every workload in the namespace now depends on this hop, so it is not a
+  # single pod any more. The config is stateless; the queue lives in each pod.
+  replicas: 2
   selector:
     matchLabels:
       {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 6 }}
@@ -137,6 +174,27 @@ spec:
                     "secretName" (printf "%s-clickstack-secret" $fullname)
                     "existingName" .Values.clickstack.existingSecret.name
                     "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 16 }}
+          # Every service plus the node log agent now funnel through this pod,
+          # so it gets a floor and a ceiling instead of BestEffort. The ceiling
+          # is paired with memory_limiter in the config: shed load before the
+          # kernel takes the pod and the in-memory queue with it.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 20
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/otel-config.yaml
@@ -145,6 +203,18 @@ spec:
         - name: config
           configMap:
             name: {{ $fullname }}-otel-collector-config
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-otel-collector
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "otel-collector" "Release" .Release) | nindent 6 }}
 ---
 apiVersion: v1
 kind: Service

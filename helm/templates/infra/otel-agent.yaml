@@ -1,0 +1,136 @@
+{{- if .Values.logAgent.enabled -}}
+{{- $fullname := include "zako3.fullname" . -}}
+{{/*
+Node log shipper.
+
+kubelet's container log rotation is the only thing that stores pod logs today
+(containerLogMaxSize 10Mi x 5 files), so a pod that writes at the rate these do
+keeps roughly eight hours and nothing can be asked about last night. This agent
+tails /var/log/pods for this namespace, tags each record with its pod and
+container, and sends it to the collector gateway, which writes it into
+ClickStack's `otel_logs` (TTL 30 days). node/log rotation stops mattering for
+anything that has already been read.
+
+The retention knob is ClickHouse's, not this pod's: otel_logs carries
+`TTL toDateTime(Timestamp) + toIntervalDay(30)`.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-otel-agent-config
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+data:
+  agent-config.yaml: |
+    extensions:
+      # Offsets live on the node, not on an emptyDir: an emptyDir only survives
+      # a container restart, and a pod delete (node reboot, eviction, a
+      # template change) would make every agent re-read the whole of
+      # /var/log/pods straight into a 30-day table. With them, `start_at:
+      # beginning` means "backfill what the node still has, once".
+      file_storage:
+        directory: /var/lib/otel-agent/storage
+        create_directory: true
+
+    receivers:
+      file_log/zako3:
+        include:
+          - /var/log/pods/{{ .Release.Namespace }}_*/*/*.log
+        # Not its own logs: while the gateway is down this pod logs an export
+        # failure per retry, and feeding that back into the failing pipeline is
+        # a loop with nothing to gain.
+        exclude:
+          - /var/log/pods/{{ .Release.Namespace }}_otel-agent-*/*/*.log
+        include_file_path: true
+        include_file_name: false
+        start_at: beginning
+        storage: file_storage
+        operators:
+          # Parses the CRI header and lifts namespace / pod / container /
+          # restart_count out of the file path into resource attributes.
+          - type: container
+
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+
+    exporters:
+      otlp/collector:
+        endpoint: "{{ $fullname }}-otel-collector:4317"
+        tls:
+          insecure: true
+        headers:
+          authorization: "${env:CLICKSTACK_OTLP_TOKEN}"
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 600s
+        sending_queue:
+          enabled: true
+          queue_size: 512
+
+    service:
+      extensions: [file_storage]
+      pipelines:
+        logs:
+          receivers: [file_log/zako3]
+          processors: [batch]
+          exporters: [otlp/collector]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $fullname }}-otel-agent
+  labels:
+    {{- include "zako3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "zako3.selectorLabels" (dict "component" "otel-agent" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zako3.selectorLabels" (dict "component" "otel-agent" "Release" .Release) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: otel-agent
+          image: {{ .Values.logAgent.image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--config=/etc/otel-agent/agent-config.yaml"]
+          env:
+            - name: CLICKSTACK_OTLP_TOKEN
+              valueFrom:
+                {{- include "zako3.secretKeyRef" (dict
+                    "secretName" (printf "%s-clickstack-secret" $fullname)
+                    "existingName" .Values.clickstack.existingSecret.name
+                    "key" .Values.clickstack.existingSecret.otlpTokenKey) | nindent 16 }}
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-agent
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/otel-agent
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-otel-agent-config
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: storage
+          hostPath:
+            path: /var/lib/zako3-otel-agent
+            type: DirectoryOrCreate
+{{- end }}

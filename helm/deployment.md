@@ -59,7 +59,7 @@ clickstack:
     name: ""                  # PVC name override (default: <release>-clickstack-data)
     existingClaim: ""         # use a PVC managed outside the chart; the chart creates none
     storageClass: "fast-ssd"  # overrides the global storageClass
-    size: "20Gi"
+    size: "100Gi"
     accessModes: []           # overrides the component default
     annotations: {}
     volumeName: ""            # bind to a specific PV
@@ -104,29 +104,56 @@ Secret reference either way, so no service config changes.
 ## Observability
 
 The observability backend is **ClickStack** (ClickHouse + HyperDX, deployed via the
-`clickhouse/clickstack-all-in-one` image). All services send OTLP directly to ClickStack over
-OTLP gRPC (`OTLP_ENDPOINT` → `-clickstack:4317`), attaching the ingestion bearer token via
-`OTEL_EXPORTER_OTLP_HEADERS` (`authorization=<token>`). The `-otel-collector` gateway is
-retained in the chart but no longer on the hot path.
+`clickhouse/clickstack-all-in-one` image). Telemetry reaches it through the `-otel-collector`
+gateway:
+
+```
+services (OTLP_ENDPOINT → -otel-collector:4317) ─┐
+-otel-agent DaemonSet (node logs) ───────────────┼→ -otel-collector → -clickstack:4318
+                                                 ┘   (queue + retry)      (ClickHouse)
+```
+
+- **Every service exports to `-otel-collector:4317`**, not to ClickStack. The gateway is the only
+  hop with a retrying exporter queue, so a ClickStack restart costs a delay instead of the
+  telemetry. Exporters pointed straight at ClickStack also mean eight services each logging a
+  connect error every second whenever ClickStack is down, which is what buried the logs on
+  2026-11-17 (8045 of 8995 HQ lines in a 24h window).
+- **ClickStack has startup and readiness probes on 4317.** Its entrypoint retries
+  `Waiting for ClickHouse to be ready...` forever if clickhouse-server dies, and without a probe
+  the pod reports Ready while listening on nothing. The startup window is 15 minutes because the
+  first boot runs the ClickStack schema migration. There is no liveness probe on purpose: a
+  restart landing in the middle of a migration or a large merge loses more than it recovers.
+- **ClickStack's volume is 100Gi by default.** The previous 20Gi filled on 2026-10-14, ClickHouse
+  could not reserve space for a merge, and the whole observability backend stayed dead for six
+  weeks. Table TTLs keep the working set small: the `otel_*` tables carry 30 days, and the
+  ClickHouse system logs (system.trace_log especially) are trimmed.
+- **`-otel-agent` is a DaemonSet that tails `/var/log/pods`** for this namespace and ships it to
+  the gateway, so a log is still searchable after kubelet's 10Mi x 5 rotation has dropped it
+  (roughly eight hours of these services). Retention is `otel_logs`' 30-day ClickHouse TTL. Set
+  `logAgent.enabled: false` to turn it off.
 
 ```yaml
 clickstack:
   replicas: 1
-  otlpAuthToken: "<ingestion token>"   # OTLP_AUTH_TOKEN — collector authenticates with this
+  otlpAuthToken: "<ingestion token>"   # OTLP_AUTH_TOKEN, the gateway authenticates with this
   apiKey: "<hyperdx api key>"          # HYPERDX_API_KEY
   persistence:
-    size: "20Gi"
+    size: "100Gi"
   # or reference a pre-existing Secret:
   existingSecret:
     name: ""
     otlpTokenKey: "otlp-auth-token"
     apiKeyKey: "hyperdx-api-key"
+
+logAgent:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib:latest
 ```
 
 Access the HyperDX UI via port-forward:
 
 ```bash
-kubectl port-forward svc/<release>-clickstack 8080:8080
+kubectl port-forward pod/<release>-clickstack-0 8080:8080
 ```
 
 **OpenObserve** is retained in the chart but turned off by default (`openobserve.replicas: 0`).

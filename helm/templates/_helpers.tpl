@@ -104,7 +104,7 @@ storageClassName: {{ $sc | quote }}
 PersistentVolumeClaim for a component. Renders nothing when persistence.existingClaim
 is set, since that claim is managed outside the chart.
 Usage: include "zako3.pvc" (dict "root" . "persistence" .Values.clickstack.persistence
-         "default" "clickstack-data" "size" "20Gi" "accessMode" "ReadWriteOnce")
+         "default" "clickstack-data" "size" "100Gi" "accessMode" "ReadWriteOnce")
 */}}
 {{- define "zako3.pvc" -}}
 {{- $p := .persistence | default dict -}}
@@ -164,14 +164,26 @@ postgres://{{ .Values.timescale.user }}:{{ .Values.timescale.password }}@{{ incl
 
 {{/*
 OTLP endpoint URL
+
+Every service exports to the collector gateway, not to ClickStack directly.
+The gateway is the only hop with a retrying exporter queue, so a ClickStack
+restart (or a ClickHouse merge that stalls ingest) buffers telemetry instead of
+dropping it, and a ClickStack pod that never came up turns into one failing
+exporter here rather than eight services each logging a connect error every
+second. On 2026-11-17, 8045 of the 8995 HQ log lines in a 24h window were that
+connect error.
 */}}
 {{- define "zako3.otlpEndpoint" -}}
-http://{{ include "zako3.fullname" . }}-clickstack:4317
+http://{{ include "zako3.fullname" . }}-otel-collector:4317
 {{- end }}
 
 {{/*
-OTLP auth header env — ingestion token for direct-to-ClickStack export.
-CLICKSTACK_OTLP_TOKEN must be defined first so k8s $(VAR) interpolation resolves.
+OTLP auth header env: ingestion token for the ClickStack hop.
+
+Services no longer carry the token to ClickStack themselves (the gateway does,
+in its exporter config); the variables stay so an endpoint pointed back at
+ClickStack keeps working without a second change. CLICKSTACK_OTLP_TOKEN must be
+defined first so k8s $(VAR) interpolation resolves.
 */}}
 {{- define "zako3.otlpAuthEnv" -}}
 - name: CLICKSTACK_OTLP_TOKEN
