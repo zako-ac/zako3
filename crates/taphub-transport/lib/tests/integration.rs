@@ -392,3 +392,161 @@ async fn test_app_error_is_not_retried() {
     assert!(matches!(err, TapHubError::TapNotFound(_)));
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
+
+/// Handler whose metadata request never answers, and which reports whether its
+/// future was dropped (cancelled) or ran to completion.
+struct SlowMetaHandler {
+    entered: Arc<std::sync::atomic::AtomicBool>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// Setting `cancelled` on drop is how the test observes cancellation: a future
+/// that is dropped never runs the code after its last await, but its locals are
+/// dropped, and the guard with them.
+struct CancelGuard(Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for CancelGuard {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[async_trait::async_trait]
+impl TapHubBridgeHandler for SlowMetaHandler {
+    async fn handle_request_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_preload_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_request_audio_meta(
+        &self,
+        _req: AudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        let _guard = CancelGuard(self.cancelled.clone());
+        self.entered
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        // Long enough that anything but immediate cancellation shows up as a
+        // timeout in the assertion below rather than a pass.
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        Err(TapHubError::Internal("unreachable".to_string()))
+    }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), TapHubError> {
+        Ok(())
+    }
+}
+
+/// A client that disappears must cancel the request it left in flight, instead
+/// of leaving the handler to wait out its whole budget with a tap request (and
+/// the tap connection behind it) still open.
+#[tokio::test]
+async fn test_client_disconnect_cancels_the_in_flight_request() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let entered = Arc::new(AtomicBool::new(false));
+    let cancelled = Arc::new(AtomicBool::new(false));
+
+    let (bound_addr, client_certs) = spawn_server(Arc::new(SlowMetaHandler {
+        entered: entered.clone(),
+        cancelled: cancelled.clone(),
+    }))
+    .await;
+
+    let client = Arc::new(
+        TransportClient::connect(
+            "127.0.0.1:0".parse().unwrap(),
+            &bound_addr.to_string(),
+            "localhost".to_string(),
+            client_certs,
+            Duration::from_secs(60),
+        )
+        .await
+        .expect("Failed to connect client"),
+    );
+
+    // Fire the request and never await it from here: this is the engine that has
+    // given up and is about to reset its connection.
+    let request_client = Arc::clone(&client);
+    let request =
+        tokio::spawn(async move { request_client.request_audio_meta(meta_request()).await });
+
+    // Wait until the server is actually inside the handler, so the disconnect
+    // below is guaranteed to interrupt a request that is in flight.
+    let start = std::time::Instant::now();
+    while !entered.load(Ordering::SeqCst) {
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "server never entered the handler"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    let closed_at = std::time::Instant::now();
+    client.close().await;
+
+    while !cancelled.load(Ordering::SeqCst) {
+        assert!(
+            closed_at.elapsed() < Duration::from_secs(5),
+            "handler future was not cancelled after the client disconnected; \
+             it is still waiting out its 60s budget"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // Cancelled on the disconnect, not on the 60s the handler would otherwise run.
+    assert!(closed_at.elapsed() < Duration::from_secs(5));
+
+    request.abort();
+}
+
+/// The cancelling path must not turn into a connection teardown for requests
+/// that are served normally: a request answered inside its budget still returns
+/// its payload, and the connection stays usable afterwards.
+#[tokio::test]
+async fn test_answered_request_leaves_the_connection_usable() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let (bound_addr, client_certs) = spawn_server(Arc::new(MockHandler)).await;
+
+    let client = TransportClient::connect(
+        "127.0.0.1:0".parse().unwrap(),
+        &bound_addr.to_string(),
+        "localhost".to_string(),
+        client_certs,
+        Duration::from_secs(5),
+    )
+    .await
+    .expect("Failed to connect client");
+
+    // More than POOL_SIZE (4): with 4 requests, strict round-robin would hand
+    // each pooled connection exactly one, so nothing would be reused.
+    for _ in 0..8 {
+        let resp = client
+            .request_audio_meta(meta_request())
+            .await
+            .expect("meta request should be answered");
+        if let AudioCacheType::CacheKey(k) = resp.cache_key.cache_type {
+            assert_eq!(k, "meta_key");
+        } else {
+            panic!("Expected CacheKey");
+        }
+    }
+}

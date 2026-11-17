@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use protofish3::{ChanReceiver, ChanSender, Connection, Server, ServerConfig, XferMode};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::fs::File;
+use std::future::Future;
 use std::io::BufReader;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -113,12 +114,32 @@ async fn handle_connection(
     loop {
         let (sender, receiver) = conn.accept_chan().await?;
         let handler_clone = handler.clone();
+        let conn_clone = conn.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_stream(sender, receiver, handler_clone).await {
+            if let Err(e) = handle_stream(sender, receiver, handler_clone, conn_clone).await {
                 tracing::error!("Stream error: {:?}", e);
             }
         });
+    }
+}
+
+/// Awaits `fut`, abandoning it the moment the peer's connection is gone.
+///
+/// Without this a client that has already given up on a request (the audio
+/// engine resets its pooled connection when its own per-attempt timeout fires)
+/// leaves the handler waiting out its whole budget, with a tap request in flight
+/// that nobody is listening for. Dropping the handler future drops the request
+/// chan with it, which is the whole of the cancellation here. The tap connection
+/// itself is not touched: the handler only ever held a clone of it.
+async fn until_client_gone<F, T>(conn: &Connection, fut: F) -> Option<T>
+where
+    F: Future<Output = T>,
+{
+    tokio::select! {
+        biased;
+        _ = conn.closed() => None,
+        out = fut => Some(out),
     }
 }
 
@@ -126,6 +147,7 @@ async fn handle_stream(
     sender: ChanSender,
     mut receiver: ChanReceiver,
     handler: Arc<dyn TapHubBridgeHandler>,
+    conn: Connection,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let payload = receiver.recv_msg().await?;
     let req: TapHubRequest = rmp_serde::from_slice(&payload)?;
@@ -133,15 +155,39 @@ async fn handle_stream(
     match req {
         TapHubRequest::RequestAudio(req) => {
             let headers = req.headers.clone();
-            match handler.handle_request_audio(req, headers).await {
+            let Some(result) =
+                until_client_gone(&conn, handler.handle_request_audio(req, headers)).await
+            else {
+                tracing::warn!(
+                    "client disconnected before its audio request was answered; dropping the request"
+                );
+                return Ok(());
+            };
+            match result {
                 Ok((meta, mut chunk_receiver)) => {
                     let resp = TapHubResponse::AudioReady(meta);
                     sender.send_msg(rmp_serde::to_vec(&resp)?).await?;
 
                     let mut xfer = sender.start_xfer(XferMode::Unrel).await?;
 
-                    while let Some((ts, bytes)) = chunk_receiver.recv().await {
-                        xfer.send(encode_chunk(ts, &bytes)).await?;
+                    loop {
+                        tokio::select! {
+                            biased;
+                            _ = conn.closed() => {
+                                // The receiver is gone; stop pulling frames out of the
+                                // tap rather than draining a stream nobody reads. The
+                                // dropped `SendXfer` asks the driver to end the transfer
+                                // (and a busy driver may drop that request).
+                                tracing::warn!(
+                                    "client disconnected mid-stream; ending the transfer"
+                                );
+                                return Ok(());
+                            }
+                            chunk = chunk_receiver.recv() => match chunk {
+                                Some((ts, bytes)) => xfer.send(encode_chunk(ts, &bytes)).await?,
+                                None => break,
+                            },
+                        }
                     }
 
                     xfer.end().await?;
@@ -154,7 +200,13 @@ async fn handle_stream(
         }
         TapHubRequest::PreloadAudio(req) => {
             let headers = req.headers.clone();
-            let resp = match handler.handle_preload_audio(req, headers).await {
+            let Some(result) =
+                until_client_gone(&conn, handler.handle_preload_audio(req, headers)).await
+            else {
+                tracing::warn!("client disconnected before its preload request was answered");
+                return Ok(());
+            };
+            let resp = match result {
                 Ok(meta) => TapHubResponse::MetaReady(meta),
                 Err(e) => TapHubResponse::Error(e),
             };
@@ -162,7 +214,13 @@ async fn handle_stream(
         }
         TapHubRequest::RequestAudioMeta(req) => {
             let headers = req.headers.clone();
-            let resp = match handler.handle_request_audio_meta(req, headers).await {
+            let Some(result) =
+                until_client_gone(&conn, handler.handle_request_audio_meta(req, headers)).await
+            else {
+                tracing::warn!("client disconnected before its metadata request was answered");
+                return Ok(());
+            };
+            let resp = match result {
                 Ok(meta) => TapHubResponse::MetaReady(meta),
                 Err(e) => TapHubResponse::Error(e),
             };
@@ -170,7 +228,13 @@ async fn handle_stream(
         }
         TapHubRequest::InvalidateCache(req) => {
             let headers = req.headers.clone();
-            let resp = match handler.handle_invalidate_cache(req, headers).await {
+            let Some(result) =
+                until_client_gone(&conn, handler.handle_invalidate_cache(req, headers)).await
+            else {
+                tracing::warn!("client disconnected before its cache invalidation was answered");
+                return Ok(());
+            };
+            let resp = match result {
                 Ok(()) => TapHubResponse::InvalidateCacheOk,
                 Err(e) => TapHubResponse::Error(e),
             };

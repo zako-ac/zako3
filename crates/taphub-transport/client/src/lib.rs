@@ -91,6 +91,19 @@ impl TransportClient {
         })
     }
 
+    /// Closes every pooled connection, code `RESET_CLOSE_CODE`.
+    ///
+    /// The server observes this as the client going away, so any request still
+    /// in flight for this client is cancelled there instead of being served into
+    /// a connection nobody reads. The tests use it for exactly that; a shutdown
+    /// path could use it too. The per-request timeout path resets only the one
+    /// connection it landed on.
+    pub async fn close(&self) {
+        for conn in &self.conns {
+            conn.reset(RESET_CLOSE_CODE).await;
+        }
+    }
+
     /// Round-robin one connection out of the pool for a single request.
     fn pick_conn(&self) -> Arc<ReconnectingClient> {
         let idx = self.cursor.fetch_add(1, Ordering::Relaxed) % self.conns.len();

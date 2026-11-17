@@ -15,6 +15,7 @@ use zakofish_taphub::ZakofishError;
 use crate::hub::TapHub;
 use crate::metrics;
 
+use super::cancel::{Waited, wait_for_tap};
 use super::{cache::build_cache_item, cache::resolve_metadata, stream::bridge_rel};
 
 pub(crate) async fn handle_request_audio_inner(
@@ -38,6 +39,9 @@ pub(crate) async fn handle_request_audio_inner(
     let _enter = span.enter();
 
     let start = Instant::now();
+    // The budget covers the whole request, not just the tap leg: the tap lookup,
+    // the permission check and the cache query below all come out of it.
+    let deadline = start + tap_hub.request_timeout;
 
     let tap_id = request.tap_id.clone();
 
@@ -150,7 +154,7 @@ pub(crate) async fn handle_request_audio_inner(
     );
 
     // Cache miss: request from zakofish
-    let (connection_id, disconnect_rx) = conn_result?;
+    let (connection_id, mut disconnect_rx) = conn_result?;
     tracing::Span::current().record("connection_id", connection_id);
 
     let (succ, rel, mut unrel) = {
@@ -159,36 +163,40 @@ pub(crate) async fn handle_request_audio_inner(
             tap_id = %tap_id.0,
             connection_id,
         );
-        let zf_result = tokio::time::timeout(
-            tap_hub.request_timeout,
-            tap_hub
-                .zf_hub
-                .request_audio(
-                    tap_id.clone(),
-                    connection_id,
-                    request.audio_request.clone(),
-                    request.headers.clone(),
-                )
-                .instrument(zakofish_span),
-        )
-        .await
-        .map_err(|_| {
-            TapHubError::Internal(format!(
-                "Tap request timed out after {:?}",
-                tap_hub.request_timeout
-            ))
-        })?;
+        let request_fut = tap_hub
+            .zf_hub
+            .request_audio(
+                tap_id.clone(),
+                connection_id,
+                request.audio_request.clone(),
+                request.headers.clone(),
+            )
+            .instrument(zakofish_span);
 
-        match zf_result {
-            Ok(triple) => triple,
-            Err(ZakofishError::TapRequestFailure { reason, try_others }) => {
+        // Bounded by what is left of the request budget and by the tap
+        // connection's life; either one ending drops the request, which closes
+        // only this request's chan.
+        match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
+            Waited::Done(Ok(triple)) => triple,
+            Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
                 return Err(TapHubError::TapScript { reason, try_others });
             }
-            Err(e) => {
+            Waited::Done(Err(e)) => {
                 return Err(TapHubError::Internal(format!(
                     "Failed to request audio from tap: {}",
                     e
                 )));
+            }
+            Waited::TimedOut => {
+                return Err(TapHubError::Internal(format!(
+                    "Tap request timed out after {:?}",
+                    tap_hub.request_timeout
+                )));
+            }
+            Waited::Disconnected => {
+                // The tap is gone, which is the same condition `select_connection`
+                // reports as unavailable — not an internal fault.
+                return Err(TapHubError::TapUnavailable);
             }
         }
     };

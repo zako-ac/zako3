@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use chrono::Utc;
 use opentelemetry::global;
@@ -10,6 +11,7 @@ use zako3_types::{
     cache::{AudioCacheItem, AudioCacheItemKey},
 };
 
+use super::cancel::Waited;
 use crate::hub::TapHub;
 
 pub(crate) async fn handle_request_audio_meta_inner(
@@ -22,6 +24,11 @@ pub(crate) async fn handle_request_audio_meta_inner(
     let _enter = span.enter();
 
     let tap_id = req.tap_id.clone();
+    // The budget belongs to the whole request, not to the tap leg alone: the tap
+    // lookup, the permission check and the cache query above can each eat into
+    // it, and a request the caller has already given up on is not worth the
+    // remainder.
+    let deadline = Instant::now() + tap_hub.request_timeout;
 
     let tap = super::tap_lookup::resolve_tap(tap_hub, &tap_id).await?;
 
@@ -45,31 +52,54 @@ pub(crate) async fn handle_request_audio_meta_inner(
     // sees the tap's own reason instead of the generic "unavailable" message.
     enum FetchOutcome<M> {
         Ok(M),
-        ConnectionUnavailable,
+        Unavailable(Unavailable),
         TapFailure { reason: String, try_others: bool },
     }
 
+    /// Why there is no answer from the tap. Kept apart because they mean
+    /// different things to the caller: no connection is `TapUnavailable`, but a
+    /// tap that is connected and simply too slow is not "offline".
+    enum Unavailable {
+        NoConnection,
+        TimedOut,
+        Disconnected,
+        Transport,
+    }
+
+    // The metadata request is bounded twice: by what is left of the request
+    // budget, and by the life of the tap connection it is made on. Cancelling it
+    // drops the request's chan, and only that chan: the tap connection is a clone
+    // held by the hub, and nothing on this path closes it.
     let outcome = 'fetch: {
-        let Ok((connection_id, _disconnect_rx)) = tap_hub.select_connection(&tap_id).await else {
-            break 'fetch FetchOutcome::ConnectionUnavailable;
+        let Ok((connection_id, mut disconnect_rx)) = tap_hub.select_connection(&tap_id).await
+        else {
+            break 'fetch FetchOutcome::Unavailable(Unavailable::NoConnection);
         };
-        match tap_hub
-            .zf_hub
-            .request_audio_metadata(
-                tap_id.clone(),
-                connection_id,
-                req.request.clone(),
-                req.headers.clone(),
-            )
-            .await
-        {
-            Ok(m) => FetchOutcome::Ok(m),
-            Err(ZakofishError::TapRequestFailure { reason, try_others }) => {
+        let request = tap_hub.zf_hub.request_audio_metadata(
+            tap_id.clone(),
+            connection_id,
+            req.request.clone(),
+            req.headers.clone(),
+        );
+        match super::cancel::wait_for_tap(request, deadline, &mut disconnect_rx).await {
+            Waited::Done(Ok(m)) => FetchOutcome::Ok(m),
+            Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
                 FetchOutcome::TapFailure { reason, try_others }
             }
-            Err(e) => {
+            Waited::Done(Err(e)) => {
                 tracing::warn!(error = %e, "request_audio_metadata transport error; falling back");
-                FetchOutcome::ConnectionUnavailable
+                FetchOutcome::Unavailable(Unavailable::Transport)
+            }
+            Waited::TimedOut => {
+                tracing::warn!(
+                    timeout_ms = tap_hub.request_timeout.as_millis() as u64,
+                    "request_audio_metadata timed out; falling back"
+                );
+                FetchOutcome::Unavailable(Unavailable::TimedOut)
+            }
+            Waited::Disconnected => {
+                tracing::warn!("tap disconnected during the metadata request; falling back");
+                FetchOutcome::Unavailable(Unavailable::Disconnected)
             }
         }
     };
@@ -79,7 +109,7 @@ pub(crate) async fn handle_request_audio_meta_inner(
         FetchOutcome::TapFailure { reason, try_others } => {
             return Err(TapHubError::TapScript { reason, try_others });
         }
-        FetchOutcome::ConnectionUnavailable => {
+        FetchOutcome::Unavailable(kind) => {
             // Final cache fallback: metadata may have been populated concurrently
             // or may exist from prior audio request.
             if let Some(entry) = tap_hub.audio_cache.get_entry(&tap_id, &meta_key).await {
@@ -90,7 +120,16 @@ pub(crate) async fn handle_request_audio_meta_inner(
                     base_volume: tap.base_volume,
                 });
             }
-            return Err(TapHubError::TapUnavailable);
+            return Err(match kind {
+                Unavailable::NoConnection | Unavailable::Disconnected => TapHubError::TapUnavailable,
+                Unavailable::TimedOut => TapHubError::Internal(format!(
+                    "Tap metadata request timed out after {:?}",
+                    tap_hub.request_timeout
+                )),
+                Unavailable::Transport => {
+                    TapHubError::Internal("Tap metadata request failed in transport".to_string())
+                }
+            });
         }
     };
 

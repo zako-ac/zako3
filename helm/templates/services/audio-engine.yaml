@@ -82,7 +82,7 @@ spec:
             - name: TAPHUB_TRANSPORT_CERT_FILE
               value: "/certs/transport/{{ .Values.taphub.transportTlsCaFilename }}"
             - name: TAPHUB_REQUEST_TIMEOUT_MS
-              value: "6000"
+              value: {{ .Values.audioEngine.requestTimeoutMs | quote }}
             # Safety net for a track that stalls after it starts: nothing else
             # in the engine re-examines a playing track, so one stalled track
             # otherwise blocks every message queued behind it.

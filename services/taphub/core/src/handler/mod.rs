@@ -9,6 +9,7 @@ use crate::hub::TapHub;
 
 mod audio_request;
 mod cache;
+mod cancel;
 mod invalidate_cache;
 mod meta;
 mod permission;

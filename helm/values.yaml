@@ -110,7 +110,11 @@ taphub:
   transportTlsCertFilename: "transport-cert.pem"
   transportTlsKeyFilename: "transport-key.pem"
   transportTlsCaFilename: "ca-cert.pem"
-  requestTimeoutMs: "13000"
+  # Budget (ms) for a whole taphub request. Must stay *below* the audio engine's
+  # per-attempt taphub timeout (audioEngine.requestTimeoutMs, 6000ms) so the hub
+  # answers before its caller gives up, instead of holding a request the engine
+  # has already abandoned and reset its connection over.
+  requestTimeoutMs: "5000"
   # TTL (seconds) for tap connection-state leases in Redis; refreshed by the hub
   # on a heartbeat (~ttl/3) so stale state from a crash expires within this window.
   connectionLeaseTtlSecs: "30"
@@ -137,10 +141,11 @@ audioEngine:
     name: ""
     discordTokensKey: "discord-tokens"
     aeTokenKey: "ae-token"
-  # Per-attempt request timeout for AE → taphub transport calls (ms). Must be
-  # >= taphub.requestTimeoutMs (13s) or the AE gives up on requests the hub
-  # would still answer, making every slow tap look like a stall.
-  requestTimeoutMs: "13000"
+  # Per-attempt request timeout for AE -> taphub transport calls (ms). Two
+  # attempts make the 12s engine budget for one play. taphub's own budget
+  # (taphub.requestTimeoutMs, 5000ms) stays below the per-attempt value so the
+  # hub never holds a request the engine has already abandoned.
+  requestTimeoutMs: "6000"
   # How long a track may run with no end event and no audio progress before the
   # session watchdog stops it (seconds; "0" disables it). This is a safety net
   # for a stalled track, not a track-length limit: reconcile only runs on a
