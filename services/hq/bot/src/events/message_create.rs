@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use hq_core::service::playback::DroppedReason;
 use hq_core::{CoreResult, Service};
 use hq_types::{
-    hq::{DiscordUserId, TapId},
     AudioRequestString, ChannelId, GuildId, QueueName,
+    hq::{DiscordUserId, TapId},
 };
 use serenity::{
     all::{Context, EventHandler},
@@ -89,17 +90,17 @@ async fn handle_message_create(
     if service.tts_channel.is_enabled(&message_channel_id).await? {
         let content = msg.content.trim();
 
-            let user = service
-                .tap
-                .get_user_by_discord_id(&author_id.to_string())
-                .await?;
+        let user = service
+            .tap
+            .get_user_by_discord_id(&author_id.to_string())
+            .await?;
 
-            let user_id_optional = user.as_ref().map(|u| u.id.clone());
+        let user_id_optional = user.as_ref().map(|u| u.id.clone());
 
-            let settings = service
-                    .user_settings
-                    .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
-                    .await?;
+        let settings = service
+            .user_settings
+            .get_effective_settings(&user_id_optional, Some(&guild_id.to_string()))
+            .await?;
 
         let tap_id = resolve_tap_id_for_user(&service, &settings).await?;
 
@@ -108,12 +109,15 @@ async fn handle_message_create(
             .resolve_tts_channels(guild_id, message_channel_id, user_voice_info, &settings)
             .await?;
 
-        if !channel_ids.is_empty() {
+        let message_id = msg.id.to_string();
 
+        if !channel_ids.is_empty() {
             let attach_count = msg.attachments.len();
             let with_attach = if attach_count > 0 {
                 format!("첨부파일 {attach_count}개와 함께, {content}")
-            } else { content.to_string() };
+            } else {
+                content.to_string()
+            };
 
             let mapped: AudioRequestString = service
                 .mapping
@@ -139,20 +143,41 @@ async fn handle_message_create(
                 tracing::Span::current().record("tts_channel_count", channel_ids.len());
 
                 for channel_id in channel_ids {
-                    service
-                        .audio_engine
-                        .play(
+                    // One channel failing must not drop the message for the
+                    // others, and neither channel should abort the handler:
+                    // `play_with_retry` has already retried once, logged the
+                    // structured drop and counted it.
+                    let _ = service
+                        .playback
+                        .play_with_retry(
                             guild_id,
                             channel_id,
                             queue_name.clone(),
                             tap_id.clone(),
                             mapped.to_owned().into(),
                             1.0.into(),
-                            author_id.clone(),
+                            &author_id,
+                            Some(&message_id),
                         )
-                        .await?;
+                        .await;
                 }
+            } else {
+                service.playback.record_dropped(
+                    DroppedReason::MappingEmpty,
+                    guild_id,
+                    message_channel_id,
+                    &author_id,
+                    Some(&message_id),
+                );
             }
+        } else {
+            service.playback.record_dropped(
+                DroppedReason::NotInChannel,
+                guild_id,
+                message_channel_id,
+                &author_id,
+                Some(&message_id),
+            );
         }
     }
 
@@ -175,8 +200,15 @@ async fn resolve_tap_id_for_user(
         return Ok(tap_id.clone());
     }
     // Fallback: resolve default tap by name
-    if let Some(tap) = service.tap.get_tap_by_name(&hq_types::hq::TapName::from(FALLBACK_TAP_NAME.to_string())).await? {
+    if let Some(tap) = service
+        .tap
+        .get_tap_by_name(&hq_types::hq::TapName::from(FALLBACK_TAP_NAME.to_string()))
+        .await?
+    {
         return Ok(tap.id);
     }
-    Err(hq_core::CoreError::NotFound(format!("Default tap '{}' not found.", FALLBACK_TAP_NAME)))
+    Err(hq_core::CoreError::NotFound(format!(
+        "Default tap '{}' not found.",
+        FALLBACK_TAP_NAME
+    )))
 }

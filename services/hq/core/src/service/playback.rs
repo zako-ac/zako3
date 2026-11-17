@@ -1,10 +1,11 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Utc;
 use hq_types::{
-    AudioMetadata, ChannelId, GuildId, QueueName, TrackId, Volume,
+    AudioMetadata, AudioRequestString, ChannelId, GuildId, QueueName, TapHubError, TrackId, Volume,
     hq::{
-        UserSettings,
+        DiscordUserId, TapId, UserSettings,
         playback::{
             AudioMetadataDto, DiscordUserInfoDto, EditQueueDto, GuildPlaybackStateDto,
             PlaybackActionDto, QueueMetaDto, TrackDto,
@@ -479,6 +480,74 @@ impl PlaybackService {
         Ok(action_to_dto(&action))
     }
 
+    /// Play one track, retrying exactly once on a transient failure.
+    ///
+    /// A message a user typed must not disappear because a tap blipped or a
+    /// request timed out. One retry after a short backoff covers that; a
+    /// refusal or "nobody is listening" is an answer, so it is not retried.
+    /// When the message is finally dropped, the reason, the ids that identify
+    /// the message and the attempt count go out as one structured log line and
+    /// one counter increment.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn play_with_retry(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+        queue_name: QueueName,
+        tap_id: TapId,
+        audio_request_string: AudioRequestString,
+        volume: Volume,
+        discord_user_id: &DiscordUserId,
+        message_id: Option<&str>,
+    ) -> CoreResult<()> {
+        let (attempts, result) = attempt_play(|| {
+            self.audio_engine.play(
+                guild_id,
+                channel_id,
+                queue_name.clone(),
+                tap_id.clone(),
+                audio_request_string.clone(),
+                volume,
+                discord_user_id.clone(),
+            )
+        })
+        .await;
+
+        if let Err(err) = &result {
+            PlayDrop {
+                dropped_reason: DroppedReason::classify(err),
+                guild_id: guild_id.to_string(),
+                channel_id: channel_id.to_string(),
+                user_id: discord_user_id.0.clone(),
+                message_id: message_id.map(str::to_string),
+                // The engine mints the track id, so a play that failed has no
+                // track to point at. Kept as an explicit field so the log
+                // shape does not change once the engine reports one.
+                track_id: None,
+                attempts,
+            }
+            .record(err);
+        }
+
+        result
+    }
+
+    /// Record a message that never reached the engine at all: an empty mapping,
+    /// or a user the TTS routing did not place in a channel Zako is in.
+    ///
+    /// Lives here so the drop vocabulary and its counter have one owner rather
+    /// than being re-spelled in the bot.
+    pub fn record_dropped(
+        &self,
+        reason: DroppedReason,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+        discord_user_id: &DiscordUserId,
+        message_id: Option<&str>,
+    ) {
+        record_early_drop(reason, guild_id, channel_id, discord_user_id, message_id);
+    }
+
     /// Determines which voice channels should receive TTS audio given the user's
     /// voice state and their `TextReadingRule` setting.
     ///
@@ -543,5 +612,414 @@ impl PlaybackService {
                 Ok(vec![])
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Play retry and drop accounting
+// ---------------------------------------------------------------------------
+
+/// How many times one message is offered to the audio engine before it is
+/// dropped: the first attempt plus exactly one retry.
+pub const PLAY_MAX_ATTEMPTS: u32 = 2;
+
+/// Backoff between the first attempt and the retry. Deliberately short: a user
+/// is waiting on this message, and the engine's taphub client already retries a
+/// transport failure twice inside a single attempt.
+pub const PLAY_RETRY_BACKOFF: Duration = Duration::from_millis(300);
+
+/// Why a message never made it into the audio queue.
+///
+/// The first six are the audit's vocabulary. `EngineError` is the fallback for
+/// a transport or engine failure that fits none of them, kept separate so a
+/// drop is never mislabelled as something it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DroppedReason {
+    /// No tap connection is available, or the tap is unknown.
+    TapUnavailable,
+    /// The request to taphub timed out.
+    RequestTimeout,
+    /// The user may not use this tap.
+    PermissionDenied,
+    /// A session exists with nothing consuming its audio.
+    NoConsumer,
+    /// Routing placed the message in no channel Zako is in.
+    NotInChannel,
+    /// Text mapping produced nothing to say.
+    MappingEmpty,
+    /// Anything else: engine transport, an internal engine failure, a tap
+    /// script error.
+    EngineError,
+}
+
+impl DroppedReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TapUnavailable => "tap_unavailable",
+            Self::RequestTimeout => "request_timeout",
+            Self::PermissionDenied => "permission_denied",
+            Self::NoConsumer => "no_consumer",
+            Self::NotInChannel => "not_in_channel",
+            Self::MappingEmpty => "mapping_empty",
+            Self::EngineError => "engine_error",
+        }
+    }
+
+    /// Whether offering the same message again could succeed.
+    ///
+    /// A refusal and "nobody is listening" are answers: asking twice cannot
+    /// change them and only spends the user's time. A dead tap and a timeout
+    /// can be transient. [`is_retriable`] is the error-level decision that
+    /// `attempt_play` actually uses; this table is the reason-level view of it.
+    pub fn is_retriable(self) -> bool {
+        matches!(
+            self,
+            Self::TapUnavailable | Self::RequestTimeout | Self::EngineError
+        )
+    }
+
+    /// Classify a play failure.
+    ///
+    /// Structured variants carry most of the answer; the string match is only
+    /// for the two cases the error types flatten into free text (the taphub
+    /// transport's timeout and the "no consumer" response).
+    pub fn classify(err: &CoreError) -> Self {
+        match err {
+            CoreError::TapHub(TapHubError::TapUnavailable)
+            | CoreError::TapHub(TapHubError::TapNotFound(_)) => Self::TapUnavailable,
+            CoreError::TapHub(TapHubError::PermissionDenied(_)) | CoreError::Forbidden(_) => {
+                Self::PermissionDenied
+            }
+            CoreError::TapHub(TapHubError::Internal(msg)) | CoreError::Internal(msg) => {
+                Self::from_message(msg)
+            }
+            CoreError::InvalidInput(msg) => {
+                if msg.to_ascii_lowercase().contains("not in vc") {
+                    Self::NotInChannel
+                } else {
+                    Self::EngineError
+                }
+            }
+            CoreError::TapHub(TapHubError::TapScript { .. }) => Self::EngineError,
+            _ => Self::EngineError,
+        }
+    }
+
+    fn from_message(msg: &str) -> Self {
+        let lower = msg.to_ascii_lowercase();
+        if lower.contains("timed out") || lower.contains("timeout") {
+            Self::RequestTimeout
+        } else if lower.contains("no consumer") {
+            Self::NoConsumer
+        } else if lower.contains("not in vc") {
+            Self::NotInChannel
+        } else {
+            Self::EngineError
+        }
+    }
+}
+
+/// The record of one dropped message.
+///
+/// `channel_id` is the voice channel the play was addressed to on the play
+/// path, and the text channel the message arrived in for an early drop.
+/// `track_id` is absent for a play that never got a track back from the
+/// engine; the field exists so the log shape stays the same once it can.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlayDrop {
+    pub dropped_reason: DroppedReason,
+    pub guild_id: String,
+    pub channel_id: String,
+    pub user_id: String,
+    pub message_id: Option<String>,
+    pub track_id: Option<String>,
+    pub attempts: u32,
+}
+
+impl PlayDrop {
+    /// The drop as one JSON object. The log line carries this same object, so
+    /// what a log search shows and what this value says cannot disagree.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "dropped_reason": self.dropped_reason.as_str(),
+            "guild_id": self.guild_id,
+            "channel_id": self.channel_id,
+            "user_id": self.user_id,
+            "message_id": self.message_id,
+            "track_id": self.track_id,
+            "attempts": self.attempts,
+        })
+    }
+
+    /// Emit the drop as a structured log line and count it.
+    pub fn record(&self, err: &CoreError) {
+        let payload = self.to_json();
+        tracing::warn!(
+            dropped_reason = self.dropped_reason.as_str(),
+            guild_id = %self.guild_id,
+            channel_id = %self.channel_id,
+            user_id = %self.user_id,
+            message_id = self.message_id.as_deref().unwrap_or(""),
+            track_id = self.track_id.as_deref().unwrap_or(""),
+            attempts = self.attempts,
+            payload = %payload,
+            error = %err,
+            "message dropped: play failed"
+        );
+        crate::metrics::record_message_dropped(self.dropped_reason.as_str());
+    }
+}
+
+/// Record a message that was dropped without asking the engine to play it.
+///
+/// Logged at `debug` and deliberately **not** counted: `mapping_empty` and
+/// `not_in_channel` are ordinary states (a message the mapping rules stripped
+/// to nothing, a user who is not in a voice channel), not messages that were
+/// lost. Counting them would drown `hq_messages_dropped_total` in normal chat
+/// traffic. They are recorded so the audit's "silently disappears" list has no
+/// silent entry left.
+pub fn record_early_drop(
+    reason: DroppedReason,
+    guild_id: GuildId,
+    channel_id: ChannelId,
+    discord_user_id: &DiscordUserId,
+    message_id: Option<&str>,
+) {
+    let drop = PlayDrop {
+        dropped_reason: reason,
+        guild_id: guild_id.to_string(),
+        channel_id: channel_id.to_string(),
+        user_id: discord_user_id.0.clone(),
+        message_id: message_id.map(str::to_string),
+        track_id: None,
+        attempts: 0,
+    };
+    let payload = drop.to_json();
+    tracing::debug!(
+        dropped_reason = reason.as_str(),
+        guild_id = %drop.guild_id,
+        channel_id = %drop.channel_id,
+        user_id = %drop.user_id,
+        message_id = drop.message_id.as_deref().unwrap_or(""),
+        track_id = "",
+        attempts = 0,
+        payload = %payload,
+        "message not played"
+    );
+}
+
+/// Whether offering the same message to the engine again could succeed.
+///
+/// Only a failure taphub itself reported qualifies. `session.play` asks taphub
+/// for metadata *before* it writes the track, so a second attempt cannot
+/// duplicate audio on that path.
+///
+/// Everything the engine answers on its own (`CoreError::Internal`, a
+/// transport error) is left alone: the engine may already have queued the
+/// track before failing (`reconcile()` runs after the queue write), and
+/// nothing dedupes a second one, because `play` mints a fresh track id on
+/// every call and no engine reads `AudioEngineCommandRequest.idempotency_key`
+/// yet.
+pub fn is_retriable(err: &CoreError) -> bool {
+    match err {
+        CoreError::TapHub(TapHubError::TapUnavailable)
+        | CoreError::TapHub(TapHubError::TapNotFound(_))
+        | CoreError::TapHub(TapHubError::Internal(_)) => true,
+        // A tap script that calls its own failure permanent is an answer.
+        CoreError::TapHub(TapHubError::TapScript { try_others, .. }) => *try_others,
+        _ => false,
+    }
+}
+
+/// Runs `attempt` until it succeeds, fails in a way a retry cannot fix, or the
+/// one allowed retry has been spent. Returns how many attempts were made.
+pub async fn attempt_play<F, Fut>(mut attempt: F) -> (u32, CoreResult<()>)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = CoreResult<()>>,
+{
+    let mut attempts: u32 = 0;
+    loop {
+        attempts += 1;
+        match attempt().await {
+            Ok(()) => {
+                crate::metrics::record_play_attempt(attempts, true);
+                return (attempts, Ok(()));
+            }
+            Err(err) => {
+                let reason = DroppedReason::classify(&err);
+                crate::metrics::record_play_attempt(attempts, false);
+                if attempts >= PLAY_MAX_ATTEMPTS || !is_retriable(&err) {
+                    return (attempts, Err(err));
+                }
+                tracing::warn!(
+                    attempt = attempts,
+                    dropped_reason = reason.as_str(),
+                    error = %err,
+                    "play attempt failed; retrying once"
+                );
+                tokio::time::sleep(PLAY_RETRY_BACKOFF).await;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    };
+
+    use super::*;
+
+    fn timeout_err() -> CoreError {
+        CoreError::TapHub(TapHubError::Internal(
+            "taphub request timed out after 2 attempts (6000ms each)".into(),
+        ))
+    }
+
+    fn denied_err() -> CoreError {
+        CoreError::TapHub(TapHubError::PermissionDenied("tap-1".into()))
+    }
+
+    fn not_in_vc_err() -> CoreError {
+        CoreError::InvalidInput("Not in VC".into())
+    }
+
+    fn engine_err() -> CoreError {
+        CoreError::Internal("audio engine transport error: connection closed".into())
+    }
+
+    /// `attempt_play` with a scripted outcome: `failures` failed attempts, then
+    /// success. Returns the attempts made and the result.
+    async fn run(failures: u32, err: fn() -> CoreError) -> (u32, CoreResult<()>) {
+        let calls = Arc::new(AtomicU32::new(0));
+        let c = calls.clone();
+        let (attempts, result) = attempt_play(move || {
+            let c = c.clone();
+            async move {
+                let n = c.fetch_add(1, Ordering::SeqCst) + 1;
+                if n <= failures { Err(err()) } else { Ok(()) }
+            }
+        })
+        .await;
+        assert_eq!(attempts, calls.load(Ordering::SeqCst));
+        (attempts, result)
+    }
+
+    #[tokio::test]
+    async fn a_transient_failure_is_retried_exactly_once() {
+        let (attempts, result) = run(1, timeout_err).await;
+        assert_eq!(attempts, 2);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_second_failure_gives_up_after_two_attempts() {
+        let (attempts, result) = run(u32::MAX, timeout_err).await;
+        assert_eq!(attempts, 2, "one retry, never two");
+        assert!(matches!(result, Err(CoreError::TapHub(_))));
+    }
+
+    #[tokio::test]
+    async fn a_permission_denial_is_not_retried() {
+        let (attempts, result) = run(u32::MAX, denied_err).await;
+        assert_eq!(attempts, 1);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn not_being_in_the_channel_is_not_retried() {
+        let (attempts, result) = run(u32::MAX, not_in_vc_err).await;
+        assert_eq!(attempts, 1);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn an_engine_side_failure_is_not_retried() {
+        // The engine may have queued the track before it failed, and nothing
+        // dedupes a second copy, so this is never re-sent.
+        let (attempts, result) = run(u32::MAX, engine_err).await;
+        assert_eq!(attempts, 1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn only_taphub_reported_failures_are_retriable() {
+        assert!(is_retriable(&timeout_err()));
+        assert!(is_retriable(&CoreError::TapHub(TapHubError::TapUnavailable)));
+        assert!(is_retriable(&CoreError::TapHub(TapHubError::TapScript {
+            reason: "tap hiccup".into(),
+            try_others: true,
+        })));
+        assert!(!is_retriable(&denied_err()));
+        assert!(!is_retriable(&not_in_vc_err()));
+        assert!(!is_retriable(&CoreError::TapHub(TapHubError::TapScript {
+            reason: "permanent".into(),
+            try_others: false,
+        })));
+        assert!(!is_retriable(&engine_err()));
+    }
+
+    #[test]
+    fn the_reason_table_matches_what_a_retry_could_fix() {
+        assert!(DroppedReason::TapUnavailable.is_retriable());
+        assert!(DroppedReason::RequestTimeout.is_retriable());
+        assert!(!DroppedReason::PermissionDenied.is_retriable());
+        assert!(!DroppedReason::NotInChannel.is_retriable());
+        assert!(!DroppedReason::NoConsumer.is_retriable());
+        assert!(!DroppedReason::MappingEmpty.is_retriable());
+    }
+
+    #[test]
+    fn tap_and_permission_errors_classify_from_their_variants() {
+        assert_eq!(
+            DroppedReason::classify(&CoreError::TapHub(TapHubError::TapUnavailable)),
+            DroppedReason::TapUnavailable
+        );
+        assert_eq!(
+            DroppedReason::classify(&CoreError::TapHub(TapHubError::PermissionDenied(
+                "tap-1".into()
+            ))),
+            DroppedReason::PermissionDenied
+        );
+        assert_eq!(
+            DroppedReason::classify(&CoreError::Forbidden("Permission denied".into())),
+            DroppedReason::PermissionDenied
+        );
+        assert_eq!(
+            DroppedReason::classify(&CoreError::Internal("No consumer attached".into())),
+            DroppedReason::NoConsumer
+        );
+    }
+
+    #[test]
+    fn the_drop_record_carries_every_documented_field() {
+        let drop = PlayDrop {
+            dropped_reason: DroppedReason::TapUnavailable,
+            guild_id: "1444631500095094847".into(),
+            channel_id: "1444631500095094849".into(),
+            user_id: "462936250278739998".into(),
+            message_id: Some("1444631500095094851".into()),
+            track_id: None,
+            attempts: 2,
+        };
+
+        let json = drop.to_json();
+        let obj = json.as_object().expect("drop record is a JSON object");
+        for field in [
+            "dropped_reason",
+            "guild_id",
+            "channel_id",
+            "user_id",
+            "message_id",
+            "track_id",
+            "attempts",
+        ] {
+            assert!(obj.contains_key(field), "missing field {field}: {json}");
+        }
+        assert_eq!(obj["dropped_reason"], "tap_unavailable");
+        assert_eq!(obj["attempts"], 2);
     }
 }
