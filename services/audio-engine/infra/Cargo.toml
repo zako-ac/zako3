@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 zako3-taphub-transport-client.workspace = true
+zako3-audio-probe.workspace = true
 async-trait = "0.1.89"
 dashmap = "6.1.0"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -1,6 +1,7 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::process;
 use std::sync::Arc;
+use zako3_audio_probe::init_injection_from_env;
 use zako3_cache_client::RemoteAudioCache;
 use zako3_metrics::TapRedisMetrics;
 use zako3_preload_cache::AudioCache;
@@ -33,6 +34,9 @@ fn load_certs(
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Armed from ZAKO_STALL_INJECT at startup rather than on the first frame.
+    init_injection_from_env();
+
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     let config = AppConfig::load()?;

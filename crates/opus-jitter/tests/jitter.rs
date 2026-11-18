@@ -109,10 +109,18 @@ async fn a_late_retransmission_is_dropped_rather_than_played_out_of_order() {
     let frames = encode_frames(4);
     let (tx, rx) = mpsc::channel(16);
     for i in [0usize, 1, 2, 3] {
-        tx.try_send(TimedFrame { ts_ms: i as u64 * FRAME_MS, payload: frames[i].clone() }).unwrap();
+        tx.try_send(TimedFrame {
+            ts_ms: i as u64 * FRAME_MS,
+            payload: frames[i].clone(),
+        })
+        .unwrap();
     }
     // Frame 0 again, long after it played.
-    tx.try_send(TimedFrame { ts_ms: 0, payload: frames[0].clone() }).unwrap();
+    tx.try_send(TimedFrame {
+        ts_ms: 0,
+        payload: frames[0].clone(),
+    })
+    .unwrap();
     drop(tx);
 
     let jb = OpusJitterBuffer::new(rx, cfg()).unwrap();
@@ -134,7 +142,11 @@ async fn a_stream_that_never_produces_anything_ends_cleanly() {
 async fn a_stalled_sender_is_reported() {
     let frames = encode_frames(2);
     let (tx, rx) = mpsc::channel(4);
-    tx.try_send(TimedFrame { ts_ms: 0, payload: frames[0].clone() }).unwrap();
+    tx.try_send(TimedFrame {
+        ts_ms: 0,
+        payload: frames[0].clone(),
+    })
+    .unwrap();
     // Hold the sender open and send nothing more.
     let _held = tx;
 
@@ -165,7 +177,10 @@ async fn the_hard_cap_still_bounds_a_sender_that_cannot_be_paced() {
         ..cfg()
     };
     for i in 0..300u64 {
-        let _ = tx.try_send(TimedFrame { ts_ms: i * FRAME_MS, payload: frames[0].clone() });
+        let _ = tx.try_send(TimedFrame {
+            ts_ms: i * FRAME_MS,
+            payload: frames[0].clone(),
+        });
     }
     drop(tx);
 
@@ -236,7 +251,10 @@ async fn a_sender_running_ahead_is_paced_instead_of_decimated() {
     // channel open afterwards.
     let sender = tokio::spawn(async move {
         for i in 0..FRAMES {
-            let frame = TimedFrame { ts_ms: i * FRAME_MS, payload: frames[0].clone() };
+            let frame = TimedFrame {
+                ts_ms: i * FRAME_MS,
+                payload: frames[0].clone(),
+            };
             if tx.send(frame).await.is_err() {
                 return;
             }
@@ -260,7 +278,10 @@ async fn a_sender_running_ahead_is_paced_instead_of_decimated() {
         }
     }
 
-    assert_eq!(played, FRAMES, "every frame the sender produced must be played");
+    assert_eq!(
+        played, FRAMES,
+        "every frame the sender produced must be played"
+    );
     assert_eq!(jb.dropped_frames(), 0, "pacing leaves nothing to drop");
     sender.abort();
 }
@@ -273,8 +294,11 @@ async fn playback_waits_for_the_pre_roll() {
     let (tx, rx) = mpsc::channel(16);
     // Two frames is 40 ms: well short of the 200 ms pre-roll.
     for i in 0..2u64 {
-        tx.try_send(TimedFrame { ts_ms: i * FRAME_MS, payload: frames[i as usize].clone() })
-            .unwrap();
+        tx.try_send(TimedFrame {
+            ts_ms: i * FRAME_MS,
+            payload: frames[i as usize].clone(),
+        })
+        .unwrap();
     }
 
     let cfg = JitterConfig {
@@ -292,9 +316,12 @@ async fn playback_waits_for_the_pre_roll() {
 
     // The rest of the stream arrives, and then plays out in full.
     for i in 2..6u64 {
-        tx.send(TimedFrame { ts_ms: i * FRAME_MS, payload: frames[i as usize].clone() })
-            .await
-            .unwrap();
+        tx.send(TimedFrame {
+            ts_ms: i * FRAME_MS,
+            payload: frames[i as usize].clone(),
+        })
+        .await
+        .unwrap();
     }
     drop(tx);
 
@@ -315,9 +342,16 @@ async fn playback_waits_for_the_pre_roll() {
 async fn without_a_pre_roll_playback_starts_immediately() {
     let frames = encode_frames(1);
     let (tx, rx) = mpsc::channel(16);
-    tx.try_send(TimedFrame { ts_ms: 0, payload: frames[0].clone() }).unwrap();
+    tx.try_send(TimedFrame {
+        ts_ms: 0,
+        payload: frames[0].clone(),
+    })
+    .unwrap();
 
-    let cfg = JitterConfig { pre_roll_ms: 0, ..cfg() };
+    let cfg = JitterConfig {
+        pre_roll_ms: 0,
+        ..cfg()
+    };
     let mut jb = OpusJitterBuffer::new(rx, cfg).unwrap();
     let held = tx;
 
@@ -335,8 +369,11 @@ async fn a_stall_with_audio_still_buffered_resumes() {
     let (tx, rx) = mpsc::channel(16);
     // A hole between 40 ms and 100 ms that will never fill, with audio past it.
     for i in [0usize, 1, 5] {
-        tx.try_send(TimedFrame { ts_ms: i as u64 * FRAME_MS, payload: frames[i].clone() })
-            .unwrap();
+        tx.try_send(TimedFrame {
+            ts_ms: i as u64 * FRAME_MS,
+            payload: frames[i].clone(),
+        })
+        .unwrap();
     }
     let _held = tx;
 
@@ -365,12 +402,20 @@ async fn occupancy_is_reported_in_milliseconds() {
     let frames = encode_frames(10);
     let (tx, rx) = mpsc::channel(64);
     for (i, frame) in frames.iter().enumerate() {
-        tx.try_send(TimedFrame { ts_ms: i as u64 * FRAME_MS, payload: frame.clone() }).unwrap();
+        tx.try_send(TimedFrame {
+            ts_ms: i as u64 * FRAME_MS,
+            payload: frame.clone(),
+        })
+        .unwrap();
     }
     drop(tx);
 
     let mut jb = OpusJitterBuffer::new(rx, cfg()).unwrap();
-    assert_eq!(jb.buffered_ms(), 0, "nothing is buffered before the first pull");
+    assert_eq!(
+        jb.buffered_ms(),
+        0,
+        "nothing is buffered before the first pull"
+    );
 
     let _ = jb.yield_pcm().await.unwrap();
     let buffered = jb.buffered_ms();
@@ -378,4 +423,51 @@ async fn occupancy_is_reported_in_milliseconds() {
         (100..=200).contains(&buffered),
         "ten 20 ms frames minus what played: got {buffered}ms"
     );
+}
+
+/// The buffer counts what it did with every frame it was handed.
+///
+/// `inserted` is the number the stall device compares against the transport's
+/// socket counter, so it has to mean exactly "accepted into the buffer" — a
+/// frame that arrived after its slot had been played past is counted `late`
+/// and never inserted.
+#[tokio::test]
+async fn a_frame_after_its_slot_is_counted_late_and_not_inserted() {
+    let frames = encode_frames(40);
+    let (tx, rx) = mpsc::channel(256);
+    let mut jb = OpusJitterBuffer::new(rx, cfg()).expect("buffer");
+
+    for (i, frame) in frames.iter().enumerate().take(20) {
+        tx.send(TimedFrame {
+            ts_ms: i as u64 * FRAME_MS,
+            payload: frame.clone(),
+        })
+        .await
+        .expect("send");
+    }
+
+    // Let playback pass the first ten frames.
+    for _ in 0..10 {
+        jb.yield_pcm().await.expect("play").expect("pcm");
+    }
+
+    // A retransmission of the very first frame: its slot is long gone.
+    tx.send(TimedFrame {
+        ts_ms: 0,
+        payload: frames[0].clone(),
+    })
+    .await
+    .expect("send late frame");
+
+    let _ = jb.yield_pcm().await;
+    let stats = jb.stats();
+
+    assert!(stats.late >= 1, "the stale frame is counted late");
+    assert_eq!(
+        stats.inserted, 20,
+        "only the 20 in-window frames were inserted"
+    );
+    assert_eq!(stats.stall_events, 0);
+    assert_eq!(stats.capacity, cfg().max_buffered_frames);
+    assert!(stats.last_insert_unix_ms > 0, "the last insert is stamped");
 }

@@ -1,0 +1,15 @@
+[package]
+name = "zako3-audio-probe"
+version = "0.1.0"
+edition = "2024"
+description = "Hop-by-hop stall instrumentation for the audio path (tap -> taphub -> engine)."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+tokio = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+opentelemetry = "0.31"

@@ -22,11 +22,17 @@ use zako3_audio_engine_infra::{
     RedisStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
+use zako3_audio_probe::init_injection_from_env;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
 use zako3_telemetry::TelemetryConfig;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Armed from ZAKO_STALL_INJECT at startup rather than on the first frame.
+    if let Some(spec) = init_injection_from_env() {
+        tracing::warn!(spec = %spec, "synthetic stall injection armed at startup");
+    }
+
     let config = AppConfig::load();
 
     println!("Starting zako3 audio engine...");
@@ -65,6 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 {
                     Ok(t) => {
                         tracing::info!("Connected to taphub");
+                        // Let a stall report carry taphub's two hops as well as
+                        // the engine's own: the reader is best-effort and a
+                        // missing Redis only costs the report its upstream half.
+                        let t = t.with_upstream_hops(
+                            zako3_audio_engine_infra::RedisUpstreamHops::new(&config.redis_url),
+                        );
                         *cell.lock().await = Some(Arc::new(t));
                         break;
                     }

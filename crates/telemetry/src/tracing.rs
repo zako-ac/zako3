@@ -12,17 +12,28 @@ pub(crate) fn build_metadata(headers_env: Option<String>) -> MetadataMap {
     let mut metadata = MetadataMap::new();
     if let Some(headers_str) = headers_env {
         for pair in headers_str.split(',') {
-            if let Some((k, v)) = pair.split_once('=') {
-                if let (Ok(key), Ok(val)) = (
+            if let Some((k, v)) = pair.split_once('=')
+                && let (Ok(key), Ok(val)) = (
                     k.trim().to_lowercase().parse::<MetadataKey<Ascii>>(),
                     v.trim().parse::<MetadataValue<Ascii>>(),
-                ) {
-                    metadata.insert(key, val);
-                }
+                )
+            {
+                metadata.insert(key, val);
             }
         }
     }
     metadata
+}
+
+/// A boolean-ish env var: set and not `0`/`false`/`no`/empty.
+fn truthy_env(key: &str) -> bool {
+    match std::env::var(key) {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            !(v.is_empty() || v == "0" || v == "false" || v == "no" || v == "off")
+        }
+        Err(_) => false,
+    }
 }
 
 pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow::Result<()> {
@@ -37,8 +48,22 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
         default_hook(info);
     }));
 
+    // `protofish3` debug logging is a diagnosis-only switch: it is verbose
+    // enough that leaving it on for normal traffic is its own problem. It is
+    // turned on for an investigation window with one env var rather than by
+    // editing RUST_LOG, so the rest of the filter stays exactly as deployed.
+    let protofish3_debug = truthy_env("ZAKO_PROTOFISH3_DEBUG");
+    let mut filter_directives = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    if protofish3_debug && !filter_directives.trim().is_empty() {
+        filter_directives.push(',');
+    }
+    if protofish3_debug {
+        filter_directives.push_str("protofish3=debug");
+    }
+    // `try_new` rather than `new`: a malformed RUST_LOG must fall back to the
+    // default filter, not silently parse to "everything off".
     let console_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        EnvFilter::try_new(&filter_directives).unwrap_or_else(|_| EnvFilter::new("info"));
     let fmt_layer = fmt::layer()
         .with_target(true)
         .with_level(true)
@@ -85,6 +110,12 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
         registry.with(otel_layer).with(log_bridge).init();
     } else {
         registry.init();
+    }
+
+    if protofish3_debug {
+        // Logged after the subscriber is installed; before it, the line goes
+        // nowhere.
+        ::tracing::info!("ZAKO_PROTOFISH3_DEBUG is set: protofish3 debug logging enabled");
     }
 
     Ok(())

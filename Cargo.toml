@@ -20,6 +20,7 @@ members = [
     "crates/metrics",
     "crates/tap-select",
     "crates/opus-jitter",
+    "crates/audio-probe",
 ]
 
 [workspace.dependencies]
@@ -34,6 +35,7 @@ zako3-states = { path = "crates/states" }
 zako3-metrics = { path = "crates/metrics" }
 zako3-tap-select = { path = "crates/tap-select" }
 zako3-opus-jitter = { path = "crates/opus-jitter" }
+zako3-audio-probe = { path = "crates/audio-probe" }
 
 zako3-tts-matching = { path = "crates/tts-matching" }
 zako3-emoji-matcher-proto = { path = "crates/emoji-matcher-proto" }
