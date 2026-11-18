@@ -147,10 +147,34 @@ Key methods in `TapService` and `AuthService` are instrumented with `#[tracing::
 
 ### HQ (`meter: "hq"`)
 
-| Metric | Type | Labels |
+| Metric | Type | Labels | Notes |
+|---|---|---|---|
+| `hq_http_requests_total` | Counter | `method`, `path`, `status` | HTTP layer (`hq-backend`) |
+| `hq_http_request_duration_seconds` | Histogram | `method`, `path` | HTTP layer (`hq-backend`) |
+| `hq_play_attempts_total` | Counter | `attempt` (1-based), `result`: ok/error | One increment per attempt sent to the audio engine; a message that needed its retry shows `attempt=1,result=error` then `attempt=2,result=ok` |
+| `hq_messages_dropped_total` | Counter | `dropped_reason` | One increment per channel a message failed to reach, after at most one retry. See below for the reason vocabulary |
+
+Both play counters are created lazily on the first increment, so a fresh pod
+shows neither family on `/metrics` until a message has actually been played or
+dropped — scrape after some traffic, not right after start.
+
+Metric names on `/metrics` are exactly the instrument names below (and the names
+OTLP/ClickStack carries): the exporter in `crates/telemetry` is built with the
+`_total` and unit suffixes turned off, so a counter is not reported as
+`…_total_total` and a `…_seconds` histogram is not reported as `…_seconds_seconds`.
+
+`dropped_reason` is one of:
+
+| Value | Meaning | Counted |
 |---|---|---|
-| `hq_http_requests_total` | Counter | `method`, `path`, `status` |
-| `hq_http_request_duration_seconds` | Histogram | `method`, `path` |
+| `tap_unavailable` | No tap connection, or the tap is unknown | yes |
+| `request_timeout` | The taphub request timed out (both attempts) | yes |
+| `permission_denied` | taphub answered that the user may not use this tap | yes |
+| `no_consumer` | The engine refused: the session has nothing that would play | yes |
+| `engine_error` | An engine-side transport or internal failure | yes |
+| `not_in_channel` | Routing placed the message in no channel Zako is in | no — logged at `debug`, ordinary state |
+| `mapping_empty` | Text mapping produced nothing to say | no — logged at `debug`, ordinary state |
+
 
 ### TapHub (`meter: "taphub"`)
 
@@ -166,7 +190,9 @@ Key methods in `TapService` and `AuthService` are instrumented with `#[tracing::
 
 ### Audio Engine (`meter: "zako3-audio-engine"` via Prometheus registry)
 
-Audio engine metrics are emitted as Prometheus metrics and scraped directly. See `audio-engine/telemetry/src/` for the registry setup.
+Audio engine metrics are emitted as Prometheus metrics and scraped directly. The
+registry setup is the shared one in `crates/telemetry` (`zako3_telemetry::init`);
+`services/audio-engine/telemetry/` is an older copy of it that no service builds.
 
 ---
 
