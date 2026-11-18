@@ -11,13 +11,15 @@ use std::io::BufReader;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-use zako3_opus_jitter::{JitterConfig, OpusJitterBuffer};
+use zako3_opus_jitter::{JitterConfig, JitterError, OpusJitterBuffer};
 use zako3_taphub_transport_lib::{TapHubRequest, TapHubResponse};
-use zako3_types::{AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError};
+use zako3_types::{
+    AudioMetaResponse, AudioRequest, AudioResponse, CachedAudioRequest, TapHubError,
+};
 
 const RESET_CLOSE_CODE: u64 = 1;
 const MAX_ATTEMPTS: usize = 2;
@@ -26,6 +28,34 @@ const MAX_ATTEMPTS: usize = 2;
 /// connection a failing request landed on, so it never tears down siblings on the other
 /// pooled connections — the whole point of the pool.
 const POOL_SIZE: usize = 4;
+/// How long an abandoned track waits for the peer to end the transfer on its own
+/// before the receive side is ended by hand.
+///
+/// Sending `RecvEnd` while the peer's own end-of-transfer frame is already in flight
+/// is a protocol violation, and the driver treats one as fatal for the whole
+/// connection — the very thing this abort path exists to avoid. Waiting one round
+/// trip lets the common case (a listener that left while the tap was finishing)
+/// resolve itself with nothing on the wire.
+const XFER_DRAIN_GRACE: Duration = Duration::from_millis(500);
+/// Bound on the handshake that ends the receive side.
+const XFER_END_TIMEOUT: Duration = Duration::from_secs(1);
+/// How many exchanges in a row may time out on one pooled connection before
+/// `pick_conn` stops handing it requests.
+///
+/// Without a reset there is nothing else that evicts a *wedged* connection — one
+/// whose peer still answers QUIC keepalives but never answers an application
+/// request. Left in the round-robin it would make one exchange in `POOL_SIZE` pay
+/// the full timeout for the life of the process.
+const WEDGED_AFTER: u32 = 2;
+/// How long a wedged connection is kept out of the rotation before one request is
+/// allowed to probe it again.
+///
+/// The quarantine has to expire: while a connection is skipped nothing is sent to
+/// it, so no success can ever clear the count, and a permanent skip would silently
+/// shrink the pool for the rest of the process after one transient slowdown. After
+/// this window the next pick lands on it, and an answer puts it straight back into
+/// full rotation.
+const WEDGE_COOLDOWN: Duration = Duration::from_secs(30);
 
 pub struct TransportClient {
     /// Pool of independent reconnecting connections. Requests round-robin across them via
@@ -33,6 +63,22 @@ pub struct TransportClient {
     conns: Vec<Arc<ReconnectingClient>>,
     cursor: AtomicUsize,
     request_timeout: Duration,
+    /// Consecutive timeouts per pooled connection, parallel to `conns`.
+    timeouts: Vec<AtomicU32>,
+    /// When a wedged connection may be tried again, in milliseconds since `started`.
+    /// Zero means "not wedged"; see `WEDGE_COOLDOWN`.
+    wedged_until_ms: Vec<AtomicU64>,
+    /// Base for the cooldown clock, so a deadline is a plain atomic integer.
+    started: Instant,
+    /// Per-track jitter buffer settings. Production runs the defaults; tests shorten
+    /// `stall_timeout` so a stall can be observed in a second instead of fifteen.
+    jitter: JitterConfig,
+    /// Pooled connections this client has reset since it was built.
+    ///
+    /// Counts reset attempts: a reset tears down every stream multiplexed over that
+    /// connection, so it is a last resort kept for a transport that is really broken —
+    /// a request that merely timed out must not move this counter.
+    resets: AtomicU64,
 }
 
 impl TransportClient {
@@ -88,6 +134,11 @@ impl TransportClient {
             conns,
             cursor: AtomicUsize::new(0),
             request_timeout,
+            timeouts: (0..POOL_SIZE).map(|_| AtomicU32::new(0)).collect(),
+            wedged_until_ms: (0..POOL_SIZE).map(|_| AtomicU64::new(0)).collect(),
+            started: Instant::now(),
+            jitter: JitterConfig::default(),
+            resets: AtomicU64::new(0),
         })
     }
 
@@ -96,18 +147,67 @@ impl TransportClient {
     /// The server observes this as the client going away, so any request still
     /// in flight for this client is cancelled there instead of being served into
     /// a connection nobody reads. The tests use it for exactly that; a shutdown
-    /// path could use it too. The per-request timeout path resets only the one
-    /// connection it landed on.
+    /// path could use it too. It is not what a slow request does — that one
+    /// abandons its own channel and leaves the connection up.
     pub async fn close(&self) {
         for conn in &self.conns {
+            self.resets.fetch_add(1, Ordering::Relaxed);
             conn.reset(RESET_CLOSE_CODE).await;
         }
     }
 
-    /// Round-robin one connection out of the pool for a single request.
-    fn pick_conn(&self) -> Arc<ReconnectingClient> {
-        let idx = self.cursor.fetch_add(1, Ordering::Relaxed) % self.conns.len();
-        Arc::clone(&self.conns[idx])
+    /// Replace the jitter buffer settings used for every track this client streams.
+    ///
+    /// Tuning and tests only; production takes the defaults. A shorter
+    /// `stall_timeout` is how a stall is reproduced in a test without waiting the
+    /// fifteen seconds the audit measured.
+    pub fn with_jitter_config(mut self, jitter: JitterConfig) -> Self {
+        self.jitter = jitter;
+        self
+    }
+
+    /// Reset attempts this client has made, on `close()` or on a transport failure.
+    ///
+    /// Stays at zero while requests only time out or tracks only stall: neither
+    /// resets a connection now.
+    pub fn resets_total(&self) -> u64 {
+        self.resets.load(Ordering::Relaxed)
+    }
+
+    /// Round-robin one connection out of the pool for a single attempt, skipping
+    /// connections that have timed out `WEDGED_AFTER` times in a row.
+    ///
+    /// When every connection is wedged the rotation is used anyway: refusing to
+    /// send would turn a taphub-wide slowdown into an outage of our own.
+    fn pick_conn(&self) -> (usize, Arc<ReconnectingClient>) {
+        let n = self.conns.len();
+        let start = self.cursor.fetch_add(1, Ordering::Relaxed) % n;
+        let now = self.now_ms();
+        let idx = pick_index(start, n, |i| {
+            self.timeouts[i].load(Ordering::Relaxed) >= WEDGED_AFTER
+                && now < self.wedged_until_ms[i].load(Ordering::Relaxed)
+        });
+        (idx, Arc::clone(&self.conns[idx]))
+    }
+
+    /// Milliseconds since this client was built, for the cooldown deadline.
+    fn now_ms(&self) -> u64 {
+        self.started.elapsed().as_millis() as u64
+    }
+
+    /// Record a timeout on `idx`; `WEDGED_AFTER` in a row starts a cooldown.
+    fn note_timeout(&self, idx: usize) {
+        let count = self.timeouts[idx].fetch_add(1, Ordering::Relaxed) + 1;
+        if count >= WEDGED_AFTER {
+            let until = self.now_ms() + WEDGE_COOLDOWN.as_millis() as u64;
+            self.wedged_until_ms[idx].store(until, Ordering::Relaxed);
+        }
+    }
+
+    /// Record an answer on `idx`: it is healthy and back in full rotation.
+    fn note_ok(&self, idx: usize) {
+        self.timeouts[idx].store(0, Ordering::Relaxed);
+        self.wedged_until_ms[idx].store(0, Ordering::Relaxed);
     }
 
     async fn round_trip_once(
@@ -123,10 +223,13 @@ impl TransportClient {
     /// One request/response exchange with a per-attempt timeout, isolated to a single
     /// pooled connection so a failure here never disturbs sibling requests on the other
     /// pooled connections. Recovery is scoped:
-    /// - **Timeout**: the request's own QUIC stream is dropped when the future is
-    ///   cancelled, and we reset *this* pooled connection before retrying so a wedged
-    ///   connection (one that accepts the channel but never answers) is evicted from
-    ///   the pool instead of being reused forever. Sibling connections are untouched.
+    /// - **Timeout**: only this request's channel is abandoned, by dropping it. The
+    ///   connection stays up — every track streaming over it would die with a reset —
+    ///   and the retry moves to the next connection in the pool instead. A connection
+    ///   that is genuinely dead is already evicted by the transport keepalive (5s
+    ///   interval, 15s timeout); one that stays alive but never answers is counted and
+    ///   skipped by `pick_conn` for `WEDGE_COOLDOWN` after `WEDGED_AFTER` timeouts, and
+    ///   probed again when that window closes.
     /// - **Transport error**: reset only *this* pooled connection, then retry.
     ///
     /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
@@ -136,16 +239,27 @@ impl TransportClient {
     async fn round_trip(
         &self,
         payload: Vec<u8>,
-    ) -> Result<(Arc<ReconnectingClient>, ChanSender, ChanReceiver, TapHubResponse), TapHubError>
-    {
-        let conn = self.pick_conn();
+    ) -> Result<
+        (
+            Arc<ReconnectingClient>,
+            ChanSender,
+            ChanReceiver,
+            TapHubResponse,
+        ),
+        TapHubError,
+    > {
         for attempt in 1..=MAX_ATTEMPTS {
+            // Picked per attempt, not once per exchange: a retry after a timeout must
+            // not go back onto the connection that just failed to answer.
+            let (idx, conn) = self.pick_conn();
             match tokio::time::timeout(self.request_timeout, Self::round_trip_once(&conn, &payload))
                 .await
             {
                 Ok(Ok((sender, receiver, resp_payload))) => {
                     let resp: TapHubResponse = rmp_serde::from_slice(&resp_payload)
                         .map_err(|e| TapHubError::Internal(e.to_string()))?;
+                    // It answered, so whatever made it slow before is gone.
+                    self.note_ok(idx);
                     return Ok((conn, sender, receiver, resp));
                 }
                 Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
@@ -155,21 +269,26 @@ impl TransportClient {
                         "taphub request failed on transport; resetting this pooled connection and retrying"
                     );
                     // Scoped to this one pooled connection — siblings are untouched.
+                    self.resets.fetch_add(1, Ordering::Relaxed);
                     conn.reset(RESET_CLOSE_CODE).await;
+                    // A fresh connection has no history of timing out.
+                    self.note_ok(idx);
                 }
                 Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
                 Err(_) if attempt < MAX_ATTEMPTS => {
                     tracing::warn!(
                         timeout_ms = self.request_timeout.as_millis() as u64,
                         attempt,
-                        "taphub request timed out; resetting this pooled connection and retrying"
+                        "taphub request timed out; abandoning only this request's channel and retrying on another pooled connection"
                     );
-                    // A connection that accepts a channel but never answers is wedged;
-                    // leaving it intact (as before) kept routing requests to a dead
-                    // connection forever. Reset it so the retry lands on a fresh one.
-                    conn.reset(RESET_CLOSE_CODE).await;
+                    // Deliberately no `conn.reset` here: dropping the timed-out future
+                    // closes this request's channel, while a reset would cut off every
+                    // other track multiplexed over the same connection. Blame the
+                    // connection instead, so a wedged one leaves the rotation.
+                    self.note_timeout(idx);
                 }
                 Err(_) => {
+                    self.note_timeout(idx);
                     return Err(TapHubError::Internal(format!(
                         "taphub request timed out after {} attempts ({}ms each)",
                         MAX_ATTEMPTS,
@@ -187,7 +306,10 @@ impl TransportClient {
         Ok(resp)
     }
 
-    pub async fn request_audio(&self, req: CachedAudioRequest) -> Result<AudioResponse, TapHubError> {
+    pub async fn request_audio(
+        &self,
+        req: CachedAudioRequest,
+    ) -> Result<AudioResponse, TapHubError> {
         let req_clone = req.clone();
         let payload = rmp_serde::to_vec(&TapHubRequest::RequestAudio(req))
             .map_err(|e| TapHubError::Internal(e.to_string()))?;
@@ -200,6 +322,7 @@ impl TransportClient {
                 let conn_clone = conn;
                 let xfer_timeout = self.request_timeout;
                 let invalidate_timeout = self.request_timeout;
+                let jitter_config = self.jitter.clone();
 
                 tokio::spawn(async move {
                     // Keep the sender alive for the duration of the transfer so the
@@ -231,47 +354,116 @@ impl TransportClient {
                     };
 
                     let (frame_tx, frame_rx) = mpsc::channel(jitter::CHANNEL_CAP);
-                    let mut jitter =
-                        match OpusJitterBuffer::new(frame_rx, JitterConfig::default()) {
-                            Ok(j) => j,
-                            Err(e) => {
-                                tracing::error!("Failed to create jitter buffer: {:?}", e);
-                                return;
-                            }
-                        };
-
-                    // Both halves run in this task: the transfer borrows the
-                    // channel receiver above, so the pump cannot be spawned
-                    // separately.
-                    let pump = jitter::pump(&mut single, frame_tx);
-                    let consume = async {
-                        loop {
-                            match jitter.yield_pcm().await {
-                                Ok(Some(pcm)) => {
-                                    if tx.send(pcm).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Ok(None) => break, // Stream ended
-                                Err(e) => {
-                                    tracing::error!("Jitter buffer error: {:?}", e);
-                                    if e.to_string().contains("InvalidPacket") {
-                                        tracing::warn!(
-                                            "Invalid opus packet detected; invalidating cache"
-                                        );
-                                        send_invalidate_cache(
-                                            conn_clone,
-                                            req_clone,
-                                            invalidate_timeout,
-                                        )
-                                        .await;
-                                    }
-                                    break;
-                                }
-                            }
+                    let stall_timeout = jitter_config.stall_timeout;
+                    let mut jitter = match OpusJitterBuffer::new(frame_rx, jitter_config) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            tracing::error!("Failed to create jitter buffer: {:?}", e);
+                            return;
                         }
                     };
-                    tokio::join!(pump, consume);
+
+                    // The pump and the consumer race for the life of the track, and the
+                    // task ends when either is done with it. `join!` here was the bug:
+                    // a consumer that gave up on a stalled source left the pump alive,
+                    // the PCM sender was never dropped, the decoder never saw EOF and
+                    // the mixer never ended the track. Aborting the pump is what ends
+                    // it — the transfer borrows the channel receiver, so the pump cannot
+                    // be a task of its own.
+                    let end = {
+                        let pump = jitter::pump(&mut single, frame_tx);
+                        tokio::pin!(pump);
+
+                        let consume = async {
+                            loop {
+                                match jitter.yield_pcm().await {
+                                    Ok(Some(pcm)) => {
+                                        if tx.send(pcm).await.is_err() {
+                                            return TrackEnd::ConsumerGone;
+                                        }
+                                    }
+                                    Ok(None) => return TrackEnd::Eof, // Stream ended
+                                    Err(e) => {
+                                        if matches!(e, JitterError::Stalled(_)) {
+                                            // The source went quiet for longer than the
+                                            // buffer waits: a wedge upstream, not the end
+                                            // of the stream. This is the case that used to
+                                            // leave the track hanging forever.
+                                            tracing::warn!(
+                                                stall_ms = stall_timeout.as_millis() as u64,
+                                                "jitter buffer stalled; ending the track"
+                                            );
+                                            return TrackEnd::Stalled;
+                                        }
+                                        tracing::error!("Jitter buffer error: {:?}", e);
+                                        // Defensive: no `JitterError` variant reaches
+                                        // this branch today (the buffer reports only
+                                        // `Opus` and `Stalled`), so a corrupt packet
+                                        // currently ends as `decode-failure`. Kept so
+                                        // the cache-invalidation path is already here
+                                        // if the buffer grows that variant.
+                                        if e.to_string().contains("InvalidPacket") {
+                                            tracing::warn!(
+                                                "Invalid opus packet detected; invalidating cache"
+                                            );
+                                            send_invalidate_cache(
+                                                conn_clone,
+                                                req_clone,
+                                                invalidate_timeout,
+                                            )
+                                            .await;
+                                            return TrackEnd::InvalidPacket;
+                                        }
+                                        return TrackEnd::DecodeFailure;
+                                    }
+                                }
+                            }
+                        };
+                        tokio::pin!(consume);
+
+                        tokio::select! {
+                            end = consume.as_mut() => end,
+                            // The transfer finished before playback did. That is not a
+                            // reason to cut off the audio still buffered: its sender is
+                            // gone, so the channel is closed and the consumer drains
+                            // what is left and reports the end of the stream itself.
+                            _ = pump.as_mut() => consume.as_mut().await,
+                        }
+                    };
+                    // The pinned futures die with that block, which releases the borrow
+                    // on the transfer so it can be ended cleanly here.
+
+                    if !matches!(end, TrackEnd::Eof) {
+                        // Let the peer end the transfer itself where it can. Frames
+                        // that land here are discarded: the consumer is gone.
+                        let peer_finished = tokio::time::timeout(XFER_DRAIN_GRACE, async {
+                            while single.recv().await.is_some() {}
+                        })
+                        .await
+                        .is_ok();
+
+                        if !peer_finished {
+                            // Still open, so say the receive side is over rather than
+                            // leave the peer pushing frames into nothing.
+                            match tokio::time::timeout(XFER_END_TIMEOUT, single.end()).await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(e)) => tracing::warn!(
+                                    reason = end.reason(),
+                                    error = %e,
+                                    "peer refused the end of the receive side"
+                                ),
+                                Err(_) => tracing::warn!(
+                                    reason = end.reason(),
+                                    "timed out ending the receive side of an abandoned transfer"
+                                ),
+                            }
+                        }
+                    }
+
+                    tracing::info!(
+                        reason = end.reason(),
+                        "audio track finished; the PCM sender is being dropped"
+                    );
 
                     if jitter.dropped_frames() > 0 {
                         // The pf3 path has no back channel to the tap, so the
@@ -333,6 +525,53 @@ impl TransportClient {
     }
 }
 
+/// The index of the pooled connection the next attempt should use.
+///
+/// Starts at the round-robin cursor and takes the first connection that has not
+/// timed out `WEDGED_AFTER` times in a row. When every connection is wedged the
+/// rotation is used anyway: refusing to send would turn a taphub-wide slowdown into
+/// an outage of our own.
+fn pick_index(start: usize, n: usize, is_wedged: impl Fn(usize) -> bool) -> usize {
+    for offset in 0..n {
+        let idx = (start + offset) % n;
+        if !is_wedged(idx) {
+            return idx;
+        }
+    }
+    start
+}
+
+/// Why a track's task stopped.
+///
+/// Logged as `reason=` so a stall in production is distinguishable from a listener
+/// that went away and from a clean end of stream — the audit could not tell those
+/// apart from the logs, which is part of why the 15-second silence went unexplained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrackEnd {
+    /// The transfer ended and playback reached the end of the stream.
+    Eof,
+    /// The listener dropped the PCM receiver; there was nothing left to send to.
+    ConsumerGone,
+    /// Nothing arrived for the stall timeout: the source wedged mid-stream.
+    Stalled,
+    /// A frame could not be decoded.
+    DecodeFailure,
+    /// The buffer rejected a packet as invalid; the cache was invalidated.
+    InvalidPacket,
+}
+
+impl TrackEnd {
+    fn reason(&self) -> &'static str {
+        match self {
+            TrackEnd::Eof => "eof",
+            TrackEnd::ConsumerGone => "consumer-gone",
+            TrackEnd::Stalled => "stalled",
+            TrackEnd::DecodeFailure => "decode-failure",
+            TrackEnd::InvalidPacket => "invalid-packet",
+        }
+    }
+}
+
 fn is_transport_error(e: &protofish3::Error) -> bool {
     matches!(
         e,
@@ -386,4 +625,21 @@ pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
     Ok(certs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_index;
+
+    /// A wedged connection leaves the rotation, and the rotation is never refused.
+    #[test]
+    fn pick_index_skips_wedged_connections() {
+        assert_eq!(pick_index(0, 4, |_| false), 0);
+        assert_eq!(pick_index(0, 4, |i| i == 0), 1);
+        // Wraps around the end of the pool.
+        assert_eq!(pick_index(3, 4, |i| i == 3), 0);
+        assert_eq!(pick_index(0, 4, |i| i < 3), 3);
+        // Everything wedged: keep sending rather than fail.
+        assert_eq!(pick_index(2, 4, |_| true), 2);
+    }
 }

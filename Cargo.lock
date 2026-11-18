@@ -11105,6 +11105,8 @@ dependencies = [
 name = "zako3-taphub-transport-client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "bytes",
  "opus",
  "protofish3",
  "rcgen 0.13.2",
@@ -11117,6 +11119,7 @@ dependencies = [
  "tracing",
  "zako3-opus-jitter",
  "zako3-taphub-transport-lib",
+ "zako3-taphub-transport-server",
  "zako3-types",
 ]
 

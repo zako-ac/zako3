@@ -17,3 +17,8 @@ opus = "0.3.1"
 rustls-pemfile = "2.2.0"
 thiserror.workspace = true
 zako3-opus-jitter.workspace = true
+
+[dev-dependencies]
+zako3-taphub-transport-server = { path = "../server" }
+async-trait = "0.1"
+bytes = "1"
