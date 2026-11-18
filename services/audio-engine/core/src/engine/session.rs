@@ -217,7 +217,7 @@ impl SessionControl {
         let effective_volume = Volume::from(f32::from(volume) * meta.base_volume);
 
         let queue_name_for_metric = queue_name.clone();
-        modify_state_session(
+        let queued = with_state_session(
             &self.state_service,
             self.guild_id,
             self.channel_id,
@@ -242,6 +242,25 @@ impl SessionControl {
             },
         )
         .await?;
+
+        if queued.is_none() {
+            // The channel has a control but no registered session: the join has
+            // not written its state yet, or a leave removed it underneath us.
+            // The old code answered `Ok(track_id)` here, so the track was never
+            // queued, never played, and nothing logged a word — the silent loss
+            // in the audit. `join` now writes the state before publishing the
+            // control, so this is a backstop rather than the normal path.
+            tracing::error!(
+                guild_id = %self.guild_id,
+                channel_id = %self.channel_id,
+                track_id = %track_id,
+                reason = NoConsumerReason::SessionMissing.as_str(),
+                "no audio consumer: the channel has no registered session"
+            );
+            return Err(crate::error::ZakoError::NoConsumer(
+                NoConsumerReason::SessionMissing,
+            ));
+        }
 
         metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
 

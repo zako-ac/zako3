@@ -43,6 +43,10 @@ pub enum NoConsumerReason {
     /// The session's mixer thread has exited; its ring buffer has no reader, so
     /// a source added to it would never reach the driver.
     MixerDead,
+    /// The channel has no registered session at all: the play reached a control
+    /// whose session state was gone (the join had not written it yet, or a leave
+    /// removed it). Queueing there used to answer `Ok` and drop the track.
+    SessionMissing,
 }
 
 impl NoConsumerReason {
@@ -53,6 +57,7 @@ impl NoConsumerReason {
             NoConsumerReason::CallLockTimeout => "call_lock_timeout",
             NoConsumerReason::NoConnection => "no_connection",
             NoConsumerReason::MixerDead => "mixer_dead",
+            NoConsumerReason::SessionMissing => "session_missing",
         }
     }
 }

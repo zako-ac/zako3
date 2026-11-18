@@ -8,7 +8,7 @@ use zako3_audio_engine_audio::{create_opus_ringbuf_pair, metrics};
 use crate::{
     audio::{PcmDecoder, create_thread_mixer},
     error::ZakoResult,
-    service::{ArcDiscordService, ArcStateService, ArcTapHubService},
+    service::{ArcDiscordService, ArcStateService, ArcTapHubService, save_state_session},
     session::{SessionConfig, SessionControl, create_session_control},
     types::{ChannelId, GuildId, SessionState},
 };
@@ -69,8 +69,9 @@ impl SessionManager {
             .unwrap_or(false)
     }
 
-    #[instrument(skip(self), fields(guild_id = %guild_id, channel_id = %channel_id))]
-    async fn initiate_session(&self, guild_id: GuildId, channel_id: ChannelId) -> ZakoResult<()> {
+    #[instrument(skip(self, session), fields(guild_id = %session.guild_id, channel_id = %session.channel_id))]
+    async fn initiate_session(&self, session: &SessionState) -> ZakoResult<()> {
+        let (guild_id, channel_id) = (session.guild_id, session.channel_id);
         tracing::debug!("Initiating audio session");
 
         let (prod, cons) = create_opus_ringbuf_pair();
@@ -98,6 +99,14 @@ impl SessionManager {
         // the channel used to go permanently silent while every play answered
         // `Ok`.
         self.discord_service.play_audio(guild_id, cons).await?;
+
+        // Write the session state *before* the control becomes reachable through
+        // `sessions`. The other order leaves a window in which a play can find a
+        // control whose state does not exist yet: `with_state_session` returns
+        // `None`, and before this change the track was silently dropped. The
+        // write goes through the same per-session lock as every later
+        // read-modify-write, so a concurrent play cannot overwrite it.
+        save_state_session(&self.state_service, session).await?;
 
         self.sessions.insert((guild_id, channel_id), control);
 
@@ -139,9 +148,7 @@ impl SessionManager {
             queues: Default::default(),
         };
 
-        self.initiate_session(guild_id, channel_id).await?;
-
-        self.state_service.save_session(&session).await?;
+        self.initiate_session(&session).await?;
 
         Ok(())
     }
@@ -164,9 +171,7 @@ impl SessionManager {
                 .await?;
         }
 
-        self.initiate_session(session.guild_id, session.channel_id)
-            .await?;
-        self.state_service.save_session(session).await?;
+        self.initiate_session(session).await?;
 
         Ok(())
     }

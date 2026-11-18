@@ -22,6 +22,18 @@ pub struct RedisStateService {
 }
 
 impl RedisStateService {
+    /// Every Redis round trip is bounded. Redis is a best-effort mirror, and the
+    /// session write lock (`zako3_audio_engine_core::service::state`) is held
+    /// across these calls: without a bound, a Redis that stops answering parks
+    /// the lock and every later play/stop/pause for that session waits forever.
+    const REDIS_OP_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+    fn connection_config() -> redis::AsyncConnectionConfig {
+        redis::AsyncConnectionConfig::new()
+            .set_connection_timeout(std::time::Duration::from_secs(2))
+            .set_response_timeout(Self::REDIS_OP_TIMEOUT)
+    }
+
     /// Connect to Redis and load any persisted sessions for `token_namespace` into the
     /// in-memory mirror. Never fails: on any Redis error it logs and starts empty (degraded,
     /// no cross-restart persistence).
@@ -30,7 +42,10 @@ impl RedisStateService {
         let sessions = DashMap::new();
 
         let conn = match redis::Client::open(redis_url) {
-            Ok(client) => match client.get_multiplexed_async_connection().await {
+            Ok(client) => match client
+                .get_multiplexed_async_connection_with_config(&Self::connection_config())
+                .await
+            {
                 Ok(mut conn) => {
                     match Self::load_all(&mut conn, &namespace).await {
                         Ok(loaded) => {
@@ -124,9 +139,21 @@ impl StateService for RedisStateService {
             let key = self.key(session.guild_id, session.channel_id);
             match serde_json::to_string(session) {
                 Ok(json) => {
-                    let res: redis::RedisResult<()> = conn.set(&key, json).await;
-                    if let Err(e) = res {
-                        tracing::warn!(%key, "RedisStateService: SET failed (best-effort): {e}");
+                    let res = tokio::time::timeout(
+                        Self::REDIS_OP_TIMEOUT,
+                        conn.set::<_, _, ()>(&key, json),
+                    )
+                    .await;
+                    match res {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            tracing::warn!(%key, "RedisStateService: SET failed (best-effort): {e}");
+                        }
+                        Err(_) => tracing::warn!(
+                            %key,
+                            timeout_ms = Self::REDIS_OP_TIMEOUT.as_millis() as u64,
+                            "RedisStateService: SET timed out (best-effort); the in-memory mirror is already written"
+                        ),
                     }
                 }
                 Err(e) => tracing::warn!("RedisStateService: serialize failed: {e}"),
@@ -140,9 +167,18 @@ impl StateService for RedisStateService {
 
         if let Some(mut conn) = self.conn.clone() {
             let key = self.key(guild_id, channel_id);
-            let res: redis::RedisResult<()> = conn.del(&key).await;
-            if let Err(e) = res {
-                tracing::warn!(%key, "RedisStateService: DEL failed (best-effort): {e}");
+            let res =
+                tokio::time::timeout(Self::REDIS_OP_TIMEOUT, conn.del::<_, ()>(&key)).await;
+            match res {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    tracing::warn!(%key, "RedisStateService: DEL failed (best-effort): {e}");
+                }
+                Err(_) => tracing::warn!(
+                    %key,
+                    timeout_ms = Self::REDIS_OP_TIMEOUT.as_millis() as u64,
+                    "RedisStateService: DEL timed out (best-effort)"
+                ),
             }
         }
         Ok(())
