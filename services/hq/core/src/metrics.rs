@@ -10,7 +10,10 @@
 
 use std::sync::OnceLock;
 
-use opentelemetry::{KeyValue, global, metrics::Counter};
+use opentelemetry::{
+    KeyValue, global,
+    metrics::{Counter, Meter},
+};
 
 pub struct HqMetrics {
     /// One increment per attempt sent to the audio engine, labelled with the
@@ -25,14 +28,14 @@ pub struct HqMetrics {
 
 static METRICS: OnceLock<HqMetrics> = OnceLock::new();
 
-/// The process-wide HQ instruments.
-///
-/// The meter provider must have been installed before the first call (it is,
-/// in `hq-boot`), otherwise these instruments are no-ops.
-pub fn metrics() -> &'static HqMetrics {
-    METRICS.get_or_init(|| {
-        let meter = global::meter("hq");
-        HqMetrics {
+impl HqMetrics {
+    /// Build the instruments on a specific meter.
+    ///
+    /// [`metrics`] passes the process-wide global meter; the test below passes
+    /// one whose reader is a Prometheus registry, which is how "the drop
+    /// counter really reaches `/metrics`" is checked without a cluster.
+    pub fn new(meter: &Meter) -> Self {
+        Self {
             play_attempts_total: meter
                 .u64_counter("hq_play_attempts_total")
                 .with_description(
@@ -47,12 +50,24 @@ pub fn metrics() -> &'static HqMetrics {
                 )
                 .build(),
         }
-    })
+    }
+}
+
+/// The process-wide HQ instruments.
+///
+/// The meter provider must have been installed before the first call (it is,
+/// in `hq-boot`), otherwise these instruments are no-ops.
+pub fn metrics() -> &'static HqMetrics {
+    METRICS.get_or_init(|| HqMetrics::new(&global::meter("hq")))
 }
 
 /// Record one play attempt (`attempt` is 1-based) and whether it succeeded.
 pub fn record_play_attempt(attempt: u32, ok: bool) {
-    metrics().play_attempts_total.add(
+    record_play_attempt_on(metrics(), attempt, ok);
+}
+
+fn record_play_attempt_on(metrics: &HqMetrics, attempt: u32, ok: bool) {
+    metrics.play_attempts_total.add(
         1,
         &[
             KeyValue::new("attempt", i64::from(attempt)),
@@ -64,13 +79,20 @@ pub fn record_play_attempt(attempt: u32, ok: bool) {
 /// Record one message that was dropped, keyed by the same string the log line
 /// carries in `dropped_reason`.
 pub fn record_message_dropped(reason: &str) {
-    metrics()
+    record_message_dropped_on(metrics(), reason);
+}
+
+fn record_message_dropped_on(metrics: &HqMetrics, reason: &str) {
+    metrics
         .messages_dropped_total
         .add(1, &[KeyValue::new("dropped_reason", reason.to_string())]);
 }
 
 #[cfg(test)]
 mod tests {
+    use opentelemetry::metrics::MeterProvider;
+    use opentelemetry_sdk::metrics::SdkMeterProvider;
+
     use super::*;
 
     #[test]
@@ -79,5 +101,85 @@ mod tests {
         // no-op meter, and recording must not panic.
         record_play_attempt(1, false);
         record_message_dropped("tap_unavailable");
+    }
+
+    /// The drop counter is only useful if an operator can see it. This wires
+    /// the instruments to a Prometheus registry the way
+    /// `crates/telemetry/src/metrics.rs` wires the service's provider, and
+    /// asserts the scrape carries both counters under the names the audit, the
+    /// logs and the runbooks use.
+    #[test]
+    fn both_counters_reach_a_prometheus_scrape_under_their_documented_names() {
+        let registry = prometheus::Registry::new();
+        let exporter = opentelemetry_prometheus::exporter()
+            .with_registry(registry.clone())
+            .without_counter_suffixes()
+            .build()
+            .expect("prometheus exporter builds");
+        let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+
+        let metrics = HqMetrics::new(&provider.meter("hq"));
+        record_play_attempt_on(&metrics, 1, false);
+        record_play_attempt_on(&metrics, 2, true);
+        record_message_dropped_on(&metrics, "tap_unavailable");
+
+        let families = registry.gather();
+        let names: Vec<String> = families.iter().map(|f| f.name().to_string()).collect();
+
+        let attempts = family(&families, "hq_play_attempts_total", &names);
+        let retried = point(attempts, &[("attempt", "1"), ("result", "error")]);
+        assert_eq!(retried, 1.0, "the failed first attempt is counted");
+        let succeeded = point(attempts, &[("attempt", "2"), ("result", "ok")]);
+        assert_eq!(succeeded, 1.0, "the retry that worked is counted");
+
+        let dropped = family(&families, "hq_messages_dropped_total", &names);
+        assert_eq!(
+            point(dropped, &[("dropped_reason", "tap_unavailable")]),
+            1.0,
+            "a drop is counted once under its reason"
+        );
+    }
+
+    fn family<'a>(
+        families: &'a [prometheus::proto::MetricFamily],
+        name: &str,
+        names: &[String],
+    ) -> &'a prometheus::proto::MetricFamily {
+        families
+            .iter()
+            .find(|f| f.name() == name)
+            .unwrap_or_else(|| panic!("`{name}` is not in the scrape; families: {names:?}"))
+    }
+
+    /// The value of the first sample carrying these labels (a subset test: the
+    /// exporter adds `otel_scope_name` of its own).
+    fn point(family: &prometheus::proto::MetricFamily, labels: &[(&str, &str)]) -> f64 {
+        family
+            .get_metric()
+            .iter()
+            .find(|m| {
+                labels.iter().all(|(name, value)| {
+                    m.get_label()
+                        .iter()
+                        .any(|l| l.name() == *name && l.value() == *value)
+                })
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "no sample of `{}` with {labels:?}; samples: {:?}",
+                    family.name(),
+                    family
+                        .get_metric()
+                        .iter()
+                        .map(|m| m
+                            .get_label()
+                            .iter()
+                            .map(|l| format!("{}={}", l.name(), l.value()))
+                            .collect::<Vec<_>>())
+                        .collect::<Vec<_>>()
+                )
+            })
+            .get_counter()
+            .value()
     }
 }

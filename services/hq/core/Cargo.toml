@@ -40,6 +40,13 @@ opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"
 
 [dev-dependencies]
+# The metrics test in `src/metrics.rs` drives a real Prometheus registry: the
+# point is to prove the drop counter reaches `/metrics`, which a no-op meter
+# cannot show. Versions match `zako3-telemetry`, the crate that installs the
+# provider in production.
+opentelemetry_sdk = "0.31"
+opentelemetry-prometheus = "0.31"
+prometheus = "0.14"
 chrono.workspace = true
 hex = "0.4.3"
 sha2 = "0.10"
