@@ -346,7 +346,6 @@ mod tests {
             service_name: default_service_name(),
             otlp_endpoint: None,
             metrics_port: default_metrics_port(),
-            track_watchdog_secs: default_track_watchdog_secs(),
         }
     }
 }
