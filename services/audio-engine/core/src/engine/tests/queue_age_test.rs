@@ -8,7 +8,7 @@
 // the queue, its removal is saved, and the next track starts.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
 
 use mockall::predicate::*;
@@ -217,6 +217,7 @@ async fn reconcile_drops_the_stale_head_and_plays_the_next_track() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        Arc::new(AtomicBool::new(true)),
     );
 
     control.reconcile().await.expect("reconcile");
@@ -277,6 +278,7 @@ async fn reconcile_leaves_a_fresh_track_alone() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        Arc::new(AtomicBool::new(true)),
     );
 
     control.reconcile().await.expect("reconcile");
@@ -352,6 +354,7 @@ async fn a_track_already_playing_is_not_dropped_when_it_passes_the_cap() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        Arc::new(AtomicBool::new(true)),
     );
 
     // Pass one: fresh, so it starts and enters `started`.

@@ -11,7 +11,7 @@ use std::{
     collections::HashSet,
     sync::{
         Arc, Mutex as StdMutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -22,7 +22,7 @@ use zako3_types::hq::{DiscordUserId, TapId};
 
 use super::{StateService, modify_state_session, with_state_session};
 use crate::{
-    engine::session::create_session_control,
+    engine::session::{SessionConfig, create_session_control},
     error::ZakoResult,
     service::{state::ArcStateService, taphub::MockTapHubService},
     types::{
@@ -129,6 +129,7 @@ fn dummy_track(id: u64) -> Track {
         volume: Volume::from(1.0),
         queue_name: QueueName::from("music".to_string()),
         paused: false,
+        queued_at_ms: None,
     }
 }
 
@@ -271,6 +272,8 @@ async fn concurrent_play_and_stop_do_not_deadlock() {
         Arc::new(decoder),
         state.clone(),
         Arc::new(taphub),
+        SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
 
     let run = async {
@@ -369,6 +372,8 @@ async fn n_concurrent_plays_queue_exactly_n_tracks() {
         Arc::new(decoder),
         state.clone(),
         Arc::new(taphub),
+        SessionConfig::default(),
+        Arc::new(AtomicBool::new(true)),
     );
 
     let mut tasks = Vec::new();
