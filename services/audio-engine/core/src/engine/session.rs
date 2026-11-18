@@ -13,7 +13,7 @@ use zako3_types::{NoConsumerReason, SessionState};
 use crate::{
     audio::{ArcDecoder, ArcMixer},
     error::ZakoResult,
-    service::{ArcStateService, ArcTapHubService, modify_state_session},
+    service::{ArcStateService, ArcTapHubService, modify_state_session, with_state_session},
     types::{
         AudioRequest, AudioRequestString, AudioStopFilter, CachedAudioRequest, ChannelId, GuildId,
         QueueName, Track, TrackId, Volume,
@@ -217,7 +217,7 @@ impl SessionControl {
         let effective_volume = Volume::from(f32::from(volume) * meta.base_volume);
 
         let queue_name_for_metric = queue_name.clone();
-        modify_state_session(
+        let queued = with_state_session(
             &self.state_service,
             self.guild_id,
             self.channel_id,
@@ -242,6 +242,25 @@ impl SessionControl {
             },
         )
         .await?;
+
+        if queued.is_none() {
+            // The channel has a control but no registered session: the join has
+            // not written its state yet, or a leave removed it underneath us.
+            // The old code answered `Ok(track_id)` here, so the track was never
+            // queued, never played, and nothing logged a word — the silent loss
+            // in the audit. `join` now writes the state before publishing the
+            // control, so this is a backstop rather than the normal path.
+            tracing::error!(
+                guild_id = %self.guild_id,
+                channel_id = %self.channel_id,
+                track_id = %track_id,
+                reason = NoConsumerReason::SessionMissing.as_str(),
+                "no audio consumer: the channel has no registered session"
+            );
+            return Err(crate::error::ZakoError::NoConsumer(
+                NoConsumerReason::SessionMissing,
+            ));
+        }
 
         metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
 
@@ -367,41 +386,45 @@ impl SessionControl {
     pub async fn stop_many(&self, filter: AudioStopFilter) -> ZakoResult<()> {
         tracing::info!(filter = ?filter, "Stopping multiple tracks");
 
-        let mut session = self
-            .state_service
-            .get_session(self.guild_id, self.channel_id)
-            .await?;
-        let track_ids = session
-            .as_ref()
-            .map(|s| match filter {
-                AudioStopFilter::All => s.get_all_track_ids(),
-                AudioStopFilter::Music => s.get_all_track_ids_by_queue_name_prefix("music"),
-                AudioStopFilter::TTS(user_id) => {
-                    s.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", user_id))
+        // Collect what to stop and drop it from the queue inside one locked
+        // read-modify-write. The previous get → remove → save sequence could
+        // overwrite a track that another task queued between the read and the
+        // save, which lost that track with no log line.
+        let stopped: Vec<(TrackId, QueueName)> = with_state_session(
+            &self.state_service,
+            self.guild_id,
+            self.channel_id,
+            move |session| {
+                let track_ids = match filter {
+                    AudioStopFilter::All => session.get_all_track_ids(),
+                    AudioStopFilter::Music => {
+                        session.get_all_track_ids_by_queue_name_prefix("music")
+                    }
+                    AudioStopFilter::TTS(user_id) => {
+                        session.get_all_track_ids_by_queue_name_prefix(&format!("tts_{}", user_id))
+                    }
+                };
+
+                let mut stopped = Vec::with_capacity(track_ids.len());
+                for track_id in track_ids {
+                    if let Some(track) = session.find_track(track_id) {
+                        stopped.push((track_id, track.queue_name.clone()));
+                    }
+                    session.remove_track(track_id);
                 }
-            })
-            .unwrap_or_default();
+                stopped
+            },
+        )
+        .await?
+        .unwrap_or_default();
 
-        let stop_count = track_ids.len();
+        let stop_count = stopped.len();
 
-        for track_id in track_ids {
-            self.mixer.remove_source(track_id);
-            self.decoder.stop_track(track_id);
-            self.started.lock().await.remove(&track_id);
-
-            if let Some(session) = session.as_mut() {
-                if let Some(track) = session.find_track(track_id) {
-                    metrics::record_track_lifecycle(
-                        "stop",
-                        &normalize_queue_name(&track.queue_name),
-                    );
-                }
-                session.remove_track(track_id);
-            }
-        }
-
-        if let Some(session) = session {
-            self.state_service.save_session(&session).await?;
+        for (track_id, queue_name) in &stopped {
+            self.mixer.remove_source(*track_id);
+            self.decoder.stop_track(*track_id);
+            self.started.lock().await.remove(track_id);
+            metrics::record_track_lifecycle("stop", &normalize_queue_name(queue_name));
         }
 
         tracing::info!(count = stop_count, "Stopped tracks");
@@ -526,6 +549,10 @@ impl SessionControl {
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
     pub(crate) async fn reconcile(&self) -> ZakoResult<()> {
+        // Lock order: reconcile_guard first, then the session write lock that
+        // `modify_state_session` takes below (see `service::state`). Nothing
+        // holding the session write lock ever calls `reconcile`, so this order
+        // is never inverted and the pair cannot deadlock.
         let _guard = self.reconcile_guard.lock().await;
 
         // Normally one pass. A pass that dropped a stale head re-reads instead
