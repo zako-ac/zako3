@@ -43,9 +43,9 @@ pub use probe::{
     HOP_TAPHUB_TO_ENGINE, StreamProbe,
 };
 pub use report::{
-    BufferView, CountersView, DEFAULT_FRESH_MS, GapStats, HopAges, HopView, RequestView,
-    StallInputs, StallReport, UpstreamHopSource, UpstreamHops, Verdict, build_report, classify,
-    emit, fresh_threshold_ms,
+    BufferView, CountersView, DEFAULT_FRESH_MS, GapStats, HOP_RECORD_PREFIX, HOP_RECORD_TTL_SECS,
+    HopAges, HopView, RequestView, StallInputs, StallReport, UpstreamHopSource, UpstreamHops,
+    Verdict, build_report, classify, emit, fresh_threshold_ms,
 };
 pub use trace::{StreamTrace, current_trace, with_trace};
 
@@ -68,10 +68,13 @@ pub fn now_unix_ms() -> u64 {
 /// string — so taphub and the engine agree on it without a protocol change and
 /// without either side telling the other. Sixteen hex characters of SHA-256 is
 /// far more than enough to keep concurrent requests apart.
-pub fn request_stream_id(tap_id: &str, audio_request: &str) -> String {
+pub fn request_stream_id(tap_id: &str, discord_user_id: &str, audio_request: &str) -> String {
     use sha2::Digest;
-    let digest = sha2::Sha256::digest(audio_request.as_bytes());
-    let hash = hex::encode(digest);
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(discord_user_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(audio_request.as_bytes());
+    let hash = hex::encode(hasher.finalize());
     format!("{}-{}", tap_id, &hash[..16])
 }
 
@@ -81,11 +84,13 @@ mod tests {
 
     #[test]
     fn stream_id_is_stable_and_input_sensitive() {
-        let a = request_stream_id("340376482209599488", "hello world");
-        let b = request_stream_id("340376482209599488", "hello world");
-        let c = request_stream_id("340376482209599488", "hello worle");
+        let a = request_stream_id("340376482209599488", "1", "hello world");
+        let b = request_stream_id("340376482209599488", "1", "hello world");
+        let c = request_stream_id("340376482209599488", "1", "hello worle");
+        let d = request_stream_id("340376482209599488", "2", "hello world");
         assert_eq!(a, b);
         assert_ne!(a, c);
+        assert_ne!(a, d, "two users asking for the same text are two streams");
         assert!(a.starts_with("340376482209599488-"));
         assert_eq!(a.len(), 18 + 1 + 16);
     }

@@ -52,15 +52,18 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
     // enough that leaving it on for normal traffic is its own problem. It is
     // turned on for an investigation window with one env var rather than by
     // editing RUST_LOG, so the rest of the filter stays exactly as deployed.
+    let protofish3_debug = truthy_env("ZAKO_PROTOFISH3_DEBUG");
     let mut filter_directives = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    if truthy_env("ZAKO_PROTOFISH3_DEBUG") {
+    if protofish3_debug {
         if !filter_directives.trim().is_empty() {
             filter_directives.push(',');
         }
         filter_directives.push_str("protofish3=debug");
-        tracing::info!("ZAKO_PROTOFISH3_DEBUG is set: protofish3 debug logging enabled");
     }
-    let console_filter = EnvFilter::new(filter_directives);
+    // `try_new` rather than `new`: a malformed RUST_LOG must fall back to the
+    // default filter, not silently parse to "everything off".
+    let console_filter =
+        EnvFilter::try_new(&filter_directives).unwrap_or_else(|_| EnvFilter::new("info"));
     let fmt_layer = fmt::layer()
         .with_target(true)
         .with_level(true)
@@ -107,6 +110,12 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
         registry.with(otel_layer).with(log_bridge).init();
     } else {
         registry.init();
+    }
+
+    if protofish3_debug {
+        // Logged after the subscriber is installed; before it, the line goes
+        // nowhere.
+        ::tracing::info!("ZAKO_PROTOFISH3_DEBUG is set: protofish3 debug logging enabled");
     }
 
     Ok(())

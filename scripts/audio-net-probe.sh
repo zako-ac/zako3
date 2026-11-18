@@ -31,7 +31,13 @@ STATE="${AUDIO_NET_PROBE_STATE:-/tmp/audio-net-probe.state}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --interval) INTERVAL="${2:-30}"; shift 2 ;;
+    --interval)
+      INTERVAL="${2:-30}"
+      case "$INTERVAL" in
+        ''|*[!0-9]*) echo "--interval wants whole seconds, got '$INTERVAL'" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
     --once) ONCE=1; shift ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -86,16 +92,24 @@ conntrack_block() {
     echo '"conntrack": null'
     return
   fi
-  # `conntrack -S` is a per-CPU table of counters. Sum them.
+  # `conntrack -S` prints one line per CPU. Depending on the version the line is
+  # either a header plus bare numbers, or `key=value` tokens per CPU; parsing
+  # key=value everywhere covers both and drops the header row (which has no `=`)
+  # without needing to know which shape this build emits.
   conntrack -S 2>/dev/null | awk '
-    NR == 1 { for (i = 1; i <= NF; i++) col[i] = $i; next }
-    { for (i = 1; i <= NF; i++) sum[i] += $i }
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i !~ /=/) continue
+        split($i, kv, "=")
+        if (kv[1] == "cpu") continue
+        sum[kv[1]] += kv[2] + 0
+      }
+    }
     END {
       printf "\"conntrack\": {"
       first = 1
-      for (i = 1; i <= length(col); i++) {
-        if (col[i] == "cpu") continue
-        printf "%s\"%s\": %d", (first ? "" : ", "), col[i], sum[i]
+      for (k in sum) {
+        printf "%s\"%s\": %d", (first ? "" : ", "), k, sum[k]
         first = 0
       }
       printf "}"

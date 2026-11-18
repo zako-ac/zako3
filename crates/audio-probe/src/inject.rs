@@ -123,10 +123,17 @@ pub fn parse_spec(spec: &str) -> Option<(String, Stage, Duration)> {
     let pattern = parts.next()?.trim();
     let stage = Stage::parse(parts.next()?)?;
     let secs: f64 = parts.next()?.trim().parse().ok()?;
-    if pattern.is_empty() || secs <= 0.0 {
+    if pattern.is_empty() || !secs.is_finite() || secs <= 0.0 {
         return None;
     }
-    Some((pattern.to_string(), stage, Duration::from_secs_f64(secs)))
+    // `Duration::from_secs_f64` panics on a value it cannot represent, and this
+    // runs inside the frame pump: a typo in a diagnostic env var must not take
+    // audio down.
+    let duration = Duration::try_from_secs_f64(secs).ok()?;
+    if duration.is_zero() {
+        return None;
+    }
+    Some((pattern.to_string(), stage, duration))
 }
 
 /// Arm the injection described by `ZAKO_STALL_INJECT`, if any.
@@ -180,6 +187,12 @@ mod tests {
         assert!(parse_spec("a:nowhere:1").is_none());
         assert!(parse_spec("a:send:0").is_none());
         assert!(parse_spec("a:send").is_none());
+        assert!(
+            parse_spec("a:send:inf").is_none(),
+            "a non-finite duration must not panic the pump"
+        );
+        assert!(parse_spec("a:send:nan").is_none());
+        assert!(parse_spec("a:send:1e300").is_none());
     }
 
     #[test]

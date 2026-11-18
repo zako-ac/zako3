@@ -29,7 +29,11 @@ pub(crate) async fn handle_request_audio_inner(
     let ars = request.audio_request.to_string();
     // The id both ends derive from the request, so the engine can find this
     // stream's hop record by key without either side telling the other.
-    let stream_id = zako3_audio_probe::request_stream_id(&request.tap_id.0.to_string(), &ars);
+    let stream_id = zako3_audio_probe::request_stream_id(
+        &request.tap_id.0.to_string(),
+        &request.discord_user_id.0.to_string(),
+        &ars,
+    );
 
     let span = tracing::info_span!(
         "audio.request",
@@ -110,6 +114,12 @@ pub(crate) async fn handle_request_audio_inner(
                     let ts = Timestamp(frame_count * 20);
                     frame_count += 1;
                     writer.on_source_frame();
+                    writer.on_send();
+                    publish_hops(&hop_repo, &writer);
+                    // The injection models a loss *after* taphub sent: the
+                    // record keeps advancing, the frame never reaches the
+                    // engine. Dropping before the bookkeeping would instead look
+                    // like taphub never sent, which is a different fault.
                     if dropping(writer.stream(), Stage::TaphubSend) {
                         zako3_audio_probe::record_injected_drop(Stage::TaphubSend, 1);
                         continue;
@@ -117,9 +127,10 @@ pub(crate) async fn handle_request_audio_inner(
                     if tx.send((ts, bytes)).await.is_err() {
                         break;
                     }
-                    writer.on_send();
-                    publish_hops(&hop_repo, &writer);
                 }
+                // The stream is over; drop the record so a later stall cannot
+                // read this stream's frozen send time as a live hop.
+                clear_hops(&hop_repo, &writer);
             });
             let meta = AudioMetaResponse {
                 metadatas: entry.metadatas,
@@ -306,17 +317,22 @@ pub(crate) async fn handle_request_audio_inner(
         // transport's own `Timestamp` for the pf3 transfer.
         while let Some((ts, bytes)) = unrel.recv().await {
             writer.on_source_frame();
+            writer.on_send();
+            publish_hops(&hop_repo, &writer);
+            // See the cache path: the injection drops after the send is
+            // recorded, so the record honestly says taphub was still sending.
             if dropping(writer.stream(), Stage::TaphubSend) {
                 zako3_audio_probe::record_injected_drop(Stage::TaphubSend, 1);
                 continue;
             }
             if let Err(e) = tx.send((Timestamp(ts.0), bytes)).await {
                 tracing::warn!(%e, "Failed to send audio chunk to channel");
-                return;
+                break;
             }
-            writer.on_send();
-            publish_hops(&hop_repo, &writer);
         }
+        // The stream is over; drop the record so a later stall cannot read this
+        // stream's frozen send time as a live hop.
+        clear_hops(&hop_repo, &writer);
     });
 
     {
@@ -351,6 +367,14 @@ pub(crate) async fn handle_request_audio_inner(
 /// never be what makes an audio stream late. The TTL is short, so a stream that
 /// ends simply stops being visible to a reader rather than leaving a stale
 /// record that looks like a live-but-quiet hop.
+fn clear_hops(repo: &CacheRepositoryRef, writer: &UpstreamHopWriter) {
+    let key = hop_record_key(writer.stream());
+    let repo = Arc::clone(repo);
+    tokio::spawn(async move {
+        repo.del(&key).await;
+    });
+}
+
 fn publish_hops(repo: &CacheRepositoryRef, writer: &UpstreamHopWriter) {
     if !writer.should_publish() {
         return;

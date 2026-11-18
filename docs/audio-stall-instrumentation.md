@@ -83,6 +83,16 @@ type changed to carry a local logging detail.
 `classify()` in `crates/audio-probe/src/report.rs` is a pure function of the four
 hop ages and the buffer state, evaluated in this order:
 
+**Which of these a stall line can actually carry.** A stall line exists only
+because the jitter buffer went a full `stall_timeout` without a frame, so at that
+instant `engine_recv` is *always* stale and the two "both hops fresh" rows are
+not produced by a real stall: a genuinely downstream break (mixer or decoder
+stopped consuming) produces no stall line at all, because `yield_pcm` is not
+being called and the buffer's timeout never runs. That case is covered by the
+track watchdog and `mixer.idle_sources`, not here. The rows stay in the table
+because `build_report` is also callable from a context where frames are still
+arriving, and it must not mislabel one.
+
 | verdict | condition | means |
 |---|---|---|
 | `engine_backpressure` | `engine_recv` and `buffer_insert` both fresh, buffer depth at its lead window | the buffer stopped reading on purpose |
@@ -105,13 +115,24 @@ engine reads it once, at the stall.
 
 - The stream id is derived from the request on both sides
   (`zako3_audio_probe::request_stream_id`: tap id plus the first 16 hex of
-  SHA-256 over the request string), so neither side has to be told.
+  SHA-256 over the discord user id and the request string), so neither side has
+  to be told. Two *identical* requests from the same user on the same tap (a
+  retry) share one record, which is what you want: they are the same audio. Two
+  concurrent plays of the same text by different users do not.
 - The write happens off the frame path (`tokio::spawn`) — a slow Redis must never
   make audio late.
-- A record older than 10 s is treated as absent, because the writer stopped:
-  reporting its timestamps as "still sending" would be wrong.
+- The age rule is the record's own TTL (120 s), deliberately longer than the
+  jitter buffer's 15 s stall timeout. A writer that went quiet because the tap
+  stopped is exactly the case worth reporting, so its frozen timestamps are
+  evidence, not staleness. Only a record that outlived its TTL is refused.
+- taphub **deletes** the key when a producer loop ends, so an ended stream cannot
+  be read later as a live-but-quiet hop, and the age rule never has to infer it.
 - No record at all is reported as `"source":"unavailable"` and produces the
   `unknown` verdict. The device never guesses at a hop it cannot see.
+- The engine snapshots its own counters *before* the Redis read, so the report
+  describes the instant the buffer gave up rather than the instant a round trip
+  later — otherwise a stream that recovered in that window would be blamed on the
+  engine.
 
 Cardinality: one key per concurrent stream, dying with its TTL. Metrics carry
 only bounded attributes (`verdict`, `stage`); stream and track ids live in the log
@@ -130,8 +151,10 @@ ZAKO_STALL_INJECT=<stream-pattern>:<engine-pump|taphub-send>:<seconds>
 
 - `engine-pump` drops a frame the engine has already read and counted. The socket
   counter climbs, the buffer counter does not: `engine_internal`.
-- `taphub-send` drops it at taphub before the transport. The engine's socket goes
-  quiet while taphub's send timestamp stays fresh: `taphub_to_engine_path`.
+- `taphub-send` drops it at taphub, *after* taphub has recorded the send and
+  republished its hop record. The engine's socket goes quiet while taphub's send
+  timestamp keeps advancing: `taphub_to_engine_path`. Dropping before that
+  bookkeeping would model a different fault (taphub never sent).
 
 `cargo test -p zako3-taphub-transport-client` drives each case through the real
 pump, channel and jitter buffer, and asserts both the counter divergence and the

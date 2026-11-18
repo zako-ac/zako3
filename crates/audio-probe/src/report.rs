@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     HOP_BUFFER_INSERT, HOP_ENGINE_RECV, HOP_TAP_TO_TAPHUB, HOP_TAPHUB_TO_ENGINE,
-    probe::StreamProbe, trace::StreamTrace,
+    probe::ProbeSnapshot, trace::StreamTrace,
 };
 
 /// Redis key prefix for the taphub-written hop record.
@@ -68,7 +68,9 @@ pub struct GapStats {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RequestView {
     pub tap_id: String,
-    pub cache_key: Option<String>,
+    /// The cache policy the request carried (`none`, `ar_hash`, `key:<k>`), not
+    /// a cache key: the engine does not hold one at this point.
+    pub cache_policy: Option<String>,
     /// First 16 hex characters of the request string's SHA-256 — the same value
     /// [`crate::request_stream_id`] embeds, so a log line can find the stream.
     pub ars_hash: String,
@@ -190,10 +192,13 @@ pub struct StallReport {
 }
 
 /// Everything needed to assemble one report.
-pub struct StallInputs<'a> {
+pub struct StallInputs {
     pub stall_ms: u64,
+    /// Captured when the stall was detected, not when the report was assembled:
+    /// assembling one reads another process, and a probe read afterwards would
+    /// describe a later instant than the one being explained.
     pub now_unix_ms: u64,
-    pub probe: &'a StreamProbe,
+    pub probe: ProbeSnapshot,
     pub buffer: BufferView,
     pub trace: Option<StreamTrace>,
     pub request: RequestView,
@@ -222,7 +227,7 @@ fn age(now: u64, then: u64) -> Option<u64> {
     (then != 0).then(|| now.saturating_sub(then))
 }
 
-pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
+pub fn build_report(inputs: StallInputs) -> StallReport {
     let StallInputs {
         stall_ms,
         now_unix_ms,
@@ -233,7 +238,7 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
         upstream,
     } = inputs;
 
-    let stream = probe.stream().to_string();
+    let stream = probe.stream.clone();
     if request.tap_id.is_empty() {
         request.tap_id = stream.split('-').next().unwrap_or_default().to_string();
     }
@@ -245,7 +250,7 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
         taphub_to_engine: upstream
             .as_ref()
             .and_then(|u| age(now_unix_ms, u.send_unix_ms)),
-        engine_recv: age(now_unix_ms, probe.engine_recv_last_unix_ms()),
+        engine_recv: age(now_unix_ms, probe.engine_recv_last_unix_ms),
         buffer_insert: age(now_unix_ms, buffer.last_insert_unix_ms),
     };
 
@@ -254,7 +259,7 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
         &ages,
         &buffer,
         upstream.is_some(),
-        probe.injected_drops(),
+        probe.injected_drops,
         fresh_ms,
     );
 
@@ -294,9 +299,9 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
     hops.insert(
         HOP_ENGINE_RECV,
         HopView {
-            last_frame_unix_ms: Some(probe.engine_recv_last_unix_ms()).filter(|v| *v != 0),
+            last_frame_unix_ms: Some(probe.engine_recv_last_unix_ms).filter(|v| *v != 0),
             age_ms: ages.engine_recv,
-            frames: Some(probe.socket_recv()),
+            frames: Some(probe.socket_recv),
             source: "engine",
         },
     );
@@ -310,12 +315,12 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
         },
     );
 
-    let socket_recv = probe.socket_recv();
+    let socket_recv = probe.socket_recv;
     let counters = CountersView {
         socket_recv_frames: socket_recv,
         buffer_inserted_frames: buffer.inserted,
         socket_minus_inserted: socket_recv as i64 - buffer.inserted as i64,
-        injected_drops: probe.injected_drops(),
+        injected_drops: probe.injected_drops,
     };
 
     let (track_id, guild_id, channel_id) = match trace {
@@ -333,14 +338,14 @@ pub fn build_report(inputs: StallInputs<'_>) -> StallReport {
         channel_id,
         request,
         stalled_ms: stall_ms,
-        stream_age_ms: now_unix_ms.saturating_sub(probe.started_unix_ms()),
+        stream_age_ms: now_unix_ms.saturating_sub(probe.started_unix_ms),
         verdict,
         verdict_reason: reason,
         fresh_threshold_ms: fresh_ms,
         hops,
         ages,
         counters,
-        gaps: probe.gaps(),
+        gaps: probe.gaps,
         buffer,
         upstream,
     }
@@ -575,7 +580,7 @@ mod tests {
 
     #[test]
     fn the_line_is_one_json_object_with_the_required_fields() {
-        let probe = StreamProbe::new("42-abcdef0123456789");
+        let probe = crate::probe::StreamProbe::new("42-abcdef0123456789");
         probe.on_socket_frame_at(980);
         probe.on_socket_frame_at(1_000);
         let mut buf = buffer(0, 25, 1);
@@ -584,7 +589,7 @@ mod tests {
         let report = build_report(StallInputs {
             stall_ms: 15_000,
             now_unix_ms: 16_000,
-            probe: &probe,
+            probe: probe.snapshot(),
             buffer: buf,
             trace: Some(StreamTrace {
                 track_id: Some("7522276704182735005".to_string()),
@@ -593,7 +598,7 @@ mod tests {
             }),
             request: RequestView {
                 tap_id: "42".to_string(),
-                cache_key: Some("ck".to_string()),
+                cache_policy: Some("key:ck".to_string()),
                 ars_hash: "abcdef0123456789".to_string(),
                 ars_len: 11,
             },

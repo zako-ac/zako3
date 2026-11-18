@@ -16,12 +16,29 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use zako3_audio_probe::{UpstreamHopSource, UpstreamHops, hop_record_key, now_unix_ms};
 
-/// A record older than this is not evidence about a stream that is stalling now.
+/// A record older than its own TTL is not evidence about anything.
 ///
-/// The writer republishes every 200 ms while frames flow, so anything this old
-/// means the writer stopped — the stream ended, or taphub died — and reporting
-/// its timestamps as "still sending" would be wrong.
-const MAX_RECORD_AGE_MS: u64 = 10_000;
+/// Deliberately *not* shorter than the jitter buffer's stall timeout: the whole
+/// point of the record is to say how long the upstream hops have been quiet, and
+/// a writer that went quiet because the tap stopped is exactly the case worth
+/// reporting. Only a record that outlived its TTL — which taphub also deletes
+/// when a stream ends — is treated as absent.
+const MAX_RECORD_AGE_MS: u64 = zako3_audio_probe::HOP_RECORD_TTL_SECS * 1000;
+
+/// Whether a record still describes a stream worth reasoning about.
+///
+/// Split out so the age rule is testable without a live Redis.
+fn accept(record: UpstreamHops, now_ms: u64) -> Option<UpstreamHops> {
+    if now_ms.saturating_sub(record.updated_unix_ms) > MAX_RECORD_AGE_MS {
+        tracing::debug!(
+            stream = %record.stream,
+            age_ms = now_ms.saturating_sub(record.updated_unix_ms),
+            "hop record reader: record outlived its TTL; treating upstream as unavailable"
+        );
+        return None;
+    }
+    Some(record)
+}
 
 pub struct RedisUpstreamHops {
     client: redis::Client,
@@ -111,16 +128,7 @@ impl UpstreamHopSource for RedisUpstreamHops {
             None => return None,
         };
 
-        if now_unix_ms().saturating_sub(record.updated_unix_ms) > MAX_RECORD_AGE_MS {
-            tracing::debug!(
-                stream,
-                age_ms = now_unix_ms().saturating_sub(record.updated_unix_ms),
-                "hop record reader: record is stale; treating upstream as unavailable"
-            );
-            return None;
-        }
-
-        Some(record)
+        accept(record, now_unix_ms())
     }
 }
 
@@ -128,10 +136,43 @@ impl UpstreamHopSource for RedisUpstreamHops {
 mod tests {
     use super::*;
 
+    fn record(age_ms: u64) -> (UpstreamHops, u64) {
+        let now = now_unix_ms();
+        (
+            UpstreamHops {
+                stream: "s".to_string(),
+                path: "tap".to_string(),
+                tap_id: "42".to_string(),
+                tap_recv_unix_ms: now.saturating_sub(age_ms),
+                send_unix_ms: now.saturating_sub(age_ms),
+                frames_from_tap: 1,
+                frames_sent: 1,
+                updated_unix_ms: now.saturating_sub(age_ms),
+            },
+            now,
+        )
+    }
+
     #[tokio::test]
     async fn a_missing_record_is_none_not_an_error() {
         // No Redis in this test: every read must simply come back empty.
         let reader = RedisUpstreamHops::new("redis://127.0.0.1:1");
         assert!(reader.read("no-such-stream").await.is_none());
+    }
+
+    /// A quiet-but-live writer is the case the device exists for: a record that
+    /// has not moved for longer than the jitter buffer's stall timeout must
+    /// still be handed to the report, or a stopped tap reports as "unknown".
+    #[test]
+    fn a_record_older_than_the_stall_timeout_is_still_evidence() {
+        let stall_timeout_ms = 15_000;
+        let (record, now) = record(stall_timeout_ms + 1_000);
+        assert!(accept(record, now).is_some());
+    }
+
+    #[test]
+    fn a_record_that_outlived_its_ttl_is_not() {
+        let (record, now) = record(MAX_RECORD_AGE_MS + 1_000);
+        assert!(accept(record, now).is_none());
     }
 }

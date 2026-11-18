@@ -12,6 +12,7 @@ serenity = { version = "0.12", default-features = false, features = ["client", "
 songbird.workspace = true
 zako3-types.workspace = true
 ae-protocol.workspace = true
+zako3-audio-probe.workspace = true
 zako3-audio-engine-core.path = "../core"
 zako3-audio-engine-infra = { path = "../infra" }
 zako3-telemetry.workspace = true

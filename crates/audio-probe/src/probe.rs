@@ -5,7 +5,6 @@
 //! the hot path (one frame every 20 ms) costs two relaxed increments and a
 //! mutex-free timestamp.
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{now_unix_ms, report::GapStats};
@@ -37,7 +36,26 @@ pub struct StreamProbe {
     socket_recv: AtomicU64,
     injected_drops: AtomicU64,
     engine_recv_last_unix_ms: AtomicU64,
-    gaps: Mutex<GapStats>,
+    gap_last_unix_ms: AtomicU64,
+    gap_count: AtomicU64,
+    gap_max_ms: AtomicU64,
+    gap_over_100ms: AtomicU64,
+    gap_over_1000ms: AtomicU64,
+}
+
+/// What a probe looked like at one instant.
+///
+/// Deliberately a value rather than a live handle: the stall report is assembled
+/// after a round trip to another process, and reading the probe *after* that
+/// would describe a later moment than the stall and could blame the wrong hop.
+#[derive(Debug, Clone, Default)]
+pub struct ProbeSnapshot {
+    pub stream: String,
+    pub started_unix_ms: u64,
+    pub socket_recv: u64,
+    pub injected_drops: u64,
+    pub engine_recv_last_unix_ms: u64,
+    pub gaps: GapStats,
 }
 
 impl StreamProbe {
@@ -48,7 +66,11 @@ impl StreamProbe {
             socket_recv: AtomicU64::new(0),
             injected_drops: AtomicU64::new(0),
             engine_recv_last_unix_ms: AtomicU64::new(0),
-            gaps: Mutex::new(GapStats::default()),
+            gap_last_unix_ms: AtomicU64::new(0),
+            gap_count: AtomicU64::new(0),
+            gap_max_ms: AtomicU64::new(0),
+            gap_over_100ms: AtomicU64::new(0),
+            gap_over_1000ms: AtomicU64::new(0),
         }
     }
 
@@ -75,20 +97,33 @@ impl StreamProbe {
         self.engine_recv_last_unix_ms
             .store(now_ms, Ordering::Relaxed);
 
-        let mut gaps = self.gaps.lock().expect("probe gap lock");
-        let previous = gaps.last_arrival_unix_ms;
+        // Atomics rather than a lock: this runs on the frame path, fifty times a
+        // second per stream, and a poisoned lock there would take the pump with
+        // it. The max is updated with a compare-exchange loop because a lost
+        // update here would hide exactly the gap the device exists to find.
+        let previous = self.gap_last_unix_ms.swap(now_ms, Ordering::Relaxed);
         if previous != 0 && now_ms > previous {
             let gap = now_ms - previous;
-            gaps.count += 1;
-            gaps.max_gap_ms = gaps.max_gap_ms.max(gap);
+            self.gap_count.fetch_add(1, Ordering::Relaxed);
+            let mut current = self.gap_max_ms.load(Ordering::Relaxed);
+            while gap > current {
+                match self.gap_max_ms.compare_exchange_weak(
+                    current,
+                    gap,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => break,
+                    Err(observed) => current = observed,
+                }
+            }
             if gap >= GAP_BUCKET_100MS {
-                gaps.over_100ms += 1;
+                self.gap_over_100ms.fetch_add(1, Ordering::Relaxed);
             }
             if gap >= GAP_BUCKET_1S {
-                gaps.over_1000ms += 1;
+                self.gap_over_1000ms.fetch_add(1, Ordering::Relaxed);
             }
         }
-        gaps.last_arrival_unix_ms = now_ms;
     }
 
     /// A frame was discarded on purpose by a synthetic stall injection.
@@ -113,7 +148,25 @@ impl StreamProbe {
     }
 
     pub fn gaps(&self) -> GapStats {
-        *self.gaps.lock().expect("probe gap lock")
+        GapStats {
+            count: self.gap_count.load(Ordering::Relaxed),
+            max_gap_ms: self.gap_max_ms.load(Ordering::Relaxed),
+            over_100ms: self.gap_over_100ms.load(Ordering::Relaxed),
+            over_1000ms: self.gap_over_1000ms.load(Ordering::Relaxed),
+            last_arrival_unix_ms: self.gap_last_unix_ms.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Everything a stall report needs, read at one instant.
+    pub fn snapshot(&self) -> ProbeSnapshot {
+        ProbeSnapshot {
+            stream: self.stream.clone(),
+            started_unix_ms: self.started_unix_ms,
+            socket_recv: self.socket_recv(),
+            injected_drops: self.injected_drops(),
+            engine_recv_last_unix_ms: self.engine_recv_last_unix_ms(),
+            gaps: self.gaps(),
+        }
     }
 }
 

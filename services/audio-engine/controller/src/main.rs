@@ -22,11 +22,17 @@ use zako3_audio_engine_infra::{
     RedisStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,
 };
 
+use zako3_audio_probe::init_injection_from_env;
 use zako3_taphub_transport_client::{TransportClient, load_certs};
 use zako3_telemetry::TelemetryConfig;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Armed from ZAKO_STALL_INJECT at startup rather than on the first frame.
+    if let Some(spec) = init_injection_from_env() {
+        tracing::warn!(spec = %spec, "synthetic stall injection armed at startup");
+    }
+
     let config = AppConfig::load();
 
     println!("Starting zako3 audio engine...");
