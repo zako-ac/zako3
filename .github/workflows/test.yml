@@ -1,0 +1,68 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audio-path:
+    # The audio path crates: the stall instrumentation and the transport that
+    # emits it. These are the tests that prove a stall report names the right
+    # hop, so they run on every pull request.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: Format check
+        run: cargo fmt -p zako3-audio-probe -p zako3-taphub-transport-client -- --check
+
+      - name: Test
+        run: cargo test -p zako3-audio-probe -p zako3-taphub-transport-client -p zako3-taphub-transport-lib -p zako3-opus-jitter
+
+      - name: Clippy
+        run: |
+          cargo clippy -p zako3-audio-probe -p zako3-taphub-transport-client \
+            -p zako3-taphub-transport-lib -p zako3-opus-jitter \
+            --all-targets -- -D warnings
+
+  touched-services:
+    # The services the instrumentation writes from: taphub publishes the hop
+    # record, the engine reads it. Checked, not tested, because their tests need
+    # a cluster.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: Clippy
+        run: |
+          cargo clippy -p zako3-taphub-core -p zako3-audio-engine-infra \
+            -p zako3-audio-engine-controller -p zako3-telemetry \
+            --all-targets -- -D warnings
