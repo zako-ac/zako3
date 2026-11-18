@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use parking_lot::Mutex;
 use tokio::sync::watch;
@@ -27,6 +22,15 @@ pub use connection::TapHubConnectionHandler;
 pub(crate) struct ConnEntry {
     pub(crate) state: OnlineTapState,
     pub(crate) disconnect_tx: watch::Sender<bool>,
+    /// The tap has said it is going away: still connected, but no longer a
+    /// candidate for a request.
+    ///
+    /// Kept as a field rather than by removing the entry, because the entry is
+    /// also the bookkeeping for uptime, metrics and the Redis projection, and a
+    /// removed entry makes the later `on_tap_disconnected` look like a
+    /// connection that was never here. Flipping this makes the connection
+    /// unroutable at once and leaves the rest of the teardown to its normal path.
+    pub(crate) draining: bool,
 }
 
 pub(crate) type ConnectionRegistry = Arc<Mutex<HashMap<u64, ConnEntry>>>;
@@ -114,6 +118,12 @@ impl TapHub {
                 let guard = self.connections.lock();
                 let mut map: HashMap<TapId, OnlineTapStates> = HashMap::new();
                 for entry in guard.values() {
+                    if entry.draining {
+                        // A draining tap is not an offering. Refreshing its
+                        // lease would advertise it to every reader of the
+                        // projection for as long as the drain lasts.
+                        continue;
+                    }
                     map.entry(entry.state.tap_id.clone())
                         .or_default()
                         .push(entry.state.clone());
@@ -122,7 +132,11 @@ impl TapHub {
             };
 
             for (tap_id, states) in by_tap {
-                if let Err(e) = self.state_service.publish_tap_states(&tap_id, &states).await {
+                if let Err(e) = self
+                    .state_service
+                    .publish_tap_states(&tap_id, &states)
+                    .await
+                {
                     tracing::warn!(%e, tap_id = %tap_id.0, "Failed to refresh tap connection lease");
                 }
             }
@@ -135,23 +149,50 @@ impl TapHub {
     /// connections — so a connection that has already been dropped is never
     /// handed out. The sampler picks a connection, then we subscribe to that
     /// connection's disconnect signal under the same logical view.
+    ///
+    /// A connection that has announced a drain is skipped for exactly that
+    /// reason: it is still connected and may still be answering, but a request
+    /// handed to it is a request that has to be retried elsewhere a moment
+    /// later. This is the "route new requests to another pod" half of the
+    /// scale-down contract, and it needs no cooperation from the pod that is
+    /// leaving.
     pub(crate) async fn select_connection(
         &self,
         tap_id: &TapId,
     ) -> Result<(u64, watch::Receiver<bool>), zako3_types::TapHubError> {
         let guard = self.connections.lock();
 
-        let available: OnlineTapStates = guard
-            .values()
-            .filter(|e| &e.state.tap_id == tap_id)
-            .map(|e| e.state.clone())
-            .collect();
+        let available: OnlineTapStates = routable_states(&guard, tap_id);
 
         let connection_id = self
             .sampler
             .lock()
             .next_connection_id(&available)
-            .ok_or(zako3_types::TapHubError::TapUnavailable)?;
+            .ok_or_else(|| {
+                // Nothing left to route to. The caller gets `TapUnavailable`,
+                // which HQ classifies as `tap_unavailable` — a retriable reason,
+                // so the message is retried once and then reported to the user
+                // instead of being dropped in silence. `held` separates "every
+                // replica is draining" (held > 0, nothing routable) from "this
+                // tap was never here" (held == 0), which is the difference
+                // between a scale-down that caught a request and a tap that is
+                // simply down.
+                let held = guard.values().filter(|e| &e.state.tap_id == tap_id).count();
+                tracing::warn!(
+                    tap_id = %tap_id.0,
+                    held,
+                    draining = held - available.len(),
+                    "no connection available for tap"
+                );
+                crate::metrics::metrics().no_tap_available_total.add(
+                    1,
+                    &[
+                        opentelemetry::KeyValue::new("tap_id", tap_id.0.to_string()),
+                        opentelemetry::KeyValue::new("held", held.to_string()),
+                    ],
+                );
+                zako3_types::TapHubError::TapUnavailable
+            })?;
 
         let disconnect_rx = guard
             .get(&connection_id)
@@ -159,5 +200,92 @@ impl TapHub {
             .ok_or(zako3_types::TapHubError::TapUnavailable)?;
 
         Ok((connection_id, disconnect_rx))
+    }
+}
+
+/// The connections of one tap that a request may be routed to: live, and not
+/// on their way out.
+pub(crate) fn routable_states(
+    registry: &std::collections::HashMap<u64, ConnEntry>,
+    tap_id: &TapId,
+) -> OnlineTapStates {
+    registry
+        .values()
+        .filter(|e| &e.state.tap_id == tap_id && !e.draining)
+        .map(|e| e.state.clone())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use zako3_types::TapName;
+
+    fn entry(connection_id: u64, draining: bool) -> ConnEntry {
+        let (disconnect_tx, _rx) = watch::channel(false);
+        ConnEntry {
+            state: OnlineTapState {
+                tap_id: TapId("t1".to_string()),
+                tap_name: TapName("test".to_string()),
+                connection_id,
+                friendly_name: "test".to_string(),
+                selection_weight: 1.0,
+                connected_at: Utc::now(),
+                replica_id: String::new(),
+            },
+            disconnect_tx,
+            draining,
+        }
+    }
+
+    fn registry(entries: Vec<ConnEntry>) -> std::collections::HashMap<u64, ConnEntry> {
+        entries
+            .into_iter()
+            .map(|e| (e.state.connection_id, e))
+            .collect()
+    }
+
+    fn ids(states: &OnlineTapStates) -> Vec<u64> {
+        let mut ids: Vec<u64> = states.iter().map(|s| s.connection_id).collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    #[test]
+    fn a_draining_connection_leaves_the_routing_set_at_once() {
+        let tap = TapId("t1".to_string());
+        let mut reg = registry(vec![entry(1, false), entry(2, false)]);
+        assert_eq!(ids(&routable_states(&reg, &tap)), vec![1, 2]);
+
+        // This is the whole of the routing change: the flag the drain handler
+        // flips, read by the same function the request path uses.
+        reg.get_mut(&1).unwrap().draining = true;
+        assert_eq!(
+            ids(&routable_states(&reg, &tap)),
+            vec![2],
+            "a draining connection must not be selectable"
+        );
+    }
+
+    #[test]
+    fn the_last_tap_draining_leaves_nothing_to_route_to() {
+        let tap = TapId("t1".to_string());
+        let mut reg = registry(vec![entry(1, false)]);
+        reg.get_mut(&1).unwrap().draining = true;
+        assert!(routable_states(&reg, &tap).is_empty());
+    }
+
+    #[test]
+    fn draining_one_tap_does_not_touch_another() {
+        let mut other = entry(9, false);
+        other.state.tap_id = TapId("t2".to_string());
+        let tap = TapId("t1".to_string());
+        let reg = registry(vec![entry(1, true), other]);
+        assert!(routable_states(&reg, &tap).is_empty());
+        assert_eq!(
+            ids(&routable_states(&reg, &TapId("t2".to_string()))),
+            vec![9]
+        );
     }
 }
