@@ -137,10 +137,10 @@ mod tests {
     /// of them, so two injection tests running in parallel disarm each other:
     /// the harness then sees frames flow through a stage that was supposed to be
     /// dropping them. Every test in this module takes this lock.
-    static INJECTION_TESTS: Mutex<()> = Mutex::new(());
+    static INJECTION_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-    fn serial() -> std::sync::MutexGuard<'static, ()> {
-        INJECTION_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+    async fn serial() -> tokio::sync::MutexGuard<'static, ()> {
+        INJECTION_TESTS.lock().await
     }
 
     fn build(
@@ -245,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_healthy_stream_raises_nothing() {
-        let _serial = serial();
+        let _serial = serial().await;
         clear_injection();
         let mut h = Harness::new("healthy");
         h.run(0, 50).await; // 1 s of audio, never interrupted
@@ -260,7 +260,7 @@ mod tests {
     /// verdict must name the engine rather than the path.
     #[tokio::test]
     async fn injection_at_the_pump_diverges_the_counters_and_blames_the_engine() {
-        let _serial = serial();
+        let _serial = serial().await;
         clear_injection();
         let mut h = Harness::new("engine-internal");
         h.run(0, 20).await; // 400 ms of healthy audio
@@ -325,7 +325,7 @@ mod tests {
     /// `UpstreamHopWriter`, so it fails if either half drifts from the other.
     #[tokio::test]
     async fn injection_at_taphub_send_leaves_the_engine_quiet_and_blames_the_path() {
-        let _serial = serial();
+        let _serial = serial().await;
         clear_injection();
         let mut h = Harness::new("path-loss");
         h.run(0, 20).await; // 400 ms of healthy audio first
@@ -408,7 +408,7 @@ mod tests {
     /// Nothing moved anywhere: the tap (or the cache) is the quiet end.
     #[tokio::test]
     async fn a_tap_that_stops_is_named_as_the_tap() {
-        let _serial = serial();
+        let _serial = serial().await;
         clear_injection();
         let mut h = Harness::new("tap-quiet");
         h.run(0, 20).await;
@@ -427,7 +427,7 @@ mod tests {
     /// cannot see.
     #[tokio::test]
     async fn no_upstream_record_is_reported_as_unknown() {
-        let _serial = serial();
+        let _serial = serial().await;
         clear_injection();
         let mut h = Harness::new("no-upstream");
         h.run(0, 20).await;

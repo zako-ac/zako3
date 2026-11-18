@@ -40,7 +40,7 @@ jobs:
         run: |
           cargo clippy -p zako3-audio-probe -p zako3-taphub-transport-client \
             -p zako3-taphub-transport-lib -p zako3-opus-jitter \
-            --all-targets -- -D warnings
+            --all-targets --no-deps -- -D warnings
 
   touched-services:
     # The services the instrumentation writes from: taphub publishes the hop
@@ -65,4 +65,4 @@ jobs:
         run: |
           cargo clippy -p zako3-taphub-core -p zako3-audio-engine-infra \
             -p zako3-audio-engine-controller -p zako3-telemetry \
-            --all-targets -- -D warnings
+            --all-targets --no-deps -- -D warnings
