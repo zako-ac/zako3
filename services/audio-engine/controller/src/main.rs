@@ -212,6 +212,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     );
 
+    // Both limits are read once, here, so this line is the only in-cluster
+    // record of what a running pod actually uses: the value can come from a
+    // chart value, a `--set`, or the process environment, and the pod spec is
+    // not always what a reader assumes it is.
+    tracing::info!(
+        track_watchdog_secs = config.track_watchdog_secs,
+        queue_max_age_secs = config.queue_max_age_secs,
+        "Audio engine session limits configured"
+    );
+
     // Fill the OnceLock now that session_manager is constructed
     let _ = sm_cell.set(session_manager.clone());
 
