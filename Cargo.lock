@@ -1097,7 +1097,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2168,7 +2168,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3424,7 +3424,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -5396,7 +5396,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -6018,6 +6018,7 @@ dependencies = [
 [[package]]
 name = "protofish3"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/protofish3-rs#d580dcaa5d80fa3f67d6ad32be9ed521cffa3be2"
 dependencies = [
  "bytes",
  "futures-util",
@@ -6033,6 +6034,7 @@ dependencies = [
 [[package]]
 name = "protofish3-proto"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/protofish3-rs#d580dcaa5d80fa3f67d6ad32be9ed521cffa3be2"
 dependencies = [
  "cookie-factory",
  "nom",
@@ -6043,6 +6045,7 @@ dependencies = [
 [[package]]
 name = "protofish4"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "bytes",
  "protofish4-proto",
@@ -6055,6 +6058,7 @@ dependencies = [
 [[package]]
 name = "protofish4-proto"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "chacha20poly1305 0.11.0",
  "thiserror 2.0.18",
@@ -6145,7 +6149,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.42",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6185,9 +6189,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6680,6 +6684,7 @@ dependencies = [
 [[package]]
 name = "ringbuf"
 version = "0.4.9"
+source = "git+https://github.com/mincomk/ringbuf#61cfa5a31991b87080d3a906e0c587fdd90871f8"
 dependencies = [
  "crossbeam-utils",
  "portable-atomic",
@@ -6884,7 +6889,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6897,7 +6902,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7013,7 +7018,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs 0.26.11",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7034,7 +7039,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs 1.0.8",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7523,6 +7528,7 @@ dependencies = [
 [[package]]
 name = "serenity-voice-model"
 version = "0.3.0"
+source = "git+https://github.com/serenity-rs/voice-model.git?branch=next#cef32674d5ad6c539b1ee2ff9dcda39b6d71e18f"
 dependencies = [
  "bitflags 2.13.0",
  "num-traits",
@@ -7750,6 +7756,7 @@ dependencies = [
 [[package]]
 name = "songbird"
 version = "0.5.0"
+source = "git+https://github.com/mincomk/songbird#a4d8767f5da1ffe395ca8d659b721cfb938a1472"
 dependencies = [
  "aead 0.5.2",
  "aes-gcm",
@@ -8442,10 +8449,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10167,7 +10174,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -10789,7 +10796,6 @@ dependencies = [
  "tracing-opentelemetry",
  "zako3-audio-engine-core",
  "zako3-audio-engine-infra",
- "zako3-audio-probe",
  "zako3-cache-client",
  "zako3-states",
  "zako3-taphub-transport-client",
@@ -10824,7 +10830,6 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing",
  "zako3-audio-engine-audio",
- "zako3-audio-probe",
  "zako3-types",
 ]
 
@@ -10852,7 +10857,6 @@ dependencies = [
  "uuid",
  "zako3-audio-engine-audio",
  "zako3-audio-engine-core",
- "zako3-audio-probe",
  "zako3-cache-client",
  "zako3-opus-jitter",
  "zako3-preload-cache",
@@ -10877,20 +10881,6 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "zako3-audio-probe"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "hex",
- "opentelemetry 0.31.0",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -11100,7 +11090,6 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
- "zako3-audio-probe",
  "zako3-cache-client",
  "zako3-metrics",
  "zako3-preload-cache",
@@ -11117,7 +11106,6 @@ name = "zako3-taphub-transport-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "async-trait",
  "bytes",
  "opus",
  "protofish3",
@@ -11129,7 +11117,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "zako3-audio-probe",
  "zako3-opus-jitter",
  "zako3-taphub-transport-lib",
  "zako3-taphub-transport-server",
@@ -11305,6 +11292,7 @@ dependencies = [
 [[package]]
 name = "zakofish4-common"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/zakofish4?rev=2f897b34a9cc54906cde871eef8e017a0fb5eb48#2f897b34a9cc54906cde871eef8e017a0fb5eb48"
 dependencies = [
  "rmp-serde",
  "serde",
@@ -11316,6 +11304,7 @@ dependencies = [
 [[package]]
 name = "zakofish4-hub"
 version = "0.1.0"
+source = "git+https://github.com/zako-ac/zakofish4?rev=2f897b34a9cc54906cde871eef8e017a0fb5eb48#2f897b34a9cc54906cde871eef8e017a0fb5eb48"
 dependencies = [
  "async-trait",
  "futures",

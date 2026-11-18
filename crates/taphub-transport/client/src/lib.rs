@@ -459,8 +459,7 @@ impl TransportClient {
                     // it — the transfer borrows the channel receiver, so the pump cannot
                     // be a task of its own.
                     let end = {
-                        let pump =
-                            jitter::pump(&mut single, frame_tx, Some(Arc::clone(&probe)));
+                        let pump = jitter::pump(&mut single, frame_tx, Some(Arc::clone(&probe)));
                         tokio::pin!(pump);
 
                         let consume = async {

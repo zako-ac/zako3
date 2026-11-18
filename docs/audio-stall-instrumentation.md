@@ -160,8 +160,14 @@ ZAKO_STALL_INJECT=<stream-pattern>:<engine-pump|taphub-send>:<seconds>
 pump, channel and jitter buffer, and asserts both the counter divergence and the
 verdict:
 
-- `injection_at_the_pump_diverges_the_counters_and_blames_the_engine`
-- `a_silent_socket_with_taphub_sending_blames_the_path`
+- `injection_at_the_pump_diverges_the_counters_and_blames_the_engine` — the
+  socket counter climbs, the buffer counter does not, and the verdict is
+  `engine_internal` with a fresh `engine_recv` age against a stale
+  `buffer_insert` age
+- `injection_at_taphub_send_leaves_the_engine_quiet_and_blames_the_path` — the
+  socket reads nothing at all while taphub's own record keeps advancing, and the
+  verdict is `taphub_to_engine_path`. It drives the real `dropping(Stage::TaphubSend)`
+  predicate and a real `UpstreamHopWriter`, so it fails if either half drifts
 - `a_tap_that_stops_is_named_as_the_tap`
 - `no_upstream_record_is_reported_as_unknown`
 - `a_healthy_stream_raises_nothing`
