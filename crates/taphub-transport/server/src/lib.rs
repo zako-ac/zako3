@@ -57,11 +57,11 @@ impl TransportServer {
         let mut config = ServerConfig::new(bind_addr, cert_chain, private_key);
         config.protofish.keepalive_interval = Some(Duration::from_secs(5));
 
-        if let Ok(var) = std::env::var("PF_INITIAL_BACKPRESSURE_CREDITS") {
-            if let Ok(credits) = var.parse::<u32>() {
-                tracing::info!("Setting initial backpressure credits to {}", credits);
-                config.protofish.initial_backpressure_credits = credits;
-            }
+        if let Ok(var) = std::env::var("PF_INITIAL_BACKPRESSURE_CREDITS")
+            && let Ok(credits) = var.parse::<u32>()
+        {
+            tracing::info!("Setting initial backpressure credits to {}", credits);
+            config.protofish.initial_backpressure_credits = credits;
         }
 
         let server = Server::bind(config).map_err(|e| std::io::Error::other(e.to_string()))?;

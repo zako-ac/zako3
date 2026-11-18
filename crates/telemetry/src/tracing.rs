@@ -12,13 +12,13 @@ pub(crate) fn build_metadata(headers_env: Option<String>) -> MetadataMap {
     let mut metadata = MetadataMap::new();
     if let Some(headers_str) = headers_env {
         for pair in headers_str.split(',') {
-            if let Some((k, v)) = pair.split_once('=') {
-                if let (Ok(key), Ok(val)) = (
+            if let Some((k, v)) = pair.split_once('=')
+                && let (Ok(key), Ok(val)) = (
                     k.trim().to_lowercase().parse::<MetadataKey<Ascii>>(),
                     v.trim().parse::<MetadataValue<Ascii>>(),
-                ) {
-                    metadata.insert(key, val);
-                }
+                )
+            {
+                metadata.insert(key, val);
             }
         }
     }
