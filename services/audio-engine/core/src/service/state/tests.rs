@@ -77,11 +77,7 @@ impl StateService for SlowStateService {
         Ok(())
     }
 
-    async fn delete_session(
-        &self,
-        _guild_id: GuildId,
-        _channel_id: ChannelId,
-    ) -> ZakoResult<()> {
+    async fn delete_session(&self, _guild_id: GuildId, _channel_id: ChannelId) -> ZakoResult<()> {
         *self.session.lock().unwrap() = None;
         Ok(())
     }
@@ -96,10 +92,7 @@ impl StateService for SlowStateService {
             .collect::<Vec<_>>())
     }
 
-    async fn list_sessions_in_guild(
-        &self,
-        _guild_id: GuildId,
-    ) -> ZakoResult<Vec<SessionState>> {
+    async fn list_sessions_in_guild(&self, _guild_id: GuildId) -> ZakoResult<Vec<SessionState>> {
         self.list_sessions().await
     }
 }
@@ -171,7 +164,9 @@ async fn concurrent_writers_keep_every_update() {
     }
 
     for task in tasks {
-        task.await.expect("writer task panicked").expect("write failed");
+        task.await
+            .expect("writer task panicked")
+            .expect("write failed");
     }
 
     let queued = queued_track_ids(&service.snapshot());
@@ -324,7 +319,9 @@ async fn n_concurrent_plays_queue_exactly_n_tracks() {
     let mut mixer = MockMixer::new();
     // Report every track as already playing, so reconcile never removes a
     // track: the queue this test measures is only what `play` queued.
-    mixer.expect_has_sources().returning(|ids| ids.into_iter().collect());
+    mixer
+        .expect_has_sources()
+        .returning(|ids| ids.into_iter().collect());
     mixer.expect_add_source().return_const(());
     mixer.expect_set_volume().return_const(());
     mixer.expect_remove_source().return_const(());
@@ -392,7 +389,9 @@ async fn n_concurrent_plays_queue_exactly_n_tracks() {
         }));
     }
     for task in tasks {
-        task.await.expect("play task panicked").expect("play failed");
+        task.await
+            .expect("play task panicked")
+            .expect("play failed");
     }
 
     let queued = queued_track_ids(&service.snapshot());

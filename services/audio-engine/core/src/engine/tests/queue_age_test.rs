@@ -8,7 +8,8 @@
 // the queue, its removal is saved, and the next track starts.
 
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use mockall::predicate::*;
@@ -217,6 +218,8 @@ async fn reconcile_drops_the_stale_head_and_plays_the_next_track() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        // The mixer is alive here: these tests are about queue ageing, and a
+        // play that is refused for want of a consumer never reaches the cap.
         Arc::new(AtomicBool::new(true)),
     );
 
@@ -278,6 +281,8 @@ async fn reconcile_leaves_a_fresh_track_alone() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        // The mixer is alive here: these tests are about queue ageing, and a
+        // play that is refused for want of a consumer never reaches the cap.
         Arc::new(AtomicBool::new(true)),
     );
 
@@ -314,12 +319,12 @@ async fn a_track_already_playing_is_not_dropped_when_it_passes_the_cap() {
         .returning(move |_, _| Ok(reads_for_mock.lock().unwrap().pop_front()));
     // `save_session` has no expectation: a drop would fail the test.
 
-    let mixer_rounds = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::from(
-        vec![
+    let mixer_rounds = std::sync::Arc::new(std::sync::Mutex::new(
+        std::collections::VecDeque::from(vec![
             std::collections::HashSet::new(),
             std::collections::HashSet::from([TrackId::from(31)]),
-        ],
-    )));
+        ]),
+    ));
     mock_mixer
         .expect_has_sources()
         .times(2)
@@ -354,6 +359,8 @@ async fn a_track_already_playing_is_not_dropped_when_it_passes_the_cap() {
         Arc::new(mock_state),
         Arc::new(mock_taphub),
         age_cap(90),
+        // The mixer is alive here: these tests are about queue ageing, and a
+        // play that is refused for want of a consumer never reaches the cap.
         Arc::new(AtomicBool::new(true)),
     );
 

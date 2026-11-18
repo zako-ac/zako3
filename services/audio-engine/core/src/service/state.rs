@@ -237,7 +237,6 @@ pub async fn save_state_session(
     result
 }
 
-
 /// Read-modify-write one session atomically.
 ///
 /// Every mutation of `SessionState` has to go through this or

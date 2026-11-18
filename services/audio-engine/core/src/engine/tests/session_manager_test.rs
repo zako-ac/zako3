@@ -305,11 +305,7 @@ async fn test_session_manager_join_without_a_consumer_registers_no_session() {
     }
 }
 
-async fn join_expecting_failure(
-    guild: u64,
-    channel: u64,
-    reason: NoConsumerReason,
-) -> ZakoError {
+async fn join_expecting_failure(guild: u64, channel: u64, reason: NoConsumerReason) -> ZakoError {
     let guild_id = GuildId::from(guild);
     let channel_id = ChannelId::from(channel);
 
