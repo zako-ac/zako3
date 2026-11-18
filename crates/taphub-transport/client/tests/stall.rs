@@ -276,14 +276,19 @@ async fn stalled_track_ends_and_keeps_its_connection() {
         "a stalled track must not reset the pooled connection"
     );
 
-    // The connection the track streamed over is still up.
-    let meta = client
-        .request_audio_meta(meta_request())
-        .await
-        .expect("the client must still serve requests after a track stalled");
-    assert!(
-        matches!(meta.cache_key.cache_type, AudioCacheType::CacheKey(ref k) if k == "meta-key")
-    );
+    // The connection the track streamed over is still up. The pool round-robins per
+    // attempt, so a single request would land on the *next* slot and prove nothing
+    // about the one that carried the track; POOL_SIZE requests cover every slot,
+    // including that one.
+    for _ in 0..4 {
+        let meta = client
+            .request_audio_meta(meta_request())
+            .await
+            .expect("the client must still serve requests after a track stalled");
+        assert!(
+            matches!(meta.cache_key.cache_type, AudioCacheType::CacheKey(ref k) if k == "meta-key")
+        );
+    }
 }
 
 /// A per-request timeout abandons only that request's channel. Resetting the

@@ -12,7 +12,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use zako3_opus_jitter::{JitterConfig, JitterError, OpusJitterBuffer};
@@ -45,10 +45,17 @@ const XFER_END_TIMEOUT: Duration = Duration::from_secs(1);
 /// Without a reset there is nothing else that evicts a *wedged* connection — one
 /// whose peer still answers QUIC keepalives but never answers an application
 /// request. Left in the round-robin it would make one exchange in `POOL_SIZE` pay
-/// the full timeout for the life of the process. A single success on the
-/// connection clears the count, so a connection that is merely slow for a moment
-/// comes straight back.
+/// the full timeout for the life of the process.
 const WEDGED_AFTER: u32 = 2;
+/// How long a wedged connection is kept out of the rotation before one request is
+/// allowed to probe it again.
+///
+/// The quarantine has to expire: while a connection is skipped nothing is sent to
+/// it, so no success can ever clear the count, and a permanent skip would silently
+/// shrink the pool for the rest of the process after one transient slowdown. After
+/// this window the next pick lands on it, and an answer puts it straight back into
+/// full rotation.
+const WEDGE_COOLDOWN: Duration = Duration::from_secs(30);
 
 pub struct TransportClient {
     /// Pool of independent reconnecting connections. Requests round-robin across them via
@@ -57,10 +64,12 @@ pub struct TransportClient {
     cursor: AtomicUsize,
     request_timeout: Duration,
     /// Consecutive timeouts per pooled connection, parallel to `conns`.
-    ///
-    /// `WEDGED_AFTER` of them takes the connection out of `pick_conn`'s rotation
-    /// until an exchange on it succeeds again.
     timeouts: Vec<AtomicU32>,
+    /// When a wedged connection may be tried again, in milliseconds since `started`.
+    /// Zero means "not wedged"; see `WEDGE_COOLDOWN`.
+    wedged_until_ms: Vec<AtomicU64>,
+    /// Base for the cooldown clock, so a deadline is a plain atomic integer.
+    started: Instant,
     /// Per-track jitter buffer settings. Production runs the defaults; tests shorten
     /// `stall_timeout` so a stall can be observed in a second instead of fifteen.
     jitter: JitterConfig,
@@ -126,6 +135,8 @@ impl TransportClient {
             cursor: AtomicUsize::new(0),
             request_timeout,
             timeouts: (0..POOL_SIZE).map(|_| AtomicU32::new(0)).collect(),
+            wedged_until_ms: (0..POOL_SIZE).map(|_| AtomicU64::new(0)).collect(),
+            started: Instant::now(),
             jitter: JitterConfig::default(),
             resets: AtomicU64::new(0),
         })
@@ -171,10 +182,32 @@ impl TransportClient {
     fn pick_conn(&self) -> (usize, Arc<ReconnectingClient>) {
         let n = self.conns.len();
         let start = self.cursor.fetch_add(1, Ordering::Relaxed) % n;
+        let now = self.now_ms();
         let idx = pick_index(start, n, |i| {
             self.timeouts[i].load(Ordering::Relaxed) >= WEDGED_AFTER
+                && now < self.wedged_until_ms[i].load(Ordering::Relaxed)
         });
         (idx, Arc::clone(&self.conns[idx]))
+    }
+
+    /// Milliseconds since this client was built, for the cooldown deadline.
+    fn now_ms(&self) -> u64 {
+        self.started.elapsed().as_millis() as u64
+    }
+
+    /// Record a timeout on `idx`; `WEDGED_AFTER` in a row starts a cooldown.
+    fn note_timeout(&self, idx: usize) {
+        let count = self.timeouts[idx].fetch_add(1, Ordering::Relaxed) + 1;
+        if count >= WEDGED_AFTER {
+            let until = self.now_ms() + WEDGE_COOLDOWN.as_millis() as u64;
+            self.wedged_until_ms[idx].store(until, Ordering::Relaxed);
+        }
+    }
+
+    /// Record an answer on `idx`: it is healthy and back in full rotation.
+    fn note_ok(&self, idx: usize) {
+        self.timeouts[idx].store(0, Ordering::Relaxed);
+        self.wedged_until_ms[idx].store(0, Ordering::Relaxed);
     }
 
     async fn round_trip_once(
@@ -195,7 +228,8 @@ impl TransportClient {
     ///   and the retry moves to the next connection in the pool instead. A connection
     ///   that is genuinely dead is already evicted by the transport keepalive (5s
     ///   interval, 15s timeout); one that stays alive but never answers is counted and
-    ///   dropped out of the rotation by `pick_conn` after `WEDGED_AFTER` timeouts.
+    ///   skipped by `pick_conn` for `WEDGE_COOLDOWN` after `WEDGED_AFTER` timeouts, and
+    ///   probed again when that window closes.
     /// - **Transport error**: reset only *this* pooled connection, then retry.
     ///
     /// Application-level `TapHubResponse::Error` is returned as-is, never retried.
@@ -225,7 +259,7 @@ impl TransportClient {
                     let resp: TapHubResponse = rmp_serde::from_slice(&resp_payload)
                         .map_err(|e| TapHubError::Internal(e.to_string()))?;
                     // It answered, so whatever made it slow before is gone.
-                    self.timeouts[idx].store(0, Ordering::Relaxed);
+                    self.note_ok(idx);
                     return Ok((conn, sender, receiver, resp));
                 }
                 Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
@@ -238,7 +272,7 @@ impl TransportClient {
                     self.resets.fetch_add(1, Ordering::Relaxed);
                     conn.reset(RESET_CLOSE_CODE).await;
                     // A fresh connection has no history of timing out.
-                    self.timeouts[idx].store(0, Ordering::Relaxed);
+                    self.note_ok(idx);
                 }
                 Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
                 Err(_) if attempt < MAX_ATTEMPTS => {
@@ -251,10 +285,10 @@ impl TransportClient {
                     // closes this request's channel, while a reset would cut off every
                     // other track multiplexed over the same connection. Blame the
                     // connection instead, so a wedged one leaves the rotation.
-                    self.timeouts[idx].fetch_add(1, Ordering::Relaxed);
+                    self.note_timeout(idx);
                 }
                 Err(_) => {
-                    self.timeouts[idx].fetch_add(1, Ordering::Relaxed);
+                    self.note_timeout(idx);
                     return Err(TapHubError::Internal(format!(
                         "taphub request timed out after {} attempts ({}ms each)",
                         MAX_ATTEMPTS,
