@@ -12,16 +12,55 @@ use protofish3::{
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::time::{Duration, Instant};
 
 use crate::error::{Result, ZakofishError};
 use crate::tap::TapHandler;
 use crate::tap_streams::encode_pf3_chunk;
 use crate::types::TransferMode;
-use crate::types::message::{HubToTapMessage, TapClientHello, TapToHubMessage};
+use crate::types::message::{HubToTapMessage, TapClientHello, TapDraining, TapToHubMessage};
+
+/// What to do when the process is asked to stop.
+///
+/// The point of a drain is that a tap going away says so *before* it stops
+/// answering. The alternative — dying on SIGTERM with the connection open —
+/// leaves the hub with a QUIC connection that only fails on its idle timeout,
+/// so requests keep being routed to a process that is already gone and each one
+/// waits out its whole budget before the caller learns there was nobody there.
+#[derive(Debug, Clone)]
+pub struct DrainConfig {
+    /// How long to keep answering requests that were already accepted before
+    /// giving up and closing anyway. The process's own grace period has to be
+    /// longer than this, or the kubelet kills it mid-drain.
+    pub timeout: Duration,
+    /// Whether to hook SIGTERM. On by default; off for tests and for anything
+    /// that wants to drive the drain itself (see [`ZakofishTapPf3::drain_now`]).
+    pub handle_signals: bool,
+}
+
+impl Default for DrainConfig {
+    fn default() -> Self {
+        Self {
+            // Above the slowest single request any tap has been measured
+            // serving (supertonic's synthesis is a 753ms worst case; youtube's
+            // download is bounded by its own timeout), and well inside the
+            // 45s grace period the manifests give the pod.
+            timeout: Duration::from_secs(20),
+            handle_signals: true,
+        }
+    }
+}
 
 pub struct ZakofishTapPf3 {
     client: Arc<Client>,
+    /// Requests currently being served, and whether a drain has begun.
+    ///
+    /// Shared with every spawned per-request task so a drain can wait for them
+    /// and so a new request arriving during the drain can be refused instead of
+    /// started.
+    in_flight: Arc<AtomicU32>,
+    draining: Arc<AtomicBool>,
 }
 
 impl ZakofishTapPf3 {
@@ -29,7 +68,22 @@ impl ZakofishTapPf3 {
         let client = Client::bind(client_config)?;
         Ok(Self {
             client: Arc::new(client),
+            in_flight: Arc::new(AtomicU32::new(0)),
+            draining: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// How many requests this tap is serving right now.
+    pub fn in_flight(&self) -> u32 {
+        self.in_flight.load(Ordering::SeqCst)
+    }
+
+    /// Begin draining without a signal, for a caller that owns the shutdown.
+    ///
+    /// Idempotent. A running [`Self::connect_and_run`] notices this within a
+    /// few tens of milliseconds and drains the same way SIGTERM would.
+    pub fn drain_now(&self) {
+        self.draining.store(true, Ordering::SeqCst);
     }
 
     /// Connect to the hub and serve requests forever, reconnecting on failure.
@@ -60,8 +114,29 @@ impl ZakofishTapPf3 {
         hello_info: TapClientHello,
         handler: Arc<dyn TapHandler>,
     ) -> Result<()> {
+        self.connect_and_run_with(
+            hub_host,
+            server_name,
+            hello_info,
+            handler,
+            DrainConfig::default(),
+        )
+        .await
+    }
+
+    /// [`Self::connect_and_run`] with the shutdown behaviour spelled out.
+    pub async fn connect_and_run_with(
+        &self,
+        hub_host: &str,
+        server_name: &str,
+        hello_info: TapClientHello,
+        handler: Arc<dyn TapHandler>,
+        drain: DrainConfig,
+    ) -> Result<()> {
         /// How often to poll DNS regardless of connection state.
         const DNS_POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+        let mut shutdown = install_shutdown_signal(drain.handle_signals)?;
 
         let recon_config = ReconnectConfig {
             initial_backoff: Duration::from_secs(1),
@@ -144,6 +219,19 @@ impl ZakofishTapPf3 {
                 continue 'outer;
             }
 
+            // The chan the tap speaks on of its own accord. It carries exactly
+            // one message, the drain notice, and it has to exist *before* the
+            // drain so the notice does not wait on a handshake that is about to
+            // stop being served. Best effort: without it the hub still learns
+            // the tap left, just later and without the reason.
+            let control = match conn.open_chan().await {
+                Ok((sender, _receiver)) => Some(sender),
+                Err(e) => {
+                    tracing::warn!(%e, "no control chan; a drain notice will not reach the hub");
+                    None
+                }
+            };
+
             loop {
                 tokio::select! {
                     // ── Independent DNS poll ────────────────────────────────
@@ -200,9 +288,17 @@ impl ZakofishTapPf3 {
                         match chan_result {
                             Ok((sender, receiver)) => {
                                 let handler_clone = handler.clone();
+                                let in_flight = Arc::clone(&self.in_flight);
+                                let draining = Arc::clone(&self.draining);
                                 tokio::spawn(async move {
-                                    if let Err(e) =
-                                        handle_incoming_chan(sender, receiver, handler_clone).await
+                                    if let Err(e) = handle_incoming_chan(
+                                        sender,
+                                        receiver,
+                                        handler_clone,
+                                        in_flight,
+                                        draining,
+                                    )
+                                    .await
                                     {
                                         tracing::error!("Error handling incoming chan: {:?}", e);
                                     }
@@ -220,10 +316,196 @@ impl ZakofishTapPf3 {
                             }
                         }
                     }
+
+                    // ── Shutdown ────────────────────────────────────────────
+                    // SIGTERM (or an explicit `drain_now`) only sets the flag;
+                    // the arm below acts on it, so a pod cancellation and a
+                    // caller-driven drain take exactly the same path.
+                    _ = wait_for_shutdown(&mut shutdown) => {
+                        if !self.draining.swap(true, Ordering::SeqCst) {
+                            tracing::info!("shutdown requested; draining");
+                        }
+                    }
+
+                    // ── Drain ───────────────────────────────────────────────
+                    // A plain timer rather than a guard on the flag: `select!`
+                    // evaluates its guards once, when it is entered, and this
+                    // one is entered on an idle connection that may then wait
+                    // forever — so a guarded arm would never become live. 50ms
+                    // is the ceiling on how long "shutdown requested" takes to
+                    // become "notice on the wire", and the tick costs a timer
+                    // wake that a tap's own loop would take anyway.
+                    _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                        if !self.draining.load(Ordering::SeqCst) {
+                            continue;
+                        }
+                        drain_and_close(
+                            &conn,
+                            control.as_ref(),
+                            &self.in_flight,
+                            &self.draining,
+                            drain.timeout,
+                        )
+                        .await;
+                        break 'outer;
+                    }
                 }
             }
             // `conn` is dropped here, cancelling any in-progress retry loop.
         }
+
+        Ok(())
+    }
+}
+
+/// The shutdown signal a tap listens for, where the platform has one.
+#[cfg(unix)]
+type ShutdownSignal = tokio::signal::unix::Signal;
+/// Nothing to listen for off unix.
+#[cfg(not(unix))]
+struct ShutdownSignal;
+
+fn install_shutdown_signal(wanted: bool) -> Result<Option<ShutdownSignal>> {
+    if !wanted {
+        return Ok(None);
+    }
+
+    #[cfg(unix)]
+    {
+        let sig = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .map_err(|e| {
+                ZakofishError::ProtocolError(format!("could not install SIGTERM handler: {e}"))
+            })?;
+        Ok(Some(sig))
+    }
+
+    #[cfg(not(unix))]
+    {
+        Ok(None)
+    }
+}
+
+async fn wait_for_shutdown(sig: &mut Option<ShutdownSignal>) {
+    match sig {
+        #[cfg(unix)]
+        Some(s) => {
+            s.recv().await;
+        }
+        #[cfg(not(unix))]
+        Some(_) => std::future::pending::<()>().await,
+        None => std::future::pending::<()>().await,
+    }
+}
+
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+// Tell the hub, finish what is already running, then leave.
+//
+// The order is the whole design: the notice goes first so the hub stops handing
+// this connection new requests while it is still able to answer, the in-flight
+// wait keeps already-started work from being thrown away, and only then does the
+// connection close — cleanly, with a close frame, so the hub sees a departure
+// rather than a timeout.
+//
+// Both waits below are best-effort, not proofs: protofish3 acks neither a chan
+// message nor a close.
+
+/// Time to let the drain notice reach the hub before the connection is closed.
+///
+/// One frame over an established connection on a cluster network; the point is
+/// only that it leaves the send buffer before CONNECTION_CLOSE does.
+const NOTICE_SETTLE: Duration = Duration::from_millis(150);
+
+/// Time to let CONNECTION_CLOSE itself leave the socket.
+const CLOSE_SETTLE: Duration = Duration::from_millis(100);
+
+async fn drain_and_close(
+    conn: &ReconnectingClient,
+    control: Option<&ChanSender>,
+    in_flight: &Arc<AtomicU32>,
+    draining: &Arc<AtomicBool>,
+    timeout: Duration,
+) {
+    let started = Instant::now();
+    let started_at_unix_ms = unix_millis();
+    // Set before the notice is sent: a request that arrives between the two must
+    // already be refused.
+    draining.store(true, Ordering::SeqCst);
+    let inflight = in_flight.load(Ordering::SeqCst);
+
+    tracing::info!(
+        in_flight = inflight,
+        timeout_ms = timeout.as_millis() as u64,
+        "draining: refusing new requests and telling the hub"
+    );
+
+    if let Some(control) = control {
+        let notice = TapToHubMessage::Draining(TapDraining {
+            in_flight: inflight,
+            started_at_unix_ms,
+        });
+        let send = async {
+            let bytes = crate::protocol::codec::encode_msgpack(&notice).ok()?;
+            control.send_msg(bytes.to_vec()).await.ok()
+        };
+        // One second is generous for a single frame on a connection that is
+        // still up, and short enough that a hub which has already gone does not
+        // hold the drain up.
+        if tokio::time::timeout(Duration::from_secs(1), send)
+            .await
+            .is_err()
+        {
+            tracing::warn!("drain notice did not reach the hub in 1s");
+        }
+    }
+
+    while in_flight.load(Ordering::SeqCst) > 0 && started.elapsed() < timeout {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // The notice is written but not acknowledged — protofish3 has no ack for a
+    // chan message — and closing the connection immediately would send
+    // CONNECTION_CLOSE on top of stream data that has not left the send buffer
+    // yet. The hub would then see a tap that vanished without saying anything,
+    // which is the case this whole path exists to replace.
+    tokio::time::sleep(NOTICE_SETTLE).await;
+
+    let left = in_flight.load(Ordering::SeqCst);
+    if left > 0 {
+        tracing::warn!(
+            left,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "drain timeout with requests still running; closing anyway"
+        );
+    } else {
+        tracing::info!(elapsed_ms = started.elapsed().as_millis() as u64, "drained");
+    }
+
+    conn.close(0).await;
+    // `close` queues a CONNECTION_CLOSE on the driver's side; exiting
+    // immediately can leave it unsent, and the hub would then be back to waiting
+    // for an idle timeout on a socket nobody is holding.
+    tokio::time::sleep(CLOSE_SETTLE).await;
+}
+
+/// Counts a request as in flight for as long as it is alive, however it ends.
+struct InFlightGuard(Arc<AtomicU32>);
+
+impl InFlightGuard {
+    fn new(counter: Arc<AtomicU32>) -> Self {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Self(counter)
+    }
+}
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -280,9 +562,36 @@ async fn handle_incoming_chan(
     sender: ChanSender,
     mut receiver: ChanReceiver,
     handler: Arc<dyn TapHandler>,
+    in_flight: Arc<AtomicU32>,
+    draining: Arc<AtomicBool>,
 ) -> Result<()> {
     let payload_bytes = receiver.recv_msg().await?;
     let msg: HubToTapMessage = crate::protocol::codec::decode_msgpack(&payload_bytes)?;
+
+    // A request that arrives after the drain started is refused rather than
+    // served: this process is about to stop existing, so starting new work here
+    // would only delay the hand-off to a tap that can actually finish it.
+    if draining.load(Ordering::SeqCst)
+        && matches!(
+            &msg,
+            HubToTapMessage::AudioRequest(_) | HubToTapMessage::AudioMetadataRequest(_)
+        )
+    {
+        tracing::info!("refused a request that arrived while draining");
+        let refusal = TapToHubMessage::AudioRequestFailure(
+            crate::types::message::AudioRequestFailureMessage {
+                reason: "tap is draining".to_string(),
+                try_others: true,
+            },
+        );
+        sender
+            .send_msg(crate::protocol::codec::encode_msgpack(&refusal)?.to_vec())
+            .await?;
+        return Ok(());
+    }
+
+    // Held for the whole of this request: the drain waits on this count.
+    let _in_flight = InFlightGuard::new(in_flight);
 
     match msg {
         HubToTapMessage::AudioRequest(request) => {

@@ -4,7 +4,7 @@ use tokio::sync::watch;
 use zako3_types::{OnlineTapState, hq::TapId};
 use zakofish_taphub::{
     hub::HubHandler,
-    types::{HubRejectReasonType, TapClientHello, TapServerReject},
+    types::{HubRejectReasonType, TapClientHello, TapDraining, TapServerReject},
 };
 
 use crate::app::App;
@@ -23,13 +23,12 @@ pub struct TapHubConnectionHandler {
 
 impl TapHubConnectionHandler {
     /// Snapshot the current live states for a tap from the authoritative registry.
+    ///
+    /// Draining connections are left out: the snapshot is what gets published as
+    /// "these are online", and a connection on its way out is not.
     fn tap_snapshot(&self, tap_id: &TapId) -> zako3_types::OnlineTapStates {
-        self.connections
-            .lock()
-            .values()
-            .filter(|e| &e.state.tap_id == tap_id)
-            .map(|e| e.state.clone())
-            .collect()
+        let guard = self.connections.lock();
+        super::routable_states(&guard, tap_id)
     }
 }
 
@@ -102,11 +101,16 @@ impl HubHandler for TapHubConnectionHandler {
                     ConnEntry {
                         state: online_tap,
                         disconnect_tx,
+                        draining: false,
                     },
                 );
 
                 let states = self.tap_snapshot(&tap.id);
-                if let Err(e) = self.state_service.publish_tap_states(&tap.id, &states).await {
+                if let Err(e) = self
+                    .state_service
+                    .publish_tap_states(&tap.id, &states)
+                    .await
+                {
                     // Roll back the registry insert so we don't advertise a
                     // connection we failed to publish.
                     self.connections.lock().remove(&connection_id);
@@ -150,6 +154,79 @@ impl HubHandler for TapHubConnectionHandler {
         }
     }
 
+    /// The tap is going away on purpose: stop routing to it and fail what it is
+    /// holding, now.
+    ///
+    /// Without this the connection stays in the routing table until the QUIC
+    /// connection gives up on a process that has already stopped reading — which
+    /// is what a pod deletion looks like from here, and which is as slow as the
+    /// idle timeout. Requests dispatched into that window wait out their whole
+    /// budget to learn there was nobody there.
+    #[tracing::instrument(skip(self, info), fields(tap_id = %tap_id.0, connection_id))]
+    async fn on_tap_draining(&self, tap_id: TapId, connection_id: u64, info: TapDraining) {
+        let started_at_unix_ms = info.started_at_unix_ms;
+
+        // Flip the flag and take the disconnect sender in one critical section:
+        // after this the connection is not routable and any request currently
+        // waiting on this connection is woken with "gone".
+        let (already, held) = {
+            let mut guard = self.connections.lock();
+            match guard.get_mut(&connection_id) {
+                Some(entry) if !entry.draining => {
+                    entry.draining = true;
+                    let held = entry.disconnect_tx.send(true).is_ok();
+                    (false, held)
+                }
+                Some(_) => (true, false),
+                // Not (or no longer) ours: a drain notice that arrives after the
+                // connection has already been removed has nothing to stop.
+                None => return,
+            }
+        };
+
+        if already {
+            tracing::debug!("repeated drain notice; connection was already draining");
+            return;
+        }
+
+        // The tap's own clock, not ours: this is the whole hop — the notice
+        // leaving the process, crossing the network and landing in the routing
+        // table — which is the number the scale-down contract is written in.
+        let observed_ms = (unix_millis().saturating_sub(started_at_unix_ms)) as f64;
+
+        tracing::warn!(
+            tap_id = %tap_id.0,
+            connection_id,
+            in_flight = info.in_flight,
+            wake_delivered = held,
+            drain_to_removal_ms = observed_ms as u64,
+            "Tap is draining — removed from routing and its in-flight requests failed"
+        );
+
+        metrics::metrics()
+            .tap_conn_draining_total
+            .add(1, &[KeyValue::new("reason", "drain_signal")]);
+        metrics::metrics().connected_taps.add(-1, &[]);
+        // Milliseconds are the unit the contract is stated in and seconds are
+        // what the histogram records; keeping the conversion explicit stops the
+        // two from drifting.
+        metrics::metrics().tap_conn_drain_to_removal_seconds.record(
+            observed_ms / 1000.0,
+            &[KeyValue::new("tap_id", tap_id.0.to_string())],
+        );
+
+        // Republish without it, so the Redis projection stops advertising a
+        // connection that will not take work while the process is still alive.
+        let states = self.tap_snapshot(&tap_id);
+        if let Err(e) = self
+            .state_service
+            .publish_tap_states(&tap_id, &states)
+            .await
+        {
+            tracing::warn!(%e, "error while publishing tap connection state on drain");
+        }
+    }
+
     #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0, connection_id))]
     async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64) {
         // Drop the connection from the authoritative registry and fire its
@@ -160,17 +237,32 @@ impl HubHandler for TapHubConnectionHandler {
             return;
         };
 
-        tracing::warn!(
-            tap_id = %tap_id.0,
-            connection_id,
-            "Tap disconnected — erroring all active streams for this connection"
-        );
+        if entry.draining {
+            tracing::info!(
+                tap_id = %tap_id.0,
+                connection_id,
+                "Draining tap finished its connection"
+            );
+        } else {
+            tracing::warn!(
+                tap_id = %tap_id.0,
+                connection_id,
+                "Tap disconnected — erroring all active streams for this connection"
+            );
+            // Already counted down when the drain was announced; counting twice
+            // would make the gauge drift negative over a day of scale-downs.
+            metrics::metrics().connected_taps.add(-1, &[]);
+        }
         let _ = entry.disconnect_tx.send(true);
 
         let uptime_secs = (chrono::Utc::now() - entry.state.connected_at)
             .num_seconds()
             .max(0);
-        if let Err(e) = self.metrics_service.acc_uptime(tap_id.clone(), uptime_secs).await {
+        if let Err(e) = self
+            .metrics_service
+            .acc_uptime(tap_id.clone(), uptime_secs)
+            .await
+        {
             tracing::warn!(%e, "Failed to accumulate uptime metric");
         }
 
@@ -181,7 +273,6 @@ impl HubHandler for TapHubConnectionHandler {
             "Tap disconnected"
         );
 
-        metrics::metrics().connected_taps.add(-1, &[]);
         metrics::metrics().connection_duration.record(
             uptime_secs as f64,
             &[KeyValue::new("tap_id", tap_id.0.to_string())],
@@ -190,8 +281,19 @@ impl HubHandler for TapHubConnectionHandler {
         // Re-publish the tap's remaining live set (deletes the key if this was the
         // last connection) so the Redis projection reflects the drop right away.
         let states = self.tap_snapshot(&tap_id);
-        if let Err(e) = self.state_service.publish_tap_states(&tap_id, &states).await {
+        if let Err(e) = self
+            .state_service
+            .publish_tap_states(&tap_id, &states)
+            .await
+        {
             tracing::warn!(%e, "error while publishing tap connection state on disconnect");
         }
     }
+}
+
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }

@@ -38,6 +38,7 @@ pub struct TapBuilder {
     api_token: Option<String>,
     selection_weight: f32,
     transport: Transport,
+    drain_timeout: Option<Duration>,
     #[cfg(feature = "healthcheck")]
     healthcheck_port: Option<u16>,
 }
@@ -84,6 +85,18 @@ impl TapBuilder {
     /// Select the wire transport. Defaults to [`Transport::Pf2`].
     pub fn transport(mut self, transport: Transport) -> Self {
         self.transport = transport;
+        self
+    }
+
+    /// How long a drain may keep answering requests that were already accepted
+    /// before the process stops for good.
+    ///
+    /// The default is [`DEFAULT_DRAIN_TIMEOUT`], overridable with
+    /// `ZAKO_DRAIN_TIMEOUT_SECS`. Whatever this is, the pod's
+    /// `terminationGracePeriodSeconds` has to be comfortably longer, or the
+    /// kubelet kills the tap in the middle of the drain it asked for.
+    pub fn drain_timeout(mut self, timeout: Duration) -> Self {
+        self.drain_timeout = Some(timeout);
         self
     }
 
@@ -150,6 +163,11 @@ impl TapBuilder {
 
         let bridge = Arc::new(HandlerBridge(handler));
 
+        let drain = zakofish::tap_pf3::DrainConfig {
+            timeout: self.drain_timeout.unwrap_or_else(drain_timeout_from_env),
+            handle_signals: true,
+        };
+
         let mut client_config =
             protofish3::ClientConfig::new("0.0.0.0:0".parse().map_err(SdkError::AddrParse)?);
         client_config.root_certificates = root_certificates;
@@ -158,11 +176,28 @@ impl TapBuilder {
 
         let zf_tap = ZakofishTapPf3::new(client_config)?;
         zf_tap
-            .connect_and_run(&hub_addr, server_name.as_str(), hello, bridge)
+            .connect_and_run_with(&hub_addr, server_name.as_str(), hello, bridge, drain)
             .await?;
 
         Ok(())
     }
+}
+
+/// How long a drain may run when the caller did not say.
+///
+/// Above the slowest single request measured on any tap (supertonic synthesis:
+/// p99 635ms, worst 753ms over a day of traffic) with room for a request that
+/// started just before the drain did, and well inside the 45s grace period the
+/// tap manifests give the pod.
+pub const DEFAULT_DRAIN_TIMEOUT: Duration = Duration::from_secs(20);
+
+fn drain_timeout_from_env() -> Duration {
+    std::env::var("ZAKO_DRAIN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or(DEFAULT_DRAIN_TIMEOUT)
 }
 
 struct HandlerBridge(Arc<dyn TapHandler>);

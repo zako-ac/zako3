@@ -9,12 +9,11 @@ use zako3_types::hq::TapId;
 use zakofish::error::{Result, ZakofishError};
 use zakofish::tap_streams::{RelChunkStream, UnrelChunkStream, bridge_pf3_recv};
 
-type SessionMap =
-    Arc<Mutex<HashMap<zakofish::types::TapId, HashMap<u64, protofish3::Connection>>>>;
+type SessionMap = Arc<Mutex<HashMap<zakofish::types::TapId, HashMap<u64, protofish3::Connection>>>>;
 
 use zakofish::types::message::{
     AudioMetadataRequestMessage, AudioMetadataSuccessMessage, AudioRequestMessage,
-    AudioRequestSuccessMessage, TapClientHello, TapServerReject,
+    AudioRequestSuccessMessage, TapClientHello, TapDraining, TapServerReject, TapToHubMessage,
 };
 
 #[async_trait::async_trait]
@@ -25,6 +24,20 @@ pub trait HubHandler: Send + Sync {
         hello: TapClientHello,
     ) -> std::result::Result<(), TapServerReject>;
     async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64);
+
+    /// The tap said it is going away on purpose.
+    ///
+    /// This is the one signal a pod deletion gives us before the process is
+    /// gone, and it arrives while the process is still alive — so the handler
+    /// has to act on it *now*: stop routing to the connection and fail its
+    /// in-flight requests, rather than waiting for the QUIC connection to
+    /// time out on a peer that has already stopped reading.
+    ///
+    /// Defaulted to a no-op so a handler that has no routing table to edit
+    /// (tests, examples) need not implement it.
+    async fn on_tap_draining(&self, tap_id: TapId, connection_id: u64, info: TapDraining) {
+        let _ = (tap_id, connection_id, info);
+    }
 }
 
 pub struct ZakofishHub {
@@ -77,7 +90,9 @@ impl ZakofishHub {
         let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
         let wire_ars = zakofish::types::AudioRequestString(ars.to_string());
 
-        let conn = self.get_session(&wire_tap_id, connection_id, &tap_id).await?;
+        let conn = self
+            .get_session(&wire_tap_id, connection_id, &tap_id)
+            .await?;
 
         let request = AudioRequestMessage {
             ars: wire_ars,
@@ -132,7 +147,9 @@ impl ZakofishHub {
         let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
         let wire_ars = zakofish::types::AudioRequestString(ars.to_string());
 
-        let conn = self.get_session(&wire_tap_id, connection_id, &tap_id).await?;
+        let conn = self
+            .get_session(&wire_tap_id, connection_id, &tap_id)
+            .await?;
 
         let request = AudioMetadataRequestMessage {
             ars: wire_ars,
@@ -160,9 +177,7 @@ impl ZakofishHub {
             .get(wire_tap_id)
             .and_then(|m| m.get(&connection_id))
             .cloned()
-            .ok_or_else(|| {
-                ZakofishError::ProtocolError(format!("Tap {} not connected", tap_id.0))
-            })
+            .ok_or_else(|| ZakofishError::ProtocolError(format!("Tap {} not connected", tap_id.0)))
     }
 }
 
@@ -196,9 +211,10 @@ async fn run_loop(
     next_connection_id: Arc<AtomicU64>,
 ) -> Result<()> {
     loop {
-        let incoming = server.accept().await.ok_or_else(|| {
-            ZakofishError::ProtocolError("Protofish3 server closed".to_string())
-        })?;
+        let incoming = server
+            .accept()
+            .await
+            .ok_or_else(|| ZakofishError::ProtocolError("Protofish3 server closed".to_string()))?;
         let handler = handler.clone();
         let sessions = sessions.clone();
         let next_connection_id = next_connection_id.clone();
@@ -224,10 +240,9 @@ async fn run_loop(
             );
             tracing::info!("New pf3 connection from {}", ip);
 
-            if let Err(e) =
-                handle_connection(hs, handler, sessions, next_connection_id)
-                    .instrument(span)
-                    .await
+            if let Err(e) = handle_connection(hs, handler, sessions, next_connection_id)
+                .instrument(span)
+                .await
             {
                 tracing::error!("Error handling pf3 connection: {:?}", e);
             }
@@ -266,8 +281,10 @@ async fn handle_connection(
 
     tracing::Span::current().record("tap_id", tracing::field::display(&tap_id_wire.0));
     tracing::Span::current().record("connection_id", connection_id);
-    tracing::Span::current()
-        .record("friendly_name", tracing::field::display(&hello.friendly_name));
+    tracing::Span::current().record(
+        "friendly_name",
+        tracing::field::display(&hello.friendly_name),
+    );
 
     match handler.on_tap_authenticate(connection_id, hello).await {
         Ok(_) => {
@@ -286,7 +303,21 @@ async fn handle_connection(
 
             drop(sender);
             drop(receiver);
+
+            // The tap speaks again on its own chans only to say it is draining.
+            // Listening for that has to happen while the connection is up, and
+            // has to stop the moment it is not — hence the abort below rather
+            // than a loop that would outlive the connection on a forever-pending
+            // `accept_chan`.
+            let control = tokio::spawn(tap_control_loop(
+                conn.clone(),
+                handler.clone(),
+                tap_id_public.clone(),
+                connection_id,
+            ));
+
             conn.closed().await;
+            control.abort();
 
             let mut sessions = sessions.lock().await;
             if let Some(conns) = sessions.get_mut(&tap_id_wire) {
@@ -297,8 +328,17 @@ async fn handle_connection(
             }
             drop(sessions);
 
-            handler.on_tap_disconnected(tap_id_public, connection_id).await;
-            tracing::Span::current().record("disconnect_reason", "clean");
+            handler
+                .on_tap_disconnected(tap_id_public, connection_id)
+                .await;
+            tracing::Span::current().record(
+                "disconnect_reason",
+                tracing::field::display(
+                    conn.close_code()
+                        .map(|c| format!("close_code={c}"))
+                        .unwrap_or_else(|| "clean".to_string()),
+                ),
+            );
             Ok(())
         }
         Err(reject) => {
@@ -309,5 +349,62 @@ async fn handle_connection(
                 .await?;
             Ok(())
         }
+    }
+}
+
+/// Reads the chans a tap opens toward the hub and dispatches what it finds.
+///
+/// A tap only ever opens one, to say it is draining. Nothing else on this path
+/// is the tap's to initiate: requests travel hub → tap, and their answers come
+/// back on the chan the hub opened. Reading here rather than on the handshake
+/// chan because the handshake chan is consumed and dropped by the time the
+/// connection is authenticated.
+async fn tap_control_loop(
+    conn: protofish3::Connection,
+    handler: Arc<dyn HubHandler>,
+    tap_id: TapId,
+    connection_id: u64,
+) {
+    loop {
+        let (sender, mut receiver) = match conn.accept_chan().await {
+            Ok(pair) => pair,
+            Err(e) => {
+                // The connection is gone; the caller's `closed()` is what ends
+                // the connection's life, so this task just stops.
+                tracing::debug!(%e, "tap control chan accept ended");
+                return;
+            }
+        };
+
+        let payload = match receiver.recv_msg().await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::debug!(%e, "tap control chan closed before a message");
+                drop(sender);
+                continue;
+            }
+        };
+
+        match zakofish::protocol::codec::decode_msgpack::<TapToHubMessage>(&payload) {
+            Ok(TapToHubMessage::Draining(info)) => {
+                tracing::info!(
+                    tap_id = %tap_id.0,
+                    connection_id,
+                    in_flight = info.in_flight,
+                    "Tap announced it is draining"
+                );
+                handler
+                    .on_tap_draining(tap_id.clone(), connection_id, info)
+                    .await;
+            }
+            Ok(other) => {
+                tracing::debug!(?other, "unexpected message on a tap-opened chan");
+            }
+            Err(e) => {
+                tracing::warn!(%e, "undecodable message on a tap-opened chan");
+            }
+        }
+
+        drop(sender);
     }
 }
