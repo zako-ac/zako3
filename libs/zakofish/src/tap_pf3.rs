@@ -509,8 +509,20 @@ impl Drop for InFlightGuard {
     }
 }
 
-/// Resolve a `"<host>:<port>"` string to a [`SocketAddr`] by querying
-/// Cloudflare 1.1.1.1 directly, bypassing the OS system resolver.
+/// Resolve a `"<host>:<port>"` string to a [`SocketAddr`].
+///
+/// The pinned public resolver (1.1.1.1) is tried first: it is what makes a DNS
+/// failover for a public name visible to a long-lived connection even while the
+/// pod's own resolver is still serving a stale answer.
+///
+/// It cannot answer for a name that only exists inside the cluster. A tap told to
+/// dial `zako3-taphub-zakofish.zako3.svc` is asking about a record no public
+/// resolver has ever heard of, and failing that lookup is fatal to the process —
+/// which is how every `supertonic-tap` replica came up in `CrashLoopBackOff` the
+/// first time this shipped with an in-cluster endpoint. So a miss falls back to
+/// the pod's own resolver, which is the only one that knows the cluster's names
+/// (and its search domains and `ndots`, which is why this asks the system rather
+/// than resolving a bare name itself).
 async fn resolve(host: &str, resolver: &TokioAsyncResolver) -> Result<SocketAddr> {
     let (hostname, port_str) = host
         .rsplit_once(':')
@@ -519,18 +531,31 @@ async fn resolve(host: &str, resolver: &TokioAsyncResolver) -> Result<SocketAddr
         .parse()
         .map_err(|_| ZakofishError::ProtocolError(format!("invalid port in '{}'", host)))?;
 
-    let response = resolver.lookup_ip(hostname).await.map_err(|e| {
+    match resolver.lookup_ip(hostname).await {
+        Ok(response) => match response.iter().next() {
+            Some(ip) => return Ok(SocketAddr::new(ip, port)),
+            None => tracing::debug!(
+                host = %hostname,
+                "public resolver returned no address; trying the system resolver"
+            ),
+        },
+        Err(e) => tracing::debug!(
+            host = %hostname,
+            %e,
+            "public resolver could not answer; trying the system resolver"
+        ),
+    }
+
+    let mut candidates = tokio::net::lookup_host(host).await.map_err(|e| {
         ZakofishError::ProtocolError(format!(
-            "DNS lookup failed for '{}' via 1.1.1.1: {}",
+            "DNS lookup failed for '{}' via both 1.1.1.1 and the system resolver: {}",
             hostname, e
         ))
     })?;
 
-    let ip = response.iter().next().ok_or_else(|| {
+    candidates.next().ok_or_else(|| {
         ZakofishError::ProtocolError(format!("no addresses found for '{}'", hostname))
-    })?;
-
-    Ok(SocketAddr::new(ip, port))
+    })
 }
 
 async fn do_handshake(conn: &ReconnectingClient, hello_info: &TapClientHello) -> Result<()> {
@@ -658,5 +683,57 @@ fn map_mode(mode: TransferMode) -> XferMode {
     match mode {
         TransferMode::Dual => XferMode::Dual,
         TransferMode::UnreliableOnly => XferMode::Unrel,
+    }
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::*;
+    use hickory_resolver::{
+        TokioAsyncResolver,
+        config::{NameServerConfig, ResolverConfig, ResolverOpts},
+        name_server::TokioConnectionProvider,
+    };
+
+    fn public_resolver() -> TokioAsyncResolver {
+        let mut cfg = ResolverConfig::new();
+        cfg.add_name_server(NameServerConfig {
+            socket_addr: (IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 53).into(),
+            protocol: hickory_resolver::config::Protocol::Udp,
+            tls_dns_name: None,
+            trust_negative_responses: false,
+            bind_addr: None,
+        });
+        TokioAsyncResolver::new(
+            cfg,
+            ResolverOpts::default(),
+            TokioConnectionProvider::default(),
+        )
+    }
+
+    /// A name no public resolver knows must still be attempted against the pod's
+    /// own resolver before giving up — the failure has to name both, or the next
+    /// person reads it as "DNS is down" instead of "1.1.1.1 does not serve the
+    /// cluster's zone".
+    #[tokio::test]
+    async fn a_name_outside_public_dns_reports_both_resolvers() {
+        let err = resolve("no-such-host.invalid:1028", &public_resolver())
+            .await
+            .expect_err("a name that does not exist must not resolve");
+        let message = err.to_string();
+        assert!(
+            message.contains("system resolver"),
+            "the error did not mention the fallback: {message}"
+        );
+    }
+
+    /// The shape of the address is checked before any lookup, so a caller's typo
+    /// does not turn into a DNS round trip.
+    #[tokio::test]
+    async fn a_host_without_a_port_is_rejected_without_a_lookup() {
+        let err = resolve("zako3-taphub-zakofish.zako3.svc", &public_resolver())
+            .await
+            .expect_err("a host with no port must be rejected");
+        assert!(err.to_string().contains("invalid host:port"), "{err}");
     }
 }
