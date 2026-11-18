@@ -542,7 +542,7 @@ impl SessionControl {
                 return Ok(());
             };
 
-            if self.drop_stale_heads(&session).await? {
+            if self.drop_stale_tracks(&session).await? {
                 continue;
             }
 
@@ -597,24 +597,26 @@ impl SessionControl {
         Ok(())
     }
 
-    /// Drops the stale heads of this session, returning whether anything was
-    /// dropped.
+    /// Drops every TTS track that has waited past the cap without starting,
+    /// returning whether anything was dropped.
     ///
-    /// Only a head can be stale in a way that matters: it is the only track
-    /// that could have played and did not. The tracks behind it have not been
-    /// denied anything yet (they are waiting their turn), so they are left
-    /// alone until they reach the front, which is where the age is judged.
-    async fn drop_stale_heads(&self, session: &SessionState) -> ZakoResult<bool> {
+    /// A track already playing is not touched: the cap is about how long a
+    /// message waited for its turn, and a long message that is being heard is
+    /// past that point — cutting it mid-sentence would be the cap harming a
+    /// user it was meant to protect. Only the queued ones are candidates, and
+    /// an undated track is not one (see [`stale_age_secs`]).
+    async fn drop_stale_tracks(&self, session: &SessionState) -> ZakoResult<bool> {
         let max_age_secs = self.config.queue_max_age.as_secs();
         if self.config.queue_max_age.is_zero() {
             return Ok(false);
         }
 
         let now_ms = now_unix_ms();
+        let playing: Vec<TrackId> = self.started.lock().await.keys().copied().collect();
         let stale: Vec<(Track, u64)> = session
             .get_active_tracks()
             .into_iter()
-            .filter(|track| !track.paused)
+            .filter(|track| !track.paused && !playing.contains(&track.track_id))
             .filter_map(|track| {
                 stale_age_secs(&track, now_ms, max_age_secs).map(|age| (track, age))
             })
@@ -637,8 +639,8 @@ impl SessionControl {
                 "Dropping stale queued track instead of playing it"
             );
             metrics::record_queue_stale_skipped(&normalize_queue_name(&track.queue_name));
-            // A head should never be in the mixer without having played, but a
-            // source left behind after we remove the track would keep mixing.
+            // A queued track should not be in the mixer, but a source left
+            // behind after we remove the track would keep mixing.
             self.mixer.remove_source(track.track_id);
             self.started.lock().await.remove(&track.track_id);
         }

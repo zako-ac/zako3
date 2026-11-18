@@ -281,3 +281,85 @@ async fn reconcile_leaves_a_fresh_track_alone() {
 
     control.reconcile().await.expect("reconcile");
 }
+
+/// A track that is already playing is not dropped when it passes the cap.
+///
+/// The cap is about the *wait*: a long TTS that is being heard must not be cut
+/// mid-sentence because its enqueue time is now long ago. `reconcile` only
+/// judges tracks that have not started, so the second pass here — the same
+/// track, re-dated far in the past, still in the mixer — must change nothing.
+#[tokio::test]
+async fn a_track_already_playing_is_not_dropped_when_it_passes_the_cap() {
+    let guild_id = GuildId::from(9);
+    let mut mock_mixer = MockMixer::new();
+    let mut mock_decoder = MockDecoder::new();
+    let mut mock_state = MockStateService::new();
+    let mut mock_taphub = MockTapHubService::new();
+
+    let fresh = track(31, "tts_123", Some(now_ms() - 1_000));
+    let aged = track(31, "tts_123", Some(now_ms() - 600_000));
+
+    let reads = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::from(
+        vec![
+            session_with(guild_id, "tts_123", vec![fresh]),
+            session_with(guild_id, "tts_123", vec![aged]),
+        ],
+    )));
+    let reads_for_mock = reads.clone();
+    mock_state
+        .expect_get_session()
+        .times(2)
+        .returning(move |_, _| Ok(reads_for_mock.lock().unwrap().pop_front()));
+    // `save_session` has no expectation: a drop would fail the test.
+
+    let mixer_rounds = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::from(
+        vec![
+            std::collections::HashSet::new(),
+            std::collections::HashSet::from([TrackId::from(31)]),
+        ],
+    )));
+    mock_mixer
+        .expect_has_sources()
+        .times(2)
+        .returning(move |_| mixer_rounds.lock().unwrap().pop_front().unwrap());
+    mock_mixer.expect_remove_source().times(0);
+
+    mock_taphub.expect_request_audio().times(1).returning(|_| {
+        Ok(AudioResponse {
+            metadatas: vec![AudioMetadata::Title("T31".to_string())],
+            cache_key: Some(AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("key".to_string()),
+                ttl_seconds: None,
+            }),
+            stream: tokio::sync::mpsc::channel(1).1,
+        })
+    });
+    mock_decoder
+        .expect_start_decoding()
+        .times(1)
+        .returning(|_, _| {
+            let (_, c) = create_ringbuf_pair();
+            Ok(c)
+        });
+    mock_mixer.expect_add_source().times(1).return_const(());
+    mock_mixer.expect_set_volume().times(1).return_const(());
+
+    let control = create_session_control(
+        guild_id,
+        ChannelId::from(100),
+        Arc::new(mock_mixer),
+        Arc::new(mock_decoder),
+        Arc::new(mock_state),
+        Arc::new(mock_taphub),
+        age_cap(90),
+    );
+
+    // Pass one: fresh, so it starts and enters `started`.
+    control.reconcile().await.expect("first reconcile");
+    // Pass two: the same track, now past the cap but already playing.
+    control.reconcile().await.expect("second reconcile");
+    assert!(
+        reads.lock().unwrap().is_empty(),
+        "both scripted reads should have been consumed"
+    );
+}
