@@ -54,10 +54,10 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: Option<String>) -> anyhow
     // editing RUST_LOG, so the rest of the filter stays exactly as deployed.
     let protofish3_debug = truthy_env("ZAKO_PROTOFISH3_DEBUG");
     let mut filter_directives = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    if protofish3_debug && !filter_directives.trim().is_empty() {
+        filter_directives.push(',');
+    }
     if protofish3_debug {
-        if !filter_directives.trim().is_empty() {
-            filter_directives.push(',');
-        }
         filter_directives.push_str("protofish3=debug");
     }
     // `try_new` rather than `new`: a malformed RUST_LOG must fall back to the
