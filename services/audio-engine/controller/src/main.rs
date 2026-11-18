@@ -16,6 +16,7 @@ use zako3_audio_engine_controller::{
     server::AeTransportHandler,
 };
 
+use zako3_audio_engine_core::engine::session::SessionConfig;
 use zako3_audio_engine_core::engine::session_manager::SessionManager;
 use zako3_audio_engine_infra::{
     RedisStateService, discord::SongbirdDiscordService, taphub::RealTapHubService,

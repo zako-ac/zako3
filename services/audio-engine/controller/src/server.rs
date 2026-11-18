@@ -89,18 +89,38 @@ impl AeTransportHandler {
                 let Some(session_info) = req.session else {
                     return err("session required for Join");
                 };
-                if session_manager
+                if let Some(existing) = session_manager
                     .get_session(session_info.guild_id, session_info.channel_id)
-                    .is_some()
                 {
-                    return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
+                    if existing.has_consumer() {
+                        return AudioEngineCommandResponse::Error(AudioEngineError::AlreadyJoined);
+                    }
+
+                    // The session outlived its mixer, so nothing it accepts can
+                    // be played. Answering `AlreadyJoined` here (which HQ counts
+                    // as success) made such a channel permanently unrepairable;
+                    // a re-join is exactly the moment to drop it and start over.
+                    warn!(
+                        guild_id = ?session_info.guild_id,
+                        channel_id = ?session_info.channel_id,
+                        reason = zako3_audio_engine_core::types::NoConsumerReason::MixerDead.as_str(),
+                        "replacing a session whose mixer is gone"
+                    );
+                    if let Err(e) = session_manager
+                        .cleanup_session(session_info.guild_id, session_info.channel_id)
+                        .await
+                    {
+                        return err(&e.to_string());
+                    }
                 }
                 match session_manager
                     .join(session_info.guild_id, session_info.channel_id)
                     .await
                 {
                     Ok(_) => AudioEngineCommandResponse::Ok,
-                    Err(e) => err(&e.to_string()),
+                    // Structured like `play`: a join that found no consumer has
+                    // to reach HQ as one, not as an anonymous internal error.
+                    Err(e) => map_engine_err(e),
                 }
             }
 
@@ -205,6 +225,15 @@ fn map_engine_err(e: ZakoError) -> AudioEngineCommandResponse {
             tracing::warn!(error = %t, "AudioEngine TapHub error");
             AudioEngineCommandResponse::Error(AudioEngineError::Tap(t))
         }
+        // Kept structured, with the reason, so HQ logs the same cause code the
+        // engine did instead of flattening it into a string.
+        ZakoError::NoConsumer(reason) => {
+            tracing::error!(
+                reason = reason.as_str(),
+                "AudioEngine refused the command: no audio consumer"
+            );
+            AudioEngineCommandResponse::Error(AudioEngineError::NoConsumer(reason))
+        }
         e => err(&e.to_string()),
     }
 }
@@ -220,6 +249,24 @@ mod tests {
     use zako3_audio_engine_core::service::state::MockStateService;
     use zako3_audio_engine_core::service::taphub::MockTapHubService;
     use zako3_audio_engine_core::types::{ChannelId, GuildId};
+
+    /// The wire hop this step exists for: an engine that refuses a command for
+    /// lack of a consumer must send that reason across, not a string that HQ
+    /// cannot classify.
+    #[test]
+    fn map_engine_err_keeps_the_no_consumer_reason() {
+        use zako3_audio_engine_core::types::NoConsumerReason;
+
+        let response = map_engine_err(ZakoError::NoConsumer(NoConsumerReason::CallLockTimeout));
+
+        match response {
+            AudioEngineCommandResponse::Error(AudioEngineError::NoConsumer(reason)) => {
+                assert_eq!(reason, NoConsumerReason::CallLockTimeout);
+                assert_eq!(reason.as_str(), "call_lock_timeout");
+            }
+            other => panic!("expected a structured NoConsumer error, got {other:?}"),
+        }
+    }
 
     #[tokio::test]
     async fn handler_fetch_discord_voice_state_returns_sessions() {

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -83,7 +84,19 @@ fn insert_source(
     true
 }
 
-fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
+struct AliveGuard(Arc<AtomicBool>);
+
+impl Drop for AliveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd, alive: Arc<AtomicBool>) {
+    // Flips the flag the session reads whenever this thread leaves any exit
+    // path, so "the mixer is dead" and "the flag is false" can never disagree.
+    let _alive = AliveGuard(alive);
+
     let mut sources: Vec<ManagedSource> = Vec::new();
     let mut encoder = Encoder::new(SAMPLE_RATE, Channels::Stereo, Application::Audio)
         .expect("Failed to create Opus encoder");
@@ -93,6 +106,14 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
 
     loop {
         let loop_start = std::time::Instant::now();
+
+        // Checked before the command drain and before the idle sleep: a mixer
+        // whose output consumer is gone can never play anything again, and it
+        // used to spin here forever when it had no sources to notice it with.
+        if !output.read_is_held() {
+            tracing::warn!("Output consumer dropped, ending mixer thread");
+            break;
+        }
 
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
@@ -186,6 +207,8 @@ fn mixer_thread(cmd_rx: Receiver<MixerCommand>, mut output: OpusProd) {
             metrics::dec_mixer_active_sources();
         }
 
+        // Re-checked mid-loop: the consumer can go away while frames are being
+        // mixed, and the top-of-loop check is a whole iteration away.
         if !output.read_is_held() {
             tracing::warn!("Output consumer dropped, ending mixer thread");
             break;
@@ -245,16 +268,29 @@ pub trait Mixer: Send + Sync + 'static {
 
 pub struct ThreadMixer {
     cmd_tx: Sender<MixerCommand>,
+    /// `false` once the mixer thread has exited (its output consumer was
+    /// dropped). The session reads this to refuse to queue audio that nothing
+    /// would ever pull out.
+    alive: Arc<AtomicBool>,
+}
+
+impl ThreadMixer {
+    /// The mixer's liveness flag: `true` until the thread exits.
+    pub fn alive(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.alive)
+    }
 }
 
 pub fn create_thread_mixer(output: OpusProd) -> ThreadMixer {
     let (cmd_tx, cmd_rx) = crossbeam::channel::unbounded();
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let thread_alive = Arc::clone(&alive);
     std::thread::spawn(move || {
-        mixer_thread(cmd_rx, output);
+        mixer_thread(cmd_rx, output, thread_alive);
     });
 
-    ThreadMixer { cmd_tx }
+    ThreadMixer { cmd_tx, alive }
 }
 
 #[async_trait]

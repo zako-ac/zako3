@@ -34,6 +34,11 @@ pub enum CoreError {
     MetricsError(#[from] zako3_metrics::MetricsError),
     #[error(transparent)]
     TapHub(#[from] hq_types::TapHubError),
+    /// The audio engine has nothing to play into, so the request was not
+    /// played. Its own variant (rather than `Internal`) so callers log it as
+    /// `dropped_reason = "no_consumer"` and the bot can say so plainly.
+    #[error("no audio consumer: {0}")]
+    NoConsumer(hq_types::NoConsumerReason),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

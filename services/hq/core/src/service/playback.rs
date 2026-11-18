@@ -700,6 +700,11 @@ impl DroppedReason {
                     Self::EngineError
                 }
             }
+            // The engine's own variant: it says the session has nothing that
+            // would play this, so it is its own reason and not an engine fault.
+            // Without this arm it would classify as `EngineError` and HQ would
+            // log `dropped_reason=engine_error` for a no-consumer drop.
+            CoreError::NoConsumer(_) => Self::NoConsumer,
             CoreError::TapHub(TapHubError::TapScript { .. }) => Self::EngineError,
             _ => Self::EngineError,
         }
@@ -992,6 +997,31 @@ mod tests {
             DroppedReason::classify(&CoreError::Internal("No consumer attached".into())),
             DroppedReason::NoConsumer
         );
+    }
+
+    /// The engine now sends the cause as its own error variant, so the reason
+    /// has to come from there rather than from the message text. This is the
+    /// link the audio audit asked for: a play refused for lack of a consumer is
+    /// dropped under `dropped_reason = "no_consumer"`, not `engine_error`.
+    #[test]
+    fn a_structured_no_consumer_error_classifies_as_no_consumer() {
+        use hq_types::NoConsumerReason;
+
+        for reason in [
+            NoConsumerReason::ManagerMissing,
+            NoConsumerReason::CallLockTimeout,
+            NoConsumerReason::NoConnection,
+            NoConsumerReason::MixerDead,
+        ] {
+            assert_eq!(
+                DroppedReason::classify(&CoreError::NoConsumer(reason)),
+                DroppedReason::NoConsumer,
+                "{reason:?} must be dropped as no_consumer"
+            );
+        }
+        assert!(!is_retriable(&CoreError::NoConsumer(
+            NoConsumerReason::CallLockTimeout
+        )));
     }
 
     #[test]

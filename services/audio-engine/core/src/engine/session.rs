@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    sync::atomic::AtomicBool,
     sync::{Arc, Weak},
     time::{Duration, Instant},
 };
@@ -7,7 +8,7 @@ use std::{
 use tokio::sync::{Mutex, mpsc::Sender};
 use tracing::instrument;
 use zako3_audio_engine_audio::metrics;
-use zako3_types::SessionState;
+use zako3_types::{NoConsumerReason, SessionState};
 
 use crate::{
     audio::{ArcDecoder, ArcMixer},
@@ -66,6 +67,12 @@ pub struct SessionControl {
     pub(crate) state_service: ArcStateService,
     pub(crate) taphub_service: ArcTapHubService,
 
+    /// Liveness of this session's mixer thread. `false` once it has exited (its
+    /// output consumer went away), which means nothing will ever pull audio out
+    /// of this session again, a state the session must refuse to play into
+    /// rather than queue silently (see `ensure_consumer`).
+    pub(crate) mixer_alive: Arc<AtomicBool>,
+
     // Serializes reconcile() to prevent concurrent check-then-act races where
     // two callers both see a track as "not in mixer" and both call play_now().
     reconcile_guard: Mutex<()>,
@@ -78,6 +85,9 @@ pub struct SessionControl {
 }
 
 impl SessionControl {
+    // The session owns one handle per collaborator; grouping them into a struct
+    // would only move the count somewhere else.
+    #[allow(clippy::too_many_arguments)]
     fn new(
         guild_id: GuildId,
         channel_id: ChannelId,
@@ -87,6 +97,7 @@ impl SessionControl {
         state_service: ArcStateService,
         taphub_service: ArcTapHubService,
         config: SessionConfig,
+        mixer_alive: Arc<AtomicBool>,
     ) -> Self {
         SessionControl {
             guild_id,
@@ -96,10 +107,42 @@ impl SessionControl {
             end_tx,
             state_service,
             taphub_service,
+            mixer_alive,
             reconcile_guard: Mutex::new(()),
             config,
             started: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Refuse to queue audio when this session has nothing that would play it.
+    ///
+    /// The old behaviour was to accept the play and answer `Ok`: the track sat
+    /// in the queue, the mixer thread was gone, and the channel went silent
+    /// while the caller believed the message had been read. Failing here is what
+    /// turns that silence into a visible play failure at HQ.
+    /// Whether this session still has something that will play what it is given.
+    ///
+    /// `false` means the mixer thread is gone: the session is registered and its
+    /// queue is readable, but nothing it accepts would ever be heard. `Join`
+    /// uses this to repair such a session instead of answering `AlreadyJoined`.
+    pub fn has_consumer(&self) -> bool {
+        self.mixer_alive.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn ensure_consumer(&self) -> ZakoResult<()> {
+        if self.mixer_alive.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(());
+        }
+
+        tracing::error!(
+            guild_id = %self.guild_id,
+            channel_id = %self.channel_id,
+            reason = NoConsumerReason::MixerDead.as_str(),
+            "no audio consumer: the session's mixer thread has exited"
+        );
+        Err(crate::error::ZakoError::NoConsumer(
+            NoConsumerReason::MixerDead,
+        ))
     }
 
     #[instrument(skip(self), fields(guild_id = %self.guild_id))]
@@ -118,6 +161,11 @@ impl SessionControl {
             discord_user_id = %discord_user_id,
             "Playing audio"
         );
+
+        // Before the taphub round trip: there is no point spending a metadata
+        // request on audio that could not be played, and the caller has to learn
+        // now that this channel cannot play anything.
+        self.ensure_consumer()?;
 
         let track_id: TrackId = id_gen::generate_id();
 
@@ -160,6 +208,22 @@ impl SessionControl {
         .await?;
 
         metrics::record_track_lifecycle("queued", &normalize_queue_name(&queue_name_for_metric));
+
+        // The mixer can exit during the taphub round trip above. Re-checking
+        // here is what keeps the window between "it was alive" and "the track is
+        // in the queue" from becoming another silent success: `add_source`
+        // swallows its send error, so nothing downstream would notice.
+        if let Err(e) = self.ensure_consumer() {
+            let tid = track_id;
+            modify_state_session(
+                &self.state_service,
+                self.guild_id,
+                self.channel_id,
+                move |session| session.remove_track(tid),
+            )
+            .await?;
+            return Err(e);
+        }
 
         self.reconcile().await?;
 
@@ -719,6 +783,7 @@ pub fn create_session_control(
     state_service: ArcStateService,
     taphub_service: ArcTapHubService,
     config: SessionConfig,
+    mixer_alive: Arc<AtomicBool>,
 ) -> Arc<SessionControl> {
     let (end_tx, end_rx) = tokio::sync::mpsc::channel(16);
 
@@ -731,6 +796,7 @@ pub fn create_session_control(
         state_service,
         taphub_service,
         config,
+        mixer_alive,
     ));
 
     let sc_clone = session_control.clone();

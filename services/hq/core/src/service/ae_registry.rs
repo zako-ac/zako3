@@ -76,6 +76,12 @@ pub enum AeError {
     Tap(#[from] hq_types::TapHubError),
     #[error("no audio engine is registered")]
     NoEngine,
+    /// The engine refused the command because nothing was attached to consume
+    /// it. Kept apart from `Transport` so HQ can log a `dropped_reason` and tell
+    /// the user that nothing was played, rather than reporting silence as a
+    /// success.
+    #[error("no audio consumer: {0}")]
+    NoConsumer(hq_types::NoConsumerReason),
     #[error("audio engine transport error: {0}")]
     Transport(String),
 }
@@ -337,6 +343,9 @@ pub fn classify(
             Err(AeError::PermissionDenied)
         }
         AudioEngineCommandResponse::Error(AudioEngineError::Tap(t)) => Err(AeError::Tap(t)),
+        AudioEngineCommandResponse::Error(AudioEngineError::NoConsumer(reason)) => {
+            Err(AeError::NoConsumer(reason))
+        }
         AudioEngineCommandResponse::Error(AudioEngineError::InternalError(msg)) => {
             Err(AeError::Transport(msg))
         }
@@ -489,5 +498,29 @@ mod tests {
         let mut e = entry("ae-0", "1", 1);
         e.last_heartbeat = Instant::now() - HEARTBEAT_TTL - Duration::from_secs(1);
         assert!(!e.is_fresh());
+    }
+}
+
+#[cfg(test)]
+mod no_consumer_tests {
+    use super::*;
+    use hq_types::NoConsumerReason;
+
+    /// `classify` is where a wire response becomes a typed error. A structured
+    /// `NoConsumer` must survive that hop; flattening it into `Transport` would
+    /// lose the reason HQ logs.
+    #[test]
+    fn classify_keeps_a_no_consumer_response_structured() {
+        let classified = classify(AudioEngineCommandResponse::Error(
+            AudioEngineError::NoConsumer(NoConsumerReason::CallLockTimeout),
+        ));
+
+        match classified {
+            Err(AeError::NoConsumer(reason)) => {
+                assert_eq!(reason, NoConsumerReason::CallLockTimeout);
+                assert_eq!(reason.as_str(), "call_lock_timeout");
+            }
+            other => panic!("expected AeError::NoConsumer, got {other:?}"),
+        }
     }
 }

@@ -26,7 +26,21 @@ fn map_ae_err(e: AeError) -> CoreError {
         AeError::NotJoined => CoreError::InvalidInput("Not in VC".into()),
         AeError::PermissionDenied => CoreError::Forbidden("Permission denied".into()),
         AeError::Tap(t) => CoreError::TapHub(t),
+        AeError::NoConsumer(reason) => CoreError::NoConsumer(reason),
         other => CoreError::Internal(other.to_string()),
+    }
+}
+
+/// The `dropped_reason` value a failed audio request carries in the log, or
+/// `None` when the request was not dropped by a classified cause.
+///
+/// This is the field the audit asked for: a play that never reaches a listener
+/// has to say why in one machine-readable word, so the losses can be counted
+/// instead of being read as silence. `no_consumer` is this step's share of it.
+pub fn dropped_reason(err: &CoreError) -> Option<&'static str> {
+    match err {
+        CoreError::NoConsumer(_) => Some("no_consumer"),
+        _ => None,
     }
 }
 
@@ -249,6 +263,19 @@ impl AudioEngineService {
                     );
                     return Ok(true);
                 }
+                // A "no consumer" answer is not a reason to try the next
+                // engine: the engine is telling us this channel cannot be
+                // played into, and retrying elsewhere (on a lock timeout, say)
+                // risks placing a second bot in the same channel. It goes back
+                // to the caller as itself so the failure is visible.
+                Err(e @ AeError::NoConsumer(_)) => {
+                    warn!(
+                        sink_id = %candidate.sink_id,
+                        error = %e,
+                        "join failed: no audio consumer"
+                    );
+                    return Err(map_ae_err(e));
+                }
                 Err(e) => {
                     warn!(
                         sink_id = %candidate.sink_id,
@@ -321,6 +348,10 @@ impl AudioEngineService {
         volume: Volume,
         discord_user_id: DiscordUserId,
     ) -> CoreResult<()> {
+        // Taken before the request takes ownership: the failure log below names
+        // the tap that was dropped.
+        let tap_id_for_log = tap_id.0.clone();
+
         let play_request = AudioPlayRequest {
             queue_name,
             tap_id,
@@ -339,7 +370,29 @@ impl AudioEngineService {
             channel_id,
             AudioEngineSessionCommand::Play(play_request),
         )
-        .await?;
+        .await
+        .map_err(|e| {
+            // Every play that will not be heard is logged once, here, with the
+            // reason code attached: this is the line the ops side counts.
+            match dropped_reason(&e) {
+                Some(reason) => tracing::error!(
+                    guild_id = %guild_id,
+                    channel_id = %channel_id,
+                    tap_id = %tap_id_for_log,
+                    dropped_reason = reason,
+                    error = %e,
+                    "play dropped: nothing to consume the audio"
+                ),
+                None => tracing::warn!(
+                    guild_id = %guild_id,
+                    channel_id = %channel_id,
+                    tap_id = %tap_id_for_log,
+                    error = %e,
+                    "play failed"
+                ),
+            }
+            e
+        })?;
         let _ = self.event_tx.send(PlaybackEvent::PlaybackChanged);
         Ok(())
     }
@@ -517,5 +570,36 @@ impl AudioEngineService {
     /// Discord user ids of every live audio engine's bot.
     pub async fn list_bot_ids(&self) -> CoreResult<Vec<String>> {
         Ok(self.registry.client_ids().await)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hq_types::NoConsumerReason;
+
+    /// The chain this step exists for: an engine that reports "no consumer"
+    /// reaches HQ as its own error kind, not as an anonymous `Internal`, and is
+    /// logged under `dropped_reason = "no_consumer"`.
+    #[test]
+    fn a_no_consumer_engine_error_becomes_a_no_consumer_dropped_reason() {
+        let err = map_ae_err(AeError::NoConsumer(NoConsumerReason::MixerDead));
+
+        assert!(matches!(
+            err,
+            CoreError::NoConsumer(NoConsumerReason::MixerDead)
+        ));
+        assert_eq!(dropped_reason(&err), Some("no_consumer"));
+    }
+
+    /// Everything else keeps its old shape: an unclassified failure is not
+    /// dressed up as a dropped play.
+    #[test]
+    fn other_errors_have_no_dropped_reason() {
+        assert_eq!(dropped_reason(&CoreError::InvalidInput("Not in VC".into())), None);
+        assert_eq!(
+            dropped_reason(&map_ae_err(AeError::Transport("boom".into()))),
+            None
+        );
     }
 }

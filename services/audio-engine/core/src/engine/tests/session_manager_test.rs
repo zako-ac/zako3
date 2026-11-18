@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     engine::session_manager::SessionManager,
+    error::ZakoError,
     service::{discord::MockDiscordService, state::MockStateService, taphub::MockTapHubService},
-    types::{ChannelId, GuildId, SessionState},
+    types::{ChannelId, GuildId, NoConsumerReason, SessionState},
 };
 use mockall::predicate::*;
 
@@ -275,4 +276,81 @@ async fn test_fetch_discord_voice_state_propagates_error() {
 
     let result = manager.fetch_discord_voice_state().await;
     assert!(result.is_err());
+}
+
+/// A join that could not hand the audio stream to a driver must not leave a
+/// session behind. The old code registered one anyway: nothing ever consumed
+/// the mixer, every later `play` answered `Ok`, and the channel was silently
+/// dead until the bot was kicked.
+///
+/// Every reason `play_audio` can give is covered, because a join that only
+/// handled one of them would still register a dead session for the others.
+#[tokio::test]
+async fn test_session_manager_join_without_a_consumer_registers_no_session() {
+    use NoConsumerReason::*;
+
+    for (reason, guild, channel) in [
+        (ManagerMissing, 6u64, 600u64),
+        (CallLockTimeout, 7, 700),
+        (NoConnection, 8, 800),
+    ] {
+        let err = join_expecting_failure(guild, channel, reason).await;
+        match err {
+            ZakoError::NoConsumer(got) => assert_eq!(
+                got, reason,
+                "the reason the engine refused with must survive the join"
+            ),
+            other => panic!("expected NoConsumer({reason:?}), got {other:?}"),
+        }
+    }
+}
+
+async fn join_expecting_failure(
+    guild: u64,
+    channel: u64,
+    reason: NoConsumerReason,
+) -> ZakoError {
+    let guild_id = GuildId::from(guild);
+    let channel_id = ChannelId::from(channel);
+
+    let mut mock_discord = MockDiscordService::new();
+    // No `expect_save_session` on the state service: mockall panics if the join
+    // persists a session, which is the assertion that none was registered.
+    let mock_state = MockStateService::new();
+    let mock_taphub = MockTapHubService::new();
+
+    mock_discord
+        .expect_get_active_voice_connections()
+        .times(1)
+        .returning(|| Ok(vec![]));
+
+    mock_discord
+        .expect_join_voice_channel()
+        .with(eq(guild_id), eq(channel_id))
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    mock_discord
+        .expect_play_audio()
+        .with(eq(guild_id), always())
+        .times(1)
+        .returning(move |_, _| Err(ZakoError::NoConsumer(reason)));
+
+    let manager = SessionManager::new(
+        Arc::new(mock_discord),
+        Arc::new(mock_state),
+        Arc::new(mock_taphub),
+    );
+
+    let err = manager
+        .join(guild_id, channel_id)
+        .await
+        .expect_err("a join with no consumer has to fail");
+
+    assert!(
+        manager.get_session(guild_id, channel_id).is_none(),
+        "a session with no consumer must not be registered"
+    );
+
+    err
 }

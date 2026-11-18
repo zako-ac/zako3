@@ -13,7 +13,7 @@ use zako3_audio_engine_audio::OpusCons;
 use zako3_audio_engine_core::{
     error::{ZakoError, ZakoResult},
     service::discord::DiscordService,
-    types::{ChannelId, GuildId},
+    types::{ChannelId, GuildId, NoConsumerReason},
 };
 
 pub struct SongbirdDiscordService {
@@ -135,18 +135,47 @@ impl DiscordService for SongbirdDiscordService {
 
         let g_id = Self::to_songbird_guild_id(guild_id);
 
-        if let Some(call_lock) = self.manager.get(g_id) {
-            let call = match tokio::time::timeout(Duration::from_secs(3), call_lock.lock()).await {
-                Ok(guard) => guard,
-                Err(_) => {
-                    tracing::warn!(guild_id = ?guild_id, "Timed out acquiring Call lock for play_audio");
-                    return Ok(());
-                }
-            };
+        // A session is only registered once this succeeds, so every path here
+        // that cannot hand the stream to a live driver has to fail loudly: the
+        // old code returned `Ok(())` in both cases, which registered a
+        // session nobody consumed, made every later `play` answer `Ok`, and left
+        // the channel permanently silent while HQ believed it had been read.
+        let Some(call_lock) = self.manager.get(g_id) else {
+            tracing::error!(
+                guild_id = %guild_id,
+                reason = NoConsumerReason::ManagerMissing.as_str(),
+                "no audio consumer: songbird has no call for this guild"
+            );
+            return Err(ZakoError::NoConsumer(NoConsumerReason::ManagerMissing));
+        };
 
-            // Play direct opus stream
-            call.play_direct_opus(stream);
+        let call = match tokio::time::timeout(Duration::from_secs(3), call_lock.lock()).await {
+            Ok(guard) => guard,
+            Err(_) => {
+                tracing::error!(
+                    guild_id = %guild_id,
+                    reason = NoConsumerReason::CallLockTimeout.as_str(),
+                    "no audio consumer: timed out acquiring the call lock"
+                );
+                return Err(ZakoError::NoConsumer(NoConsumerReason::CallLockTimeout));
+            }
+        };
+
+        // Belt and braces: a successful `Songbird::join` only completes once the
+        // connection is live, so this should never fire on the normal path. It
+        // fires when the connection dropped between the join and here, and then
+        // `play_direct_opus` would queue against a driver that is gone.
+        if call.current_connection().is_none() {
+            tracing::error!(
+                guild_id = %guild_id,
+                reason = NoConsumerReason::NoConnection.as_str(),
+                "no audio consumer: the call has no live voice connection"
+            );
+            return Err(ZakoError::NoConsumer(NoConsumerReason::NoConnection));
         }
+
+        // Play direct opus stream
+        call.play_direct_opus(stream);
 
         Ok(())
     }

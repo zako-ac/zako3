@@ -24,6 +24,11 @@ pub enum AudioEngineError {
     /// to a localized user message instead of falling into the generic
     /// "internal error" bucket.
     Tap(zako3_types::TapHubError),
+    /// The command could not be played because nothing was attached to consume
+    /// it. Structured rather than an `InternalError` string so HQ can log it
+    /// under its own `dropped_reason = "no_consumer"` instead of treating it as
+    /// an anonymous engine fault.
+    NoConsumer(NoConsumerReason),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

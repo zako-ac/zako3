@@ -21,6 +21,48 @@ pub enum TapHubError {
     Internal(String),
 }
 
+/// Why a session turned out to have no consumer: nothing that would ever pull
+/// the mixed audio out of it, so anything queued there is played to nobody.
+///
+/// This is the failure the audio engine used to swallow: a session was
+/// registered, `play` answered `Ok`, and the channel went permanently silent
+/// while every message looked like it had been read. The reason is carried as a
+/// stable code so the engine's log line and HQ's `dropped_reason` field name the
+/// same cause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoConsumerReason {
+    /// Songbird holds no `Call` for the guild at all: nothing ever joined.
+    ManagerMissing,
+    /// The `Call` lock could not be taken within the timeout, so the play could
+    /// not be handed to the driver.
+    CallLockTimeout,
+    /// The `Call` exists but has no live voice connection, so there is no driver
+    /// to play to.
+    NoConnection,
+    /// The session's mixer thread has exited; its ring buffer has no reader, so
+    /// a source added to it would never reach the driver.
+    MixerDead,
+}
+
+impl NoConsumerReason {
+    /// The stable code, as it appears in logs and in HQ's `dropped_reason`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            NoConsumerReason::ManagerMissing => "manager_missing",
+            NoConsumerReason::CallLockTimeout => "call_lock_timeout",
+            NoConsumerReason::NoConnection => "no_connection",
+            NoConsumerReason::MixerDead => "mixer_dead",
+        }
+    }
+}
+
+impl std::fmt::Display for NoConsumerReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ZakoError {
     #[error("IO error: {0}")]
@@ -46,6 +88,12 @@ pub enum ZakoError {
 
     #[error(transparent)]
     TapHub(#[from] TapHubError),
+
+    /// No consumer is attached, so this audio could never be played. Returned
+    /// instead of a silent success: the caller has to hear that the request was
+    /// not played, not learn it from a channel that has gone quiet.
+    #[error("no audio consumer: {0}")]
+    NoConsumer(NoConsumerReason),
 
     #[error("RPC error: {0}")]
     Rpc(String),
