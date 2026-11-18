@@ -56,6 +56,18 @@ pub struct AppConfig {
     #[serde(default = "default_track_watchdog_secs")]
     pub track_watchdog_secs: u64,
 
+    /// Upper bound (seconds) on how long a queued TTS may wait for its turn
+    /// before it is dropped rather than played. Zero disables the cap.
+    ///
+    /// See `zako3_audio_engine_core::engine::session::DEFAULT_QUEUE_MAX_AGE_SECS`
+    /// for why 90 is the default and what to watch when changing it
+    /// (`audio_queue_stale_skipped_total`). Read once at startup, so a change
+    /// needs the pods restarted — `kubectl -n zako3 rollout restart
+    /// statefulset/zako3-audio-engine`, or the chart value
+    /// `audioEngine.queueMaxAgeSecs` applied by Flux.
+    #[serde(default = "default_queue_max_age_secs")]
+    pub queue_max_age_secs: u64,
+
     /// Where this engine receives audio over UDP. Only used when the v4 audio
     /// plane is enabled.
     #[serde(default = "default_udp_bind_addr")]
@@ -134,6 +146,13 @@ fn default_taphub_request_timeout_ms() -> u64 {
 /// patience, and it only fires on a track that is also making no progress.
 fn default_track_watchdog_secs() -> u64 {
     60
+}
+
+/// The queue age cap. Far above a healthy queue (the median TTS track is 1.78s,
+/// so a per-user queue drains in seconds) and below the point where an answer
+/// is no longer an answer.
+fn default_queue_max_age_secs() -> u64 {
+    zako3_audio_engine_core::engine::session::DEFAULT_QUEUE_MAX_AGE_SECS
 }
 
 fn default_service_name() -> String {
@@ -317,6 +336,8 @@ mod tests {
             taphub_sni: default_taphub_sni(),
             taphub_transport_cert_file: default_taphub_transport_cert_file(),
             taphub_request_timeout_ms: default_taphub_request_timeout_ms(),
+            track_watchdog_secs: default_track_watchdog_secs(),
+            queue_max_age_secs: default_queue_max_age_secs(),
             udp_bind_addr: default_udp_bind_addr(),
             udp_public_addr: None,
             sink_id: None,

@@ -158,3 +158,47 @@ kubectl port-forward pod/<release>-clickstack-0 8080:8080
 
 **OpenObserve** is retained in the chart but turned off by default (`openobserve.replicas: 0`).
 Its StatefulSet, PVC, and Service still render, so no pod runs until the replica count is raised.
+
+## Audio queue age cap
+
+A user's TTS queue is drained in order, so nothing bounds how long a message
+waits for its turn: one stalled track holds everything behind it, and the audit
+found backlogs of 15+ messages played one to two minutes after they were said.
+Late audio is worse than none, and a queue that keeps growing is what makes the
+next message later still.
+
+```yaml
+audioEngine:
+  queueMaxAgeSecs: "90"   # seconds; "0" disables the cap
+```
+
+Before a track is started, the engine compares its enqueue time with the cap
+(`Queue max age`). Past it, the track is dropped instead of played:
+
+- **TTS queues only** (`tts_<user>`). Music queues are playlists: a track
+  waiting its turn is the intended behaviour, not a stall.
+- **90s by default.** The median TTS track is 1.78s, so a healthy queue drains
+  in seconds and the cap only fires when something upstream is stuck. 90s is
+  roughly fifty tracks deep, far past "late" and short of "an answer to a
+  question the user has moved on from".
+- **Undated tracks play.** A track with no enqueue time (state written before the
+  field existed, or restored from it) is never treated as stale: silently
+  dropping audio we cannot date is the worse failure.
+- **Resuming restarts the clock.** `resume` re-stamps the track, so a queue
+  paused for a few minutes does not come back with everything dropped.
+- **Read once at startup.** A change rolls the StatefulSet:
+  `kubectl -n <ns> rollout restart statefulset/<release>-audio-engine`. No image
+  rebuild is needed.
+
+Watch it with:
+
+```promql
+audio_queue_stale_skipped_total{queue_name="tts"}
+```
+
+and the engine's `Dropping stale queued track` warning, which carries
+`track_id`, `age_secs`, `max_age_secs`, `queue_name`, `tap_id` and
+`discord_user_id`. Raise the cap if users report messages that were never read;
+lower it if audio still arrives too late to be useful. A skip count that rises
+while `audio_track_lifecycle_total{event="start"}` stays flat is a queue
+discarding rather than draining, and points at the stall behind it.
