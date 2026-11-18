@@ -21,6 +21,16 @@ pub struct UpdateTapDto {
     pub permission: Option<TapPermission>,
     pub roles: Option<Vec<TapRole>>,
     pub base_volume: Option<f32>,
+    /// Whether this tap speaks the v4 WebSocket gateway rather than the
+    /// protofish3 taphub.
+    ///
+    /// This is the per-tap cutover the audio plane reads: while it is false HQ
+    /// answers every metadata and audio request for the tap with `Legacy`, and
+    /// the audio engine then asks the taphub for it. A tap that has moved to
+    /// the gateway but is still false here is therefore not merely routed the
+    /// old way — it is unreachable, and fails with `TapUnavailable` on the
+    /// first request, because the taphub has no connection for it.
+    pub gateway_v4: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, zod_gen_derive::ZodSchema)]

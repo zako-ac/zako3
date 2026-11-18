@@ -125,6 +125,33 @@ impl HubBackend for GatewayBackend {
             resuming = hello.resuming.len(),
             "tap connected"
         );
+
+        // A tap that is live on this gateway but still flagged legacy in HQ's
+        // own table has no working route at all: the audio plane answers
+        // `Legacy` for it, the audio engine falls back to the taphub, and the
+        // taphub holds no connection for a tap that speaks this protocol — so
+        // every request fails with `TapUnavailable` and nothing in either
+        // service's log says why. One read per connection buys that
+        // explanation, and the fix it names.
+        match self
+            .shared
+            .service
+            .tap
+            .repo()
+            .find_by_id(hq_tap_id.clone())
+            .await
+        {
+            Ok(Some(tap)) if !tap.gateway_v4 => tracing::warn!(
+                tap_id = %hq_tap_id.0,
+                "tap speaks the v4 gateway but its row is not flagged gateway_v4; \
+                 requests routed to it answer Legacy and fail on the taphub — \
+                 set gateway_v4 on this tap to cut it over"
+            ),
+            Ok(_) => {}
+            // Not being able to read the row is not a reason to reject a tap
+            // that has already authenticated; it only costs us the warning.
+            Err(e) => tracing::debug!(%e, tap_id = %hq_tap_id.0, "could not read the tap row"),
+        }
     }
 
     async fn on_complete(&self, tap_id: &TapId, request_id: RequestId, outcome: RequestOutcome) {
