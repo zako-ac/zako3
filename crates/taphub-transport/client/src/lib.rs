@@ -60,6 +60,36 @@ const WEDGED_AFTER: u32 = 2;
 /// this window the next pick lands on it, and an answer puts it straight back into
 /// full rotation.
 const WEDGE_COOLDOWN: Duration = Duration::from_secs(30);
+/// Sentinel for "this client has never completed an exchange" in `last_success_ms`.
+const NEVER: u64 = u64::MAX;
+
+/// What a supervisor needs in order to decide whether this client is still usable.
+///
+/// The counters describe *exchanges*, not connections: a request that fails on
+/// both attempts is one failure, and any successful answer clears the count.
+/// A track that stalls mid-stream is not counted — its exchange succeeded and
+/// the silence is downstream of the request path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientHealth {
+    /// Requests that failed on every attempt since the last successful exchange.
+    pub consecutive_failures: u64,
+    /// Time since the last successful exchange; `None` if there has not been one.
+    pub since_last_success: Option<Duration>,
+    /// Reset attempts: transport failures plus `close()`.
+    pub resets: u64,
+}
+
+impl ClientHealth {
+    /// True once `min_failures` requests in a row have failed outright.
+    ///
+    /// One failure is not enough evidence to throw the client away: a taphub
+    /// restart or a brief network blip fails one or two requests and then
+    /// heals on its own. At production budgets (2 attempts of 6s) three in a
+    /// row means roughly half a minute of uninterrupted failure.
+    pub fn is_wedged(&self, min_failures: u64) -> bool {
+        self.consecutive_failures >= min_failures
+    }
+}
 
 pub struct TransportClient {
     /// Pool of independent reconnecting connections. Requests round-robin across them via
@@ -87,6 +117,16 @@ pub struct TransportClient {
     /// connection, so it is a last resort kept for a transport that is really broken —
     /// a request that merely timed out must not move this counter.
     resets: AtomicU64,
+    /// Requests that failed on every attempt since the last successful exchange.
+    ///
+    /// Kept at the client rather than per connection because the caller's
+    /// recovery is client-wide: when every pooled connection has stopped
+    /// answering, the honest replacement is a new client (new endpoint, new
+    /// connections), not another round over the same dead pool.
+    consecutive_failures: AtomicU64,
+    /// When the last exchange succeeded, in milliseconds since `started`;
+    /// `NEVER` until the first one.
+    last_success_ms: AtomicU64,
 }
 
 impl TransportClient {
@@ -148,6 +188,8 @@ impl TransportClient {
             started: Instant::now(),
             jitter: JitterConfig::default(),
             resets: AtomicU64::new(0),
+            consecutive_failures: AtomicU64::new(0),
+            last_success_ms: AtomicU64::new(NEVER),
         })
     }
 
@@ -189,6 +231,29 @@ impl TransportClient {
     /// resets a connection now.
     pub fn resets_total(&self) -> u64 {
         self.resets.load(Ordering::Relaxed)
+    }
+
+    /// This client's exchange health, for a supervisor deciding whether to
+    /// replace it. Cheap: three atomic loads.
+    pub fn health(&self) -> ClientHealth {
+        let last = self.last_success_ms.load(Ordering::Relaxed);
+        ClientHealth {
+            consecutive_failures: self.consecutive_failures.load(Ordering::Relaxed),
+            since_last_success: (last != NEVER)
+                .then(|| Duration::from_millis(self.now_ms().saturating_sub(last))),
+            resets: self.resets.load(Ordering::Relaxed),
+        }
+    }
+
+    /// An exchange got an answer: whatever was failing is over.
+    fn record_success(&self) {
+        self.last_success_ms.store(self.now_ms(), Ordering::Relaxed);
+        self.consecutive_failures.store(0, Ordering::Relaxed);
+    }
+
+    /// An exchange failed on every attempt.
+    fn record_failure(&self) {
+        self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Round-robin one connection out of the pool for a single attempt, skipping
@@ -277,6 +342,7 @@ impl TransportClient {
                         .map_err(|e| TapHubError::Internal(e.to_string()))?;
                     // It answered, so whatever made it slow before is gone.
                     self.note_ok(idx);
+                    self.record_success();
                     return Ok((conn, sender, receiver, resp));
                 }
                 Ok(Err(e)) if attempt < MAX_ATTEMPTS && is_transport_error(&e) => {
@@ -291,7 +357,10 @@ impl TransportClient {
                     // A fresh connection has no history of timing out.
                     self.note_ok(idx);
                 }
-                Ok(Err(e)) => return Err(TapHubError::Internal(e.to_string())),
+                Ok(Err(e)) => {
+                    self.record_failure();
+                    return Err(TapHubError::Internal(e.to_string()));
+                }
                 Err(_) if attempt < MAX_ATTEMPTS => {
                     tracing::warn!(
                         timeout_ms = self.request_timeout.as_millis() as u64,
@@ -306,6 +375,7 @@ impl TransportClient {
                 }
                 Err(_) => {
                     self.note_timeout(idx);
+                    self.record_failure();
                     return Err(TapHubError::Internal(format!(
                         "taphub request timed out after {} attempts ({}ms each)",
                         MAX_ATTEMPTS,
@@ -734,7 +804,8 @@ pub fn load_certs<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<CertificateDer
 
 #[cfg(test)]
 mod tests {
-    use super::pick_index;
+    use super::{ClientHealth, pick_index};
+    use std::time::Duration;
 
     /// A wedged connection leaves the rotation, and the rotation is never refused.
     #[test]
@@ -746,5 +817,40 @@ mod tests {
         assert_eq!(pick_index(0, 4, |i| i < 3), 3);
         // Everything wedged: keep sending rather than fail.
         assert_eq!(pick_index(2, 4, |_| true), 2);
+    }
+
+    /// The rebuild trigger is a run of outright failures, and a success in
+    /// between is what clears it — not elapsed time, and not a stall.
+    #[test]
+    fn health_is_wedged_after_a_run_of_failures() {
+        let healthy = ClientHealth {
+            consecutive_failures: 0,
+            since_last_success: Some(Duration::from_secs(2)),
+            resets: 0,
+        };
+        assert!(!healthy.is_wedged(3));
+
+        // One or two failures happen on a taphub restart and then heal.
+        let flaky = ClientHealth {
+            consecutive_failures: 2,
+            since_last_success: Some(Duration::from_secs(20)),
+            resets: 1,
+        };
+        assert!(!flaky.is_wedged(3));
+
+        let wedged = ClientHealth {
+            consecutive_failures: 3,
+            since_last_success: Some(Duration::from_secs(45)),
+            resets: 0,
+        };
+        assert!(wedged.is_wedged(3));
+
+        // Never answered at all is a wedge once the run is long enough.
+        let never = ClientHealth {
+            consecutive_failures: 5,
+            since_last_success: None,
+            resets: 2,
+        };
+        assert!(never.is_wedged(3));
     }
 }

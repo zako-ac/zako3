@@ -53,39 +53,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let taphub_cell: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>> =
         Arc::new(tokio::sync::Mutex::new(None));
 
-    // Spawn background retry task
+    // Keep the taphub transport usable for the life of the process.
+    //
+    // A pooled connection can stop answering application requests while the
+    // transport still calls it alive: keepalives are exchanged, every request
+    // times out, and protofish3's reconnect path never replaces the endpoint
+    // underneath it. The recovery used to be deleting the pod, which also took
+    // that pod's voice sessions down. The supervisor does the same rebuild one
+    // layer up — a brand new client, with a fresh QUIC endpoint and fresh
+    // pooled connections — so only the requests already in flight are lost.
     {
         let cell = taphub_cell.clone();
         let config = config.clone();
         let certs = certs.clone();
         tokio::spawn(async move {
-            loop {
-                match TransportClient::connect(
-                    "0.0.0.0:0".parse().unwrap(),
-                    &config.taphub_url,
-                    config.taphub_sni.clone(),
-                    certs.clone(),
-                    Duration::from_millis(config.taphub_request_timeout_ms),
-                )
-                .await
-                {
-                    Ok(t) => {
-                        tracing::info!("Connected to taphub");
-                        // Let a stall report carry taphub's two hops as well as
-                        // the engine's own: the reader is best-effort and a
-                        // missing Redis only costs the report its upstream half.
-                        let t = t.with_upstream_hops(
-                            zako3_audio_engine_infra::RedisUpstreamHops::new(&config.redis_url),
-                        );
-                        *cell.lock().await = Some(Arc::new(t));
-                        break;
-                    }
-                    Err(e) => {
-                        tracing::warn!("Taphub connect failed: {:?}. Retrying in 5s...", e);
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                    }
-                }
-            }
+            run_taphub_supervisor(cell, config, certs).await;
         });
     }
 
@@ -448,4 +430,105 @@ async fn build_hq_audio(
             legacy,
         ),
     )))
+}
+
+/// Requests that may fail outright in a row before the taphub client is
+/// replaced. Two attempts of 6s each make this roughly half a minute of
+/// uninterrupted failure, which no transient in the logs has produced.
+const TAPHUB_REBUILD_AFTER_FAILURES: u64 = 3;
+/// How often the supervisor looks at the client's health.
+const TAPHUB_HEALTH_INTERVAL: Duration = Duration::from_secs(10);
+/// Floor on how often the client may be replaced. A taphub outage would
+/// otherwise turn every health check into another connect attempt.
+const TAPHUB_REBUILD_MIN_GAP: Duration = Duration::from_secs(60);
+
+/// Builds one taphub client, with the stall report's upstream reader attached.
+async fn connect_taphub(
+    config: &AppConfig,
+    certs: &[rustls::pki_types::CertificateDer<'static>],
+) -> Result<TransportClient, String> {
+    let client = TransportClient::connect(
+        "0.0.0.0:0".parse().unwrap(),
+        &config.taphub_url,
+        config.taphub_sni.clone(),
+        certs.to_vec(),
+        Duration::from_millis(config.taphub_request_timeout_ms),
+    )
+    .await?;
+
+    // Let a stall report carry taphub's two hops as well as the engine's own:
+    // the reader is best-effort and a missing Redis only costs the report its
+    // upstream half.
+    Ok(
+        client.with_upstream_hops(zako3_audio_engine_infra::RedisUpstreamHops::new(
+            &config.redis_url,
+        )),
+    )
+}
+
+/// Owns the taphub client for the life of the process: connects it, watches
+/// its exchange health, and replaces it when it stops answering.
+///
+/// Replacing is the same recovery an operator performs by deleting the pod,
+/// scoped to the client: the new one binds its own QUIC endpoint, so it does
+/// not inherit whatever state the old endpoint was stuck in.
+async fn run_taphub_supervisor(
+    cell: Arc<tokio::sync::Mutex<Option<Arc<TransportClient>>>>,
+    config: AppConfig,
+    certs: Vec<rustls::pki_types::CertificateDer<'static>>,
+) {
+    let mut last_rebuild: Option<std::time::Instant> = None;
+
+    loop {
+        let current = cell.lock().await.clone();
+
+        match current {
+            None => match connect_taphub(&config, &certs).await {
+                Ok(t) => {
+                    tracing::info!("Connected to taphub");
+                    *cell.lock().await = Some(Arc::new(t));
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Taphub connect failed; retrying in 5s");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            },
+            Some(client) => {
+                let health = client.health();
+                let cooling = last_rebuild.is_some_and(|at| at.elapsed() < TAPHUB_REBUILD_MIN_GAP);
+
+                if health.is_wedged(TAPHUB_REBUILD_AFTER_FAILURES) && !cooling {
+                    // Build the replacement before dropping the old client: a
+                    // rebuild that cannot reach taphub leaves the engine on the
+                    // client it already has rather than on nothing.
+                    match connect_taphub(&config, &certs).await {
+                        Ok(t) => {
+                            tracing::warn!(
+                                event = "taphub_client_rebuild",
+                                consecutive_failures = health.consecutive_failures,
+                                since_last_success_ms =
+                                    health.since_last_success.map(|d| d.as_millis() as u64),
+                                resets = health.resets,
+                                "taphub transport stopped answering; replaced the client"
+                            );
+                            *cell.lock().await = Some(Arc::new(t));
+                            last_rebuild = Some(std::time::Instant::now());
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "taphub client rebuild failed; keeping the current client"
+                            );
+                            last_rebuild = Some(std::time::Instant::now());
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        tokio::time::sleep(TAPHUB_HEALTH_INTERVAL).await;
+    }
 }

@@ -550,3 +550,109 @@ async fn test_answered_request_leaves_the_connection_usable() {
         }
     }
 }
+
+/// Answers immediately, except for a meta request whose text contains `slow`:
+/// that one stalls far past any budget the test sets.
+struct SlowWhenMarkedHandler;
+
+#[async_trait::async_trait]
+impl TapHubBridgeHandler for SlowWhenMarkedHandler {
+    async fn handle_request_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(AudioMetaResponse, mpsc::Receiver<(Timestamp, bytes::Bytes)>), TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_preload_audio(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        Err(TapHubError::Internal("unused".to_string()))
+    }
+
+    async fn handle_request_audio_meta(
+        &self,
+        req: AudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<AudioMetaResponse, TapHubError> {
+        if req.request.to_string().contains("slow") {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        }
+        Ok(AudioMetaResponse {
+            cache_key: AudioCachePolicy {
+                cache_type: AudioCacheType::CacheKey("health_key".to_string()),
+                ttl_seconds: None,
+            },
+            metadatas: vec![AudioMetadata::Title("Health".to_string())],
+            base_volume: 1.0,
+        })
+    }
+
+    async fn handle_invalidate_cache(
+        &self,
+        _req: CachedAudioRequest,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), TapHubError> {
+        Ok(())
+    }
+}
+
+/// `health()` is the signal a supervisor uses to replace a client, so it has to
+/// count *exhausted exchanges*: one failure per request that failed on both
+/// attempts, cleared by the next answer. A request that merely times out once
+/// and then succeeds is not a failure at all.
+#[tokio::test]
+async fn test_health_counts_exhausted_exchanges() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let (bound_addr, client_certs) = spawn_server(Arc::new(SlowWhenMarkedHandler)).await;
+
+    let client = TransportClient::connect(
+        "127.0.0.1:0".parse().unwrap(),
+        &bound_addr.to_string(),
+        "localhost".to_string(),
+        client_certs,
+        Duration::from_millis(500),
+    )
+    .await
+    .expect("Failed to connect client");
+
+    // Nothing answered yet: no success, and no failure either.
+    let health = client.health();
+    assert_eq!(health.consecutive_failures, 0);
+    assert!(health.since_last_success.is_none());
+    assert!(!health.is_wedged(3));
+
+    client
+        .request_audio_meta(meta_request())
+        .await
+        .expect("an answered request must succeed");
+    let health = client.health();
+    assert_eq!(health.consecutive_failures, 0);
+    assert!(health.since_last_success.is_some());
+
+    // Fails on both attempts, so it is one failure — not two, and not zero.
+    let slow = AudioRequest {
+        tap_id: zako3_types::hq::TapId("test_tap_id".to_string()),
+        request: "slow:meta".to_string().into(),
+        discord_user_id: "123".to_string().into(),
+        headers: HashMap::new(),
+    };
+    assert!(
+        client.request_audio_meta(slow).await.is_err(),
+        "a request past both attempt budgets must fail"
+    );
+    let health = client.health();
+    assert_eq!(health.consecutive_failures, 1);
+    assert!(!health.is_wedged(3), "one failure is not a wedge");
+
+    // The run, not the total: the next answer clears it.
+    client
+        .request_audio_meta(meta_request())
+        .await
+        .expect("the connection stays usable");
+    assert_eq!(client.health().consecutive_failures, 0);
+}
