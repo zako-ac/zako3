@@ -16,6 +16,9 @@ tracing.workspace = true
 bytes = "1.11.1"
 rcgen = "0.14.7"
 rustls = { version = "0.23.37", features = ["ring"] }
+# `time` is what `pf3_drain` drives its wall-clock assertions with. It resolves
+# today only because another crate in the graph turns the feature on.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing-subscriber.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 zakofish = { path = "../../libs/zakofish" }

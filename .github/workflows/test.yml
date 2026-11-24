@@ -72,6 +72,36 @@ jobs:
             -p zako3-audio-engine-controller -p zako3-telemetry \
             --all-targets --no-deps
 
+  tap-drain:
+    # The scale-down path. A tap pod being deleted has to leave taphub's routing
+    # table at once and take its in-flight requests with it, instead of being
+    # routed into until the QUIC connection gives up. The tests for it live in
+    # two places: `zakofish-taphub` drives a real connection through a drain, and
+    # `zako3-taphub-core` asserts a draining connection is out of the routing set.
+    # Nothing ran them. `touched-services` compiles `zako3-taphub-core` and its
+    # unit tests and stops there, and `zakofish-taphub`'s test target is not built
+    # by any lane at all, so a regression in either would have merged green.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: taphub-core unit tests (draining connections among them)
+        run: cargo test -p zako3-taphub-core --lib
+
+      - name: the drain notice over a real connection (pf3_drain)
+        run: cargo test -p zakofish-taphub --test pf3_drain
+
   engine-core:
     # The audio engine's own tests: the no-consumer refusal, the track watchdog
     # and the queue age cap all live in this target. Nothing compiled it, which
