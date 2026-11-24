@@ -3,6 +3,8 @@ name: h3load build
 # Builds the H-3 autoscaling load generator as a downloadable binary, so the
 # load test can run from inside the cluster without a local Rust build.
 on:
+  push:
+    branches: ["test/h3-*"]
   workflow_dispatch:
 
 jobs:
