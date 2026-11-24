@@ -40,7 +40,9 @@ fn gen_cert() -> (
 struct RecordingHub {
     connected: Mutex<Vec<u64>>,
     draining: Mutex<Vec<(u64, TapDraining, Instant)>>,
-    disconnected: Mutex<Vec<(u64, Instant)>>,
+    /// connection id, when the hub saw the close, and the close code it
+    /// recorded — `Some(0)` is the frame a draining tap sends.
+    disconnected: Mutex<Vec<(u64, Instant, Option<u64>)>>,
 }
 
 #[async_trait::async_trait]
@@ -54,11 +56,17 @@ impl HubHandler for RecordingHub {
         Ok(())
     }
 
-    async fn on_tap_disconnected(&self, _tap_id: TapId, connection_id: u64) {
-        self.disconnected
-            .lock()
-            .unwrap()
-            .push((connection_id, Instant::now()));
+    async fn on_tap_disconnected(
+        &self,
+        _tap_id: TapId,
+        connection_id: u64,
+        close_code: Option<u64>,
+    ) {
+        self.disconnected.lock().unwrap().push((
+            connection_id,
+            Instant::now(),
+            close_code,
+        ));
     }
 
     async fn on_tap_draining(&self, _tap_id: TapId, connection_id: u64, info: TapDraining) {
@@ -255,7 +263,7 @@ async fn a_drained_tap_closes_its_connection_and_stops() {
         .expect("the tap task panicked");
 
     let disconnected = f.recorder.disconnected.lock().unwrap().clone();
-    let (id, at) = disconnected
+    let (id, at, close_code) = disconnected
         .first()
         .cloned()
         .expect("the hub never saw the connection close");
@@ -264,6 +272,14 @@ async fn a_drained_tap_closes_its_connection_and_stops() {
         at.duration_since(drain_started) < Duration::from_secs(3),
         "the connection outlived the drain: {:?}",
         at.duration_since(drain_started)
+    );
+    // The close frame is the difference between this and a process that simply
+    // died: without a code the hub cannot tell a departure from a lost
+    // connection, and it will not retry the difference either.
+    assert_eq!(
+        close_code,
+        Some(0),
+        "the tap did not close with a close frame; the hub saw {close_code:?}"
     );
 }
 

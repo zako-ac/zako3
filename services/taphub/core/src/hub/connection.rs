@@ -228,7 +228,7 @@ impl HubHandler for TapHubConnectionHandler {
     }
 
     #[tracing::instrument(skip(self), fields(tap_id = %tap_id.0, connection_id))]
-    async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64) {
+    async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64, close_code: Option<u64>) {
         // Drop the connection from the authoritative registry and fire its
         // disconnect signal so any active streams error out immediately.
         let removed = self.connections.lock().remove(&connection_id);
@@ -241,6 +241,7 @@ impl HubHandler for TapHubConnectionHandler {
             tracing::info!(
                 tap_id = %tap_id.0,
                 connection_id,
+                close_code = ?close_code,
                 "Draining tap finished its connection"
             );
         } else {

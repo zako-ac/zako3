@@ -178,12 +178,20 @@ impl TapHub {
                 // between a scale-down that caught a request and a tap that is
                 // simply down.
                 let held = guard.values().filter(|e| &e.state.tap_id == tap_id).count();
-                tracing::warn!(
-                    tap_id = %tap_id.0,
-                    held,
-                    draining = held - available.len(),
-                    "no connection available for tap"
-                );
+                // Held-but-none-routable means every replica is on its way out,
+                // which is a scheduled scale-down and says nothing new at warn;
+                // held == 0 means the tap is simply gone, which does.
+                let message = "no connection available for tap";
+                if held == available.len() {
+                    tracing::warn!(tap_id = %tap_id.0, held, "{message}");
+                } else {
+                    tracing::debug!(
+                        tap_id = %tap_id.0,
+                        held,
+                        draining = held - available.len(),
+                        "{message}"
+                    );
+                }
                 crate::metrics::metrics().no_tap_available_total.add(
                     1,
                     &[

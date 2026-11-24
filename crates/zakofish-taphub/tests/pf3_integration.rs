@@ -46,7 +46,13 @@ impl HubHandler for TestHubHandler {
         let _ = self.tap_connected.send(connection_id).await;
         Ok(())
     }
-    async fn on_tap_disconnected(&self, _tap_id: TapId, _connection_id: u64) {}
+    async fn on_tap_disconnected(
+        &self,
+        _tap_id: TapId,
+        _connection_id: u64,
+        _close_code: Option<u64>,
+    ) {
+    }
 }
 
 struct TestTapHandler;

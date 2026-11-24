@@ -23,7 +23,14 @@ pub trait HubHandler: Send + Sync {
         connection_id: u64,
         hello: TapClientHello,
     ) -> std::result::Result<(), TapServerReject>;
-    async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64);
+    /// The connection is gone.
+    ///
+    /// `close_code` is whatever the peer recorded: `Some(0)` for the close frame
+    /// a draining tap sends, `Some(n)` for anything else the application asked
+    /// for, and `None` when the transport never got a close at all — which is
+    /// what a process that died on SIGTERM used to look like, and the difference
+    /// between the two is the whole point of the drain.
+    async fn on_tap_disconnected(&self, tap_id: TapId, connection_id: u64, close_code: Option<u64>);
 
     /// The tap said it is going away on purpose.
     ///
@@ -328,16 +335,20 @@ async fn handle_connection(
             }
             drop(sessions);
 
+            let close_code = conn.close_code();
             handler
-                .on_tap_disconnected(tap_id_public, connection_id)
+                .on_tap_disconnected(tap_id_public, connection_id, close_code)
                 .await;
+            // `clean` keeps meaning "closed without an application code", which
+            // is what the old code called every close; a code now gets its own
+            // value rather than replacing that one, so a dashboard filtering on
+            // `clean` does not go quiet.
             tracing::Span::current().record(
                 "disconnect_reason",
-                tracing::field::display(
-                    conn.close_code()
-                        .map(|c| format!("close_code={c}"))
-                        .unwrap_or_else(|| "clean".to_string()),
-                ),
+                tracing::field::display(match close_code {
+                    None | Some(0) => "clean".to_string(),
+                    Some(code) => format!("close_code={code}"),
+                }),
             );
             Ok(())
         }
