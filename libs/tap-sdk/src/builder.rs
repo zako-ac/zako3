@@ -189,7 +189,7 @@ impl TapBuilder {
 /// p99 635ms, worst 753ms over a day of traffic) with room for a request that
 /// started just before the drain did, and well inside the 45s grace period the
 /// tap manifests give the pod.
-pub const DEFAULT_DRAIN_TIMEOUT: Duration = Duration::from_secs(20);
+pub const DEFAULT_DRAIN_TIMEOUT: Duration = zakofish::tap_pf3::DrainConfig::DEFAULT_TIMEOUT;
 
 fn drain_timeout_from_env() -> Duration {
     std::env::var("ZAKO_DRAIN_TIMEOUT_SECS")

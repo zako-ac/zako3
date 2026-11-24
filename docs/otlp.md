@@ -187,6 +187,9 @@ OTLP/ClickStack carries): the exporter in `crates/telemetry` is built with the
 | `taphub_cache_hits_total` | Counter | `tap_id`, `request_type` | |
 | `taphub_connection_duration_seconds` | Histogram | `tap_id` | On disconnect |
 | `taphub_active_streams` | UpDownCounter | — | Live relay streams |
+| `taphub_tap_conn_draining_total` | Counter | `reason` | Connections that announced a drain before leaving (`drain_signal`) |
+| `taphub_tap_conn_drain_to_removal_seconds` | Histogram | `tap_id` | Tap's stated drain start → out of the routing table. Measured from the tap's own clock in `TapDraining`, so it is the whole hop, not this process's handling of it |
+| `taphub_no_tap_available_total` | Counter | `tap_id`, `held` | A request found no routable connection. `held` separates "every replica is draining" (`held` > 0) from "this tap is not connected" (`held` = 0); the caller sees `TapUnavailable` either way |
 
 ### Audio Engine (`meter: "zako3-audio-engine"` via Prometheus registry)
 
