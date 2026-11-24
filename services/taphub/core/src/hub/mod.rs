@@ -46,6 +46,9 @@ pub(crate) struct ConnEntry {
     /// recovers has to be able to prove it (see 2026-11-18 05:53, the same
     /// trade-off in the transport client's pool).
     pub(crate) suspect_until: Option<Instant>,
+    /// When this connection last answered a request. An answer is proof the tap
+    /// is alive, which is what keeps a busy tap out of the suspect path.
+    pub(crate) last_answered_at: Option<Instant>,
 }
 
 impl ConnEntry {
@@ -67,6 +70,22 @@ pub(crate) const UNANSWERED_EVICT_AFTER: u32 = 3;
 /// connection to be noticed and dropped by the transport, short enough that a
 /// tap which recovers is back in rotation within a request or two.
 pub(crate) const SUSPECT_COOLDOWN: Duration = Duration::from_secs(60);
+
+/// How long a connection must have gone without answering anything before it
+/// can be retired. A tap that is merely busy answers something inside this
+/// window (the load test's saturated tap answered every few seconds), so it is
+/// never retired; a connection whose peer is gone answers nothing at all.
+pub(crate) const SILENT_FOR: Duration = Duration::from_secs(20);
+
+/// Whether a connection that failed `unanswered` requests in a row, having been
+/// silent for `silent_for`, should be retired from the routing set.
+///
+/// Both halves are needed: consecutive failures alone retire a tap that is
+/// simply buried under a burst, and silence alone retires a tap that has had no
+/// traffic in minutes the moment one request misses.
+pub(crate) fn should_retire(unanswered: u32, silent_for: Duration) -> bool {
+    unanswered >= UNANSWERED_EVICT_AFTER && silent_for >= SILENT_FOR
+}
 
 pub(crate) type ConnectionRegistry = Arc<Mutex<HashMap<u64, ConnEntry>>>;
 
@@ -262,32 +281,44 @@ impl TapHub {
 
     /// Record that this connection did not answer a request.
     ///
-    /// After [`UNANSWERED_EVICT_AFTER`] in a row with no answer in between, the
-    /// connection leaves the routing set for [`SUSPECT_COOLDOWN`]. This is the
-    /// piece that turns a stale connection from an eight-minute blackout into a
-    /// handful of failed requests: the tap is still connected as far as the
-    /// transport knows, so nothing else in the system would ever stop routing to
-    /// it.
+    /// After [`UNANSWERED_EVICT_AFTER`] in a row with no answer in between **and**
+    /// a full [`SILENT_FOR`] with nothing from it, the connection leaves the
+    /// routing set for [`SUSPECT_COOLDOWN`]. This is the piece that turns a stale
+    /// connection from an eight-minute blackout into a handful of failed
+    /// requests: the tap is still connected as far as the transport knows, so
+    /// nothing else in the system would ever stop routing to it.
+    ///
+    /// The [`SILENT_FOR`] half is what keeps a *busy* tap from being retired. A
+    /// tap under load answers one request while three others time out waiting
+    /// behind it, so consecutive timeouts alone would empty the routing set
+    /// exactly when it is needed; an answer resets the clock and nothing is
+    /// retired while the tap is demonstrably still talking.
     pub(crate) fn mark_unanswered(&self, tap_id: &TapId, connection_id: u64) {
+        let now = Instant::now();
         let mut guard = self.connections.lock();
         let Some(entry) = guard.get_mut(&connection_id) else {
             return;
         };
         entry.unanswered = entry.unanswered.saturating_add(1);
-        if entry.unanswered < UNANSWERED_EVICT_AFTER {
-            tracing::warn!(
-                tap_id = %tap_id.0,
-                connection_id,
-                unanswered = entry.unanswered,
-                "tap connection did not answer"
-            );
+        let silent_for = entry
+            .last_answered_at
+            .map_or(SILENT_FOR, |at| now.saturating_duration_since(at));
+        if !should_retire(entry.unanswered, silent_for) {
             return;
         }
-        entry.suspect_until = Some(Instant::now() + SUSPECT_COOLDOWN);
+        // Log once per retirement, not once per failed request: a retired
+        // connection keeps failing until it is allowed back, and one line per
+        // failure buries the rest of the log.
+        let already_out = entry.suspect(now);
+        entry.suspect_until = Some(now + SUSPECT_COOLDOWN);
+        if already_out {
+            return;
+        }
         tracing::warn!(
             tap_id = %tap_id.0,
             connection_id,
             unanswered = entry.unanswered,
+            silent_secs = silent_for.as_secs(),
             cooldown_secs = SUSPECT_COOLDOWN.as_secs(),
             "tap connection is not answering — taken out of the routing set"
         );
@@ -300,11 +331,10 @@ impl TapHub {
     /// Record that this connection answered, which puts it back in normal
     /// rotation whatever it accumulated before.
     pub(crate) fn mark_answered(&self, connection_id: u64) {
-        if let Some(entry) = self.connections.lock().get_mut(&connection_id)
-            && (entry.unanswered != 0 || entry.suspect_until.is_some())
-        {
+        if let Some(entry) = self.connections.lock().get_mut(&connection_id) {
             entry.unanswered = 0;
             entry.suspect_until = None;
+            entry.last_answered_at = Some(Instant::now());
         }
     }
 }
@@ -345,6 +375,7 @@ mod tests {
             draining,
             unanswered: 0,
             suspect_until: None,
+            last_answered_at: Some(Instant::now()),
         }
     }
 
@@ -444,5 +475,24 @@ mod tests {
         e.suspect_until = None;
         assert_eq!(e.unanswered, 0);
         assert!(!e.suspect(Instant::now()));
+    }
+
+    /// A tap buried under a burst fails several requests in a row while still
+    /// answering others. It must not be retired: the H-3 load test saturated a
+    /// healthy tap this way for minutes at a time.
+    #[test]
+    fn a_busy_tap_is_not_retired_while_it_still_answers() {
+        assert!(!should_retire(
+            UNANSWERED_EVICT_AFTER + 9,
+            SILENT_FOR - std::time::Duration::from_secs(1)
+        ));
+    }
+
+    /// A connection whose peer is gone fails and never answers again, so it is
+    /// retired as soon as both halves of the rule hold.
+    #[test]
+    fn a_connection_that_stopped_answering_is_retired() {
+        assert!(should_retire(UNANSWERED_EVICT_AFTER, SILENT_FOR));
+        assert!(!should_retire(UNANSWERED_EVICT_AFTER - 1, SILENT_FOR * 10));
     }
 }

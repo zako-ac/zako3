@@ -104,6 +104,7 @@ impl HubHandler for TapHubConnectionHandler {
                         draining: false,
                         unanswered: 0,
                         suspect_until: None,
+                        last_answered_at: Some(std::time::Instant::now()),
                     },
                 );
 
