@@ -82,15 +82,23 @@ pub(crate) async fn handle_request_audio_meta_inner(
             req.headers.clone(),
         );
         match super::cancel::wait_for_tap(request, deadline, &mut disconnect_rx).await {
-            Waited::Done(Ok(m)) => FetchOutcome::Ok(m),
+            Waited::Done(Ok(m)) => {
+                tap_hub.mark_answered(connection_id);
+                FetchOutcome::Ok(m)
+            }
             Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
+                // The tap answered with a refusal of its own; that is not a
+                // connection problem and must not count against it.
+                tap_hub.mark_answered(connection_id);
                 FetchOutcome::TapFailure { reason, try_others }
             }
             Waited::Done(Err(e)) => {
+                tap_hub.mark_unanswered(&tap_id, connection_id);
                 tracing::warn!(error = %e, "request_audio_metadata transport error; falling back");
                 FetchOutcome::Unavailable(Unavailable::Transport)
             }
             Waited::TimedOut => {
+                tap_hub.mark_unanswered(&tap_id, connection_id);
                 tracing::warn!(
                     timeout_ms = tap_hub.request_timeout.as_millis() as u64,
                     "request_audio_metadata timed out; falling back"
@@ -98,6 +106,7 @@ pub(crate) async fn handle_request_audio_meta_inner(
                 FetchOutcome::Unavailable(Unavailable::TimedOut)
             }
             Waited::Disconnected => {
+                tap_hub.mark_unanswered(&tap_id, connection_id);
                 tracing::warn!("tap disconnected during the metadata request; falling back");
                 FetchOutcome::Unavailable(Unavailable::Disconnected)
             }

@@ -28,7 +28,7 @@ impl TapHubConnectionHandler {
     /// "these are online", and a connection on its way out is not.
     fn tap_snapshot(&self, tap_id: &TapId) -> zako3_types::OnlineTapStates {
         let guard = self.connections.lock();
-        super::routable_states(&guard, tap_id)
+        super::routable_states(&guard, tap_id, std::time::Instant::now())
     }
 }
 
@@ -102,6 +102,8 @@ impl HubHandler for TapHubConnectionHandler {
                         state: online_tap,
                         disconnect_tx,
                         draining: false,
+                        unanswered: 0,
+                        suspect_until: None,
                     },
                 );
 

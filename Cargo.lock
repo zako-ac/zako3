@@ -6021,7 +6021,6 @@ dependencies = [
 [[package]]
 name = "protofish3"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish3-rs#d580dcaa5d80fa3f67d6ad32be9ed521cffa3be2"
 dependencies = [
  "bytes",
  "futures-util",
@@ -6037,7 +6036,6 @@ dependencies = [
 [[package]]
 name = "protofish3-proto"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish3-rs#d580dcaa5d80fa3f67d6ad32be9ed521cffa3be2"
 dependencies = [
  "cookie-factory",
  "nom",
@@ -6048,7 +6046,6 @@ dependencies = [
 [[package]]
 name = "protofish4"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "bytes",
  "protofish4-proto",
@@ -6061,7 +6058,6 @@ dependencies = [
 [[package]]
 name = "protofish4-proto"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/protofish4-rs?rev=d4781f3643c3baf10841545c09e82ba54f953692#d4781f3643c3baf10841545c09e82ba54f953692"
 dependencies = [
  "chacha20poly1305 0.11.0",
  "thiserror 2.0.18",
@@ -6687,7 +6683,6 @@ dependencies = [
 [[package]]
 name = "ringbuf"
 version = "0.4.9"
-source = "git+https://github.com/mincomk/ringbuf#61cfa5a31991b87080d3a906e0c587fdd90871f8"
 dependencies = [
  "crossbeam-utils",
  "portable-atomic",
@@ -7531,7 +7526,6 @@ dependencies = [
 [[package]]
 name = "serenity-voice-model"
 version = "0.3.0"
-source = "git+https://github.com/serenity-rs/voice-model.git?branch=next#cef32674d5ad6c539b1ee2ff9dcda39b6d71e18f"
 dependencies = [
  "bitflags 2.13.0",
  "num-traits",
@@ -7759,7 +7753,6 @@ dependencies = [
 [[package]]
 name = "songbird"
 version = "0.5.0"
-source = "git+https://github.com/mincomk/songbird#a4d8767f5da1ffe395ca8d659b721cfb938a1472"
 dependencies = [
  "aead 0.5.2",
  "aes-gcm",
@@ -11314,7 +11307,6 @@ dependencies = [
 [[package]]
 name = "zakofish4-common"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/zakofish4?rev=2f897b34a9cc54906cde871eef8e017a0fb5eb48#2f897b34a9cc54906cde871eef8e017a0fb5eb48"
 dependencies = [
  "rmp-serde",
  "serde",
@@ -11326,7 +11318,6 @@ dependencies = [
 [[package]]
 name = "zakofish4-hub"
 version = "0.1.0"
-source = "git+https://github.com/zako-ac/zakofish4?rev=2f897b34a9cc54906cde871eef8e017a0fb5eb48#2f897b34a9cc54906cde871eef8e017a0fb5eb48"
 dependencies = [
  "async-trait",
  "futures",

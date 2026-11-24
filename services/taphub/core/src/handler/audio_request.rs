@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use opentelemetry::{KeyValue, global};
@@ -19,6 +19,14 @@ use crate::metrics;
 
 use super::cancel::{Waited, wait_for_tap};
 use super::{cache::build_cache_item, cache::resolve_metadata, stream::bridge_rel};
+
+/// Connections one audio request may be sent to.
+const MAX_TAP_ATTEMPTS: usize = 2;
+
+/// A retry is only started if the request budget can still hold one. Below
+/// this there is no point handing the request to a second tap: the caller has
+/// already given up by the time the answer could arrive.
+const MIN_RETRY_BUDGET: Duration = Duration::from_millis(1500);
 
 pub(crate) async fn handle_request_audio_inner(
     tap_hub: &TapHub,
@@ -182,11 +190,32 @@ pub(crate) async fn handle_request_audio_inner(
         "Cache miss — requesting from Tap"
     );
 
-    // Cache miss: request from zakofish
-    let (connection_id, mut disconnect_rx) = conn_result?;
-    tracing::Span::current().record("connection_id", connection_id);
+    // Cache miss: request from zakofish.
+    //
+    // Two attempts at most, on two different connections. A tap connection can
+    // be dead while the transport still believes it is alive — the pod is gone
+    // but the socket has not timed out yet — and nothing reports that, so the
+    // first request to notice it sits out the whole budget. The load test hit
+    // exactly this after a scale-down: the surviving replicas were healthy and
+    // every request still went to a connection whose peer was gone, for eight
+    // minutes. So a connection that does not answer is recorded as such (three
+    // in a row and it leaves the routing set, see `TapHub::mark_unanswered`),
+    // and if the budget still has room the request is handed to another
+    // connection instead of failing.
+    let mut tried: Vec<u64> = Vec::new();
+    let mut next_conn = Some(conn_result?);
+    let mut final_error = TapHubError::TapUnavailable;
 
-    let (succ, rel, mut unrel) = {
+    let (connection_id, succ, rel, mut unrel, disconnect_rx) = loop {
+        let Some((connection_id, mut disconnect_rx)) = next_conn.take() else {
+            // No connection left to try: the tap is gone or every replica is
+            // suspect. `TapUnavailable` is what `select_connection` reports for
+            // that, and it is what the caller retries.
+            return Err(final_error);
+        };
+        tried.push(connection_id);
+        tracing::Span::current().record("connection_id", connection_id);
+
         let zakofish_span = tracing::info_span!(
             "zakofish.audio_request",
             tap_id = %tap_id.0,
@@ -205,28 +234,56 @@ pub(crate) async fn handle_request_audio_inner(
         // Bounded by what is left of the request budget and by the tap
         // connection's life; either one ending drops the request, which closes
         // only this request's chan.
-        match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
-            Waited::Done(Ok(triple)) => triple,
+        final_error = match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
+            Waited::Done(Ok(triple)) => {
+                tap_hub.mark_answered(connection_id);
+                let (succ, rel, unrel) = triple;
+                break (connection_id, succ, rel, unrel, disconnect_rx);
+            }
             Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
+                // The tap answered, and its answer was "no". Asking another
+                // replica the same question would only get the same answer.
                 return Err(TapHubError::TapScript { reason, try_others });
             }
             Waited::Done(Err(e)) => {
-                return Err(TapHubError::Internal(format!(
-                    "Failed to request audio from tap: {}",
-                    e
-                )));
+                tap_hub.mark_unanswered(&tap_id, connection_id);
+                TapHubError::Internal(format!("Failed to request audio from tap: {}", e))
             }
             Waited::TimedOut => {
-                return Err(TapHubError::Internal(format!(
+                tap_hub.mark_unanswered(&tap_id, connection_id);
+                TapHubError::Internal(format!(
                     "Tap request timed out after {:?}",
                     tap_hub.request_timeout
-                )));
+                ))
             }
             Waited::Disconnected => {
-                // The tap is gone, which is the same condition `select_connection`
-                // reports as unavailable — not an internal fault.
-                return Err(TapHubError::TapUnavailable);
+                // The tap is gone, which is the same condition
+                // `select_connection` reports as unavailable — not an internal
+                // fault.
+                tap_hub.mark_unanswered(&tap_id, connection_id);
+                TapHubError::TapUnavailable
             }
+        };
+
+        // A retry is only started when the budget can still hold one. A request
+        // that already spent the whole budget has nothing left to try with —
+        // that is the case `mark_unanswered` exists for.
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if tried.len() >= MAX_TAP_ATTEMPTS || remaining < MIN_RETRY_BUDGET {
+            return Err(final_error);
+        }
+
+        match tap_hub.select_connection_excluding(&tap_id, &tried).await {
+            Ok(conn) => {
+                tracing::warn!(
+                    tap_id = %tap_id.0,
+                    connection_id,
+                    remaining_ms = remaining.as_millis() as u64,
+                    "tap connection did not answer — retrying on another connection"
+                );
+                next_conn = Some(conn);
+            }
+            Err(e) => return Err(e),
         }
     };
 
