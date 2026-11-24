@@ -28,6 +28,13 @@ pub struct TapHubMetrics {
     /// `TapUnavailable` covers "the tap was never here" and "every replica is
     /// draining" with one wire reason; this is where the two are told apart.
     pub no_tap_available_total: Counter<u64>,
+    /// Tap connections taken out of the routing set because they stopped
+    /// answering (`TapHub::mark_unanswered`).
+    ///
+    /// Separate from `tap_conn_draining_total`: a drain is the tap saying it is
+    /// leaving, this is taphub finding out that a connection which still claims
+    /// to be here does not answer.
+    pub tap_conn_unresponsive_total: Counter<u64>,
 }
 
 static METRICS: OnceLock<TapHubMetrics> = OnceLock::new();
@@ -84,6 +91,10 @@ pub fn metrics() -> &'static TapHubMetrics {
             no_tap_available_total: meter
                 .u64_counter("taphub_no_tap_available_total")
                 .with_description("Requests for a tap that had no routable connection")
+                .build(),
+            tap_conn_unresponsive_total: meter
+                .u64_counter("taphub_tap_conn_unresponsive_total")
+                .with_description("Tap connections taken out of routing after failing to answer")
                 .build(),
         }
     })

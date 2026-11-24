@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use parking_lot::Mutex;
 use tokio::sync::watch;
@@ -31,7 +36,37 @@ pub(crate) struct ConnEntry {
     /// connection that was never here. Flipping this makes the connection
     /// unroutable at once and leaves the rest of the teardown to its normal path.
     pub(crate) draining: bool,
+    /// Requests this connection has failed to answer in a row, with no answer in
+    /// between. Reset by any answer, so a connection that is merely slow under
+    /// load keeps its place while one that has stopped answering does not.
+    pub(crate) unanswered: u32,
+    /// While this is in the future the connection is out of the routing set: it
+    /// is still connected and still in the registry, but nothing is sent to it.
+    /// A cooldown rather than a permanent exclusion, because a connection that
+    /// recovers has to be able to prove it (see 2026-11-18 05:53, the same
+    /// trade-off in the transport client's pool).
+    pub(crate) suspect_until: Option<Instant>,
 }
+
+impl ConnEntry {
+    /// Whether this connection should be left out of the routing set right now.
+    fn suspect(&self, now: Instant) -> bool {
+        self.suspect_until.is_some_and(|until| until > now)
+    }
+}
+
+/// Consecutive requests a connection may fail to answer before it is taken out
+/// of the routing set. One is too few: under saturation a busy tap times out
+/// requests and answers others, and evicting on a single timeout would empty the
+/// routing set exactly when it is needed. Three is roughly the window in which
+/// the load test showed a buried tap still answering something.
+pub(crate) const UNANSWERED_EVICT_AFTER: u32 = 3;
+
+/// How long a connection that failed to answer is kept out of the routing set
+/// before it is allowed to take a request again. Long enough for a stale
+/// connection to be noticed and dropped by the transport, short enough that a
+/// tap which recovers is back in rotation within a request or two.
+pub(crate) const SUSPECT_COOLDOWN: Duration = Duration::from_secs(60);
 
 pub(crate) type ConnectionRegistry = Arc<Mutex<HashMap<u64, ConnEntry>>>;
 
@@ -160,9 +195,24 @@ impl TapHub {
         &self,
         tap_id: &TapId,
     ) -> Result<(u64, watch::Receiver<bool>), zako3_types::TapHubError> {
+        self.select_connection_excluding(tap_id, &[]).await
+    }
+
+    /// [`TapHub::select_connection`], but never handing back one of `exclude`.
+    ///
+    /// The retry in the request path uses this: the connection it just failed on
+    /// is excluded before the routing filter is applied, so the second attempt
+    /// cannot land on the same connection even if the eviction threshold has not
+    /// been reached yet.
+    pub(crate) async fn select_connection_excluding(
+        &self,
+        tap_id: &TapId,
+        exclude: &[u64],
+    ) -> Result<(u64, watch::Receiver<bool>), zako3_types::TapHubError> {
         let guard = self.connections.lock();
 
-        let available: OnlineTapStates = routable_states(&guard, tap_id);
+        let mut available: OnlineTapStates = routable_states(&guard, tap_id, Instant::now());
+        available.retain(|s| !exclude.contains(&s.connection_id));
 
         let connection_id = self
             .sampler
@@ -209,17 +259,66 @@ impl TapHub {
 
         Ok((connection_id, disconnect_rx))
     }
+
+    /// Record that this connection did not answer a request.
+    ///
+    /// After [`UNANSWERED_EVICT_AFTER`] in a row with no answer in between, the
+    /// connection leaves the routing set for [`SUSPECT_COOLDOWN`]. This is the
+    /// piece that turns a stale connection from an eight-minute blackout into a
+    /// handful of failed requests: the tap is still connected as far as the
+    /// transport knows, so nothing else in the system would ever stop routing to
+    /// it.
+    pub(crate) fn mark_unanswered(&self, tap_id: &TapId, connection_id: u64) {
+        let mut guard = self.connections.lock();
+        let Some(entry) = guard.get_mut(&connection_id) else {
+            return;
+        };
+        entry.unanswered = entry.unanswered.saturating_add(1);
+        if entry.unanswered < UNANSWERED_EVICT_AFTER {
+            tracing::warn!(
+                tap_id = %tap_id.0,
+                connection_id,
+                unanswered = entry.unanswered,
+                "tap connection did not answer"
+            );
+            return;
+        }
+        entry.suspect_until = Some(Instant::now() + SUSPECT_COOLDOWN);
+        tracing::warn!(
+            tap_id = %tap_id.0,
+            connection_id,
+            unanswered = entry.unanswered,
+            cooldown_secs = SUSPECT_COOLDOWN.as_secs(),
+            "tap connection is not answering — taken out of the routing set"
+        );
+        crate::metrics::metrics().tap_conn_unresponsive_total.add(
+            1,
+            &[opentelemetry::KeyValue::new("tap_id", tap_id.0.to_string())],
+        );
+    }
+
+    /// Record that this connection answered, which puts it back in normal
+    /// rotation whatever it accumulated before.
+    pub(crate) fn mark_answered(&self, connection_id: u64) {
+        if let Some(entry) = self.connections.lock().get_mut(&connection_id)
+            && (entry.unanswered != 0 || entry.suspect_until.is_some())
+        {
+            entry.unanswered = 0;
+            entry.suspect_until = None;
+        }
+    }
 }
 
-/// The connections of one tap that a request may be routed to: live, and not
-/// on their way out.
+/// The connections of one tap that a request may be routed to: live, not on
+/// their way out, and not currently suspect.
 pub(crate) fn routable_states(
     registry: &std::collections::HashMap<u64, ConnEntry>,
     tap_id: &TapId,
+    now: Instant,
 ) -> OnlineTapStates {
     registry
         .values()
-        .filter(|e| &e.state.tap_id == tap_id && !e.draining)
+        .filter(|e| &e.state.tap_id == tap_id && !e.draining && !e.suspect(now))
         .map(|e| e.state.clone())
         .collect()
 }
@@ -244,6 +343,8 @@ mod tests {
             },
             disconnect_tx,
             draining,
+            unanswered: 0,
+            suspect_until: None,
         }
     }
 
@@ -260,17 +361,22 @@ mod tests {
         ids
     }
 
+    /// The routing set as the request path reads it.
+    fn routable(reg: &std::collections::HashMap<u64, ConnEntry>, tap: &TapId) -> Vec<u64> {
+        ids(&routable_states(reg, tap, Instant::now()))
+    }
+
     #[test]
     fn a_draining_connection_leaves_the_routing_set_at_once() {
         let tap = TapId("t1".to_string());
         let mut reg = registry(vec![entry(1, false), entry(2, false)]);
-        assert_eq!(ids(&routable_states(&reg, &tap)), vec![1, 2]);
+        assert_eq!(routable(&reg, &tap), vec![1, 2]);
 
         // This is the whole of the routing change: the flag the drain handler
         // flips, read by the same function the request path uses.
         reg.get_mut(&1).unwrap().draining = true;
         assert_eq!(
-            ids(&routable_states(&reg, &tap)),
+            routable(&reg, &tap),
             vec![2],
             "a draining connection must not be selectable"
         );
@@ -281,7 +387,7 @@ mod tests {
         let tap = TapId("t1".to_string());
         let mut reg = registry(vec![entry(1, false)]);
         reg.get_mut(&1).unwrap().draining = true;
-        assert!(routable_states(&reg, &tap).is_empty());
+        assert!(routable(&reg, &tap).is_empty());
     }
 
     #[test]
@@ -290,10 +396,53 @@ mod tests {
         other.state.tap_id = TapId("t2".to_string());
         let tap = TapId("t1".to_string());
         let reg = registry(vec![entry(1, true), other]);
-        assert!(routable_states(&reg, &tap).is_empty());
+        assert!(routable(&reg, &tap).is_empty());
+        assert_eq!(routable(&reg, &TapId("t2".to_string())), vec![9]);
+    }
+
+    /// A connection that stopped answering takes its place out of the routing
+    /// set, and the connection that is still answering keeps its own. This is
+    /// the scale-down case the load test caught: the surviving pod was fine, and
+    /// every request still went to a connection whose peer was gone.
+    #[test]
+    fn an_unanswered_connection_leaves_the_routing_set() {
+        let tap = TapId("t1".to_string());
+        let mut reg = registry(vec![entry(1, false), entry(2, false)]);
+
+        reg.get_mut(&1).unwrap().unanswered = UNANSWERED_EVICT_AFTER - 1;
+        assert_eq!(routable(&reg, &tap), vec![1, 2], "not yet at the threshold");
+
+        reg.get_mut(&1).unwrap().unanswered = UNANSWERED_EVICT_AFTER;
+        reg.get_mut(&1).unwrap().suspect_until = Some(Instant::now() + SUSPECT_COOLDOWN);
         assert_eq!(
-            ids(&routable_states(&reg, &TapId("t2".to_string()))),
-            vec![9]
+            routable(&reg, &tap),
+            vec![2],
+            "a connection that stopped answering must not be routed to"
         );
+    }
+
+    /// The exclusion is a cooldown, not a life sentence: once it lapses the
+    /// connection is a candidate again and can prove itself with one request.
+    #[test]
+    fn a_suspect_connection_returns_after_the_cooldown() {
+        let tap = TapId("t1".to_string());
+        let mut reg = registry(vec![entry(1, false), entry(2, false)]);
+        reg.get_mut(&1).unwrap().suspect_until =
+            Some(Instant::now() - std::time::Duration::from_secs(1));
+        assert_eq!(routable(&reg, &tap), vec![1, 2]);
+    }
+
+    /// An answer clears the count, so a busy tap that times out some requests
+    /// and answers others is never mistaken for a dead one.
+    #[test]
+    fn a_single_answer_clears_the_unanswered_count() {
+        let mut e = entry(1, false);
+        e.unanswered = UNANSWERED_EVICT_AFTER + 5;
+        e.suspect_until = Some(Instant::now() + SUSPECT_COOLDOWN);
+        // What `mark_answered` does to the entry.
+        e.unanswered = 0;
+        e.suspect_until = None;
+        assert_eq!(e.unanswered, 0);
+        assert!(!e.suspect(Instant::now()));
     }
 }
