@@ -96,10 +96,10 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
 
-      - name: Test: taphub-core unit tests (draining connections among them)
+      - name: taphub-core unit tests (draining connections among them)
         run: cargo test -p zako3-taphub-core --lib
 
-      - name: Test: the drain notice over a real connection
+      - name: the drain notice over a real connection (pf3_drain)
         run: cargo test -p zakofish-taphub --test pf3_drain
 
   engine-core:
