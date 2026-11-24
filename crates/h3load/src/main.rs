@@ -132,7 +132,7 @@ async fn run_one(
 ) -> bool {
     let req = CachedAudioRequest {
         tap_id: TapId(tap_id.to_string()),
-        audio_request: ars.into(),
+        audio_request: ars.to_string().into(),
         cache_key: AudioCachePolicy {
             cache_type: AudioCacheType::None,
             ttl_seconds: None,
