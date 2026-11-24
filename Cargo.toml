@@ -21,6 +21,7 @@ members = [
     "crates/tap-select",
     "crates/opus-jitter",
     "crates/audio-probe",
+    "crates/h3load",
 ]
 
 [workspace.dependencies]

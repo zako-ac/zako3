@@ -1,0 +1,32 @@
+name: h3load build
+
+# Builds the H-3 autoscaling load generator as a downloadable binary, so the
+# load test can run from inside the cluster without a local Rust build.
+on:
+  workflow_dispatch:
+
+jobs:
+  h3load:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: h3load-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: Build
+        run: cargo build --release -p zako3-h3load
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h3load
+          path: target/release/h3load
+          if-no-files-found: error

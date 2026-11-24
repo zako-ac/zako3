@@ -1,0 +1,15 @@
+[package]
+name = "zako3-h3load"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "h3load"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+rustls = "0.23"
+zako3-taphub-transport-client.workspace = true
+zako3-types.workspace = true
