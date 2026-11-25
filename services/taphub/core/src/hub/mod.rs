@@ -49,6 +49,10 @@ pub(crate) struct ConnEntry {
     /// When this connection last answered a request. An answer is proof the tap
     /// is alive, which is what keeps a busy tap out of the suspect path.
     pub(crate) last_answered_at: Option<Instant>,
+    /// Retirements in a row without an answer in between. Drives the escalating
+    /// cooldown: a connection that is wedged comes back less and less often,
+    /// while one that recovers is back in rotation after a single answer.
+    pub(crate) suspect_strikes: u32,
 }
 
 impl ConnEntry {
@@ -70,6 +74,26 @@ pub(crate) const UNANSWERED_EVICT_AFTER: u32 = 3;
 /// connection to be noticed and dropped by the transport, short enough that a
 /// tap which recovers is back in rotation within a request or two.
 pub(crate) const SUSPECT_COOLDOWN: Duration = Duration::from_secs(60);
+
+/// The longest a connection that keeps failing is kept out of the routing set.
+pub(crate) const SUSPECT_COOLDOWN_MAX: Duration = Duration::from_secs(15 * 60);
+
+/// How long a connection that failed to answer is kept out of the routing set,
+/// given how many times in a row it has been retired without answering anything
+/// in between.
+///
+/// The first retirement is [`SUSPECT_COOLDOWN`], and every further one doubles
+/// it up to [`SUSPECT_COOLDOWN_MAX`]. A flat cooldown is a recovery probe that
+/// never stops: a permanently wedged connection returns every minute and
+/// swallows roughly half the requests whenever there is one healthy replica
+/// beside it — which is what "Zako reads messages selectively" looks like from
+/// the outside. Escalating means the wedged connection gets one probe every
+/// quarter of an hour instead of every minute, and any answer puts it straight
+/// back.
+pub(crate) fn suspect_cooldown(strikes: u32) -> Duration {
+    let doublings = strikes.saturating_sub(1).min(4);
+    (SUSPECT_COOLDOWN * (1u32 << doublings)).min(SUSPECT_COOLDOWN_MAX)
+}
 
 /// How long a connection must have gone without answering anything before it
 /// can be retired. A tap that is merely busy answers something inside this
@@ -310,7 +334,9 @@ impl TapHub {
         // connection keeps failing until it is allowed back, and one line per
         // failure buries the rest of the log.
         let already_out = entry.suspect(now);
-        entry.suspect_until = Some(now + SUSPECT_COOLDOWN);
+        entry.suspect_strikes = entry.suspect_strikes.saturating_add(1);
+        let cooldown = suspect_cooldown(entry.suspect_strikes);
+        entry.suspect_until = Some(now + cooldown);
         if already_out {
             return;
         }
@@ -319,13 +345,27 @@ impl TapHub {
             connection_id,
             unanswered = entry.unanswered,
             silent_secs = silent_for.as_secs(),
-            cooldown_secs = SUSPECT_COOLDOWN.as_secs(),
+            cooldown_secs = cooldown.as_secs(),
+            strikes = entry.suspect_strikes,
             "tap connection is not answering — taken out of the routing set"
         );
         crate::metrics::metrics().tap_conn_unresponsive_total.add(
             1,
             &[opentelemetry::KeyValue::new("tap_id", tap_id.0.to_string())],
         );
+    }
+
+    /// Whether this connection is on probation: it has been retired for not
+    /// answering at least once since it last answered anything.
+    ///
+    /// The metadata path uses this to give it half the request budget instead of
+    /// all of it, so a second connection can be tried inside the same request.
+    /// A connection that answers anything at all is off probation immediately.
+    pub(crate) fn is_on_probation(&self, connection_id: u64) -> bool {
+        self.connections
+            .lock()
+            .get(&connection_id)
+            .is_some_and(|entry| entry.suspect_strikes > 0)
     }
 
     /// Record that this connection answered, which puts it back in normal
@@ -376,6 +416,7 @@ mod tests {
             unanswered: 0,
             suspect_until: None,
             last_answered_at: Some(Instant::now()),
+            suspect_strikes: 0,
         }
     }
 
@@ -464,16 +505,20 @@ mod tests {
     }
 
     /// An answer clears the count, so a busy tap that times out some requests
-    /// and answers others is never mistaken for a dead one.
+    /// and answers others is never mistaken for a dead one — and it takes the
+    /// connection off probation, so the next request gets the full budget again.
     #[test]
     fn a_single_answer_clears_the_unanswered_count() {
         let mut e = entry(1, false);
         e.unanswered = UNANSWERED_EVICT_AFTER + 5;
         e.suspect_until = Some(Instant::now() + SUSPECT_COOLDOWN);
+        e.suspect_strikes = 4;
         // What `mark_answered` does to the entry.
         e.unanswered = 0;
         e.suspect_until = None;
+        e.suspect_strikes = 0;
         assert_eq!(e.unanswered, 0);
+        assert_eq!(e.suspect_strikes, 0, "an answer ends probation");
         assert!(!e.suspect(Instant::now()));
     }
 
@@ -486,6 +531,22 @@ mod tests {
             UNANSWERED_EVICT_AFTER + 9,
             SILENT_FOR - std::time::Duration::from_secs(1)
         ));
+    }
+
+    /// A connection that is wedged for good is probed less and less often, so a
+    /// healthy neighbour beside it is the one that gets the work. A flat
+    /// one-minute cooldown kept handing it every other message.
+    #[test]
+    fn a_connection_that_keeps_failing_is_retired_for_longer_each_time() {
+        assert_eq!(suspect_cooldown(1), SUSPECT_COOLDOWN);
+        assert_eq!(suspect_cooldown(2), SUSPECT_COOLDOWN * 2);
+        assert_eq!(suspect_cooldown(3), SUSPECT_COOLDOWN * 4);
+        assert_eq!(suspect_cooldown(9), SUSPECT_COOLDOWN_MAX);
+        assert_eq!(
+            suspect_cooldown(u32::MAX),
+            SUSPECT_COOLDOWN_MAX,
+            "the cooldown must not overflow into something shorter"
+        );
     }
 
     /// A connection whose peer is gone fails and never answers again, so it is
