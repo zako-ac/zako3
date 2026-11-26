@@ -54,6 +54,7 @@ pub(crate) async fn handle_preload_audio_inner(
 
     // Request audio from zakofish, bounded by what is left of the request budget
     // and by the tap connection's life.
+    tap_hub.record_stream_opened(&tap_id, connection_id);
     let request_fut = tap_hub.zf_hub.request_audio(
         tap_id.clone(),
         connection_id,
@@ -63,8 +64,12 @@ pub(crate) async fn handle_preload_audio_inner(
 
     let (succ, rel, unrel) =
         match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
-            Waited::Done(Ok(triple)) => triple,
+            Waited::Done(Ok(triple)) => {
+                tap_hub.record_stream_closed(&tap_id, connection_id);
+                triple
+            }
             Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
+                tap_hub.record_stream_closed(&tap_id, connection_id);
                 return Err(TapHubError::TapScript { reason, try_others });
             }
             Waited::Done(Err(e)) => {

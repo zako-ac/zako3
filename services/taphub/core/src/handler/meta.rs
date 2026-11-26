@@ -13,6 +13,7 @@ use zakofish_taphub::ZakofishError;
 
 use super::cancel::Waited;
 use crate::hub::TapHub;
+use crate::metrics;
 
 /// Connections one metadata request may be sent to.
 ///
@@ -107,6 +108,10 @@ pub(crate) async fn handle_request_audio_meta_inner(
             break FetchOutcome::Unavailable(last_kind);
         };
         tried.push(connection_id);
+        // Which attempt this is, on the counter: a request that only ever
+        // reaches `attempt=1` never retried, and one that reaches `attempt=2`
+        // is the retry the half budget exists to pay for.
+        metrics::record_meta_attempt(tried.len() as u64);
 
         let now = Instant::now();
         let remaining = deadline.saturating_duration_since(now);
@@ -117,6 +122,9 @@ pub(crate) async fn handle_request_audio_meta_inner(
             deadline
         };
 
+        // One chan is opened on this connection per attempt; counting it here is
+        // what turns "is the tap out of stream credit" into a number.
+        tap_hub.record_stream_opened(&tap_id, connection_id);
         let request = tap_hub.zf_hub.request_audio_metadata(
             tap_id.clone(),
             connection_id,
@@ -128,12 +136,14 @@ pub(crate) async fn handle_request_audio_meta_inner(
         {
             Waited::Done(Ok(m)) => {
                 tap_hub.mark_answered(connection_id);
+                tap_hub.record_stream_closed(&tap_id, connection_id);
                 break FetchOutcome::Ok(m);
             }
             Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
                 // The tap answered with a refusal of its own; that is not a
                 // connection problem and must not count against it.
                 tap_hub.mark_answered(connection_id);
+                tap_hub.record_stream_closed(&tap_id, connection_id);
                 break FetchOutcome::TapFailure { reason, try_others };
             }
             Waited::Done(Err(e)) => {
@@ -166,11 +176,14 @@ pub(crate) async fn handle_request_audio_meta_inner(
 
         match tap_hub.select_connection_excluding(&tap_id, &tried).await {
             Ok(conn) => {
+                let next_attempt = tried.len() + 1;
+                metrics::record_meta_retry();
                 tracing::warn!(
                     tap_id = %tap_id.0,
                     connection_id,
+                    attempt = next_attempt,
                     remaining_ms = remaining.as_millis() as u64,
-                    "tap connection on probation did not answer the metadata request — retrying on another connection"
+                    "meta_retry attempt={next_attempt}: tap connection on probation did not answer the metadata request; retrying on another connection"
                 );
                 next_conn = Some(conn);
             }

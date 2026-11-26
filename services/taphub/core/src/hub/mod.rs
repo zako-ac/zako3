@@ -53,12 +53,31 @@ pub(crate) struct ConnEntry {
     /// cooldown: a connection that is wedged comes back less and less often,
     /// while one that recovers is back in rotation after a single answer.
     pub(crate) suspect_strikes: u32,
+    /// Request chans opened on this connection that no answer has closed yet.
+    ///
+    /// Maintained where the request is actually made and answered, and published
+    /// as `taphub_tap_conn_inflight_requests`. protofish3 has no chan-close, so a
+    /// request abandoned on timeout leaves its chan open on the wire: this is the
+    /// only direct measurement of that, and with the cumulative opened/closed
+    /// counters it is what decides the stream-credit hypothesis.
+    pub(crate) inflight_requests: i64,
 }
 
 impl ConnEntry {
     /// Whether this connection should be left out of the routing set right now.
     fn suspect(&self, now: Instant) -> bool {
         self.suspect_until.is_some_and(|until| until > now)
+    }
+
+    /// How long this connection has gone without answering anything.
+    ///
+    /// The number the eviction rule is written in, computed in one place so the
+    /// retirement decision, its log line and the published gauge cannot drift
+    /// apart. A connection that has never answered is as silent as the rule
+    /// treats it, which is [`SILENT_FOR`].
+    fn silent_for(&self, now: Instant) -> Duration {
+        self.last_answered_at
+            .map_or(SILENT_FOR, |at| now.saturating_duration_since(at))
     }
 }
 
@@ -100,6 +119,14 @@ pub(crate) fn suspect_cooldown(strikes: u32) -> Duration {
 /// window (the load test's saturated tap answered every few seconds), so it is
 /// never retired; a connection whose peer is gone answers nothing at all.
 pub(crate) const SILENT_FOR: Duration = Duration::from_secs(20);
+
+/// How often the per-connection gauges are republished.
+///
+/// Silence is the number that changes when nothing happens, so a gauge sampled
+/// only at events would freeze at the last event's value on exactly the
+/// connection that has gone quiet — the case the number exists for. Five seconds
+/// is comfortably inside a 15s scrape without taking the registry lock often.
+pub(crate) const CONNECTION_GAUGE_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Whether a connection that failed `unanswered` requests in a row, having been
 /// silent for `silent_for`, should be retired from the routing set.
@@ -176,6 +203,45 @@ impl TapHub {
         tokio::select! {
             r = self.zf_hub.run() => r,
             _ = self.lease_heartbeat() => Ok(()),
+            _ = self.connection_gauge_heartbeat() => Ok(()),
+        }
+    }
+
+    /// Republish every live connection's silence, strikes and open chans.
+    ///
+    /// The values are read under the registry lock into a small snapshot and
+    /// recorded outside it, so the lock is never held across the meter.
+    async fn connection_gauge_heartbeat(&self) {
+        let mut ticker = tokio::time::interval(CONNECTION_GAUGE_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            ticker.tick().await;
+
+            let now = Instant::now();
+            let snapshot: Vec<(u64, TapId, f64, u64, i64)> = {
+                let guard = self.connections.lock();
+                guard
+                    .values()
+                    .map(|entry| {
+                        (
+                            entry.state.connection_id,
+                            entry.state.tap_id.clone(),
+                            entry.silent_for(now).as_secs_f64(),
+                            u64::from(entry.suspect_strikes),
+                            entry.inflight_requests,
+                        )
+                    })
+                    .collect()
+            };
+
+            let metrics = crate::metrics::metrics();
+            for (connection_id, tap_id, silent_secs, strikes, inflight) in snapshot {
+                let key = crate::metrics::connection_key_values(connection_id, &tap_id.0);
+                metrics.tap_conn_silent_seconds.record(silent_secs, &key);
+                metrics.tap_conn_strikes.record(strikes, &key);
+                metrics.tap_conn_inflight_requests.record(inflight, &key);
+            }
         }
     }
 
@@ -324,9 +390,15 @@ impl TapHub {
             return;
         };
         entry.unanswered = entry.unanswered.saturating_add(1);
-        let silent_for = entry
-            .last_answered_at
-            .map_or(SILENT_FOR, |at| now.saturating_duration_since(at));
+        let silent_for = entry.silent_for(now);
+        // Published per connection, from the same numbers the decision below is
+        // made from: a connection that keeps being retired while it stays silent
+        // beside a neighbour that answers is S2b, and until now that was one log
+        // line per retirement and nothing a dashboard could read.
+        let key = crate::metrics::connection_key_values(connection_id, &tap_id.0);
+        crate::metrics::metrics()
+            .tap_conn_silent_seconds
+            .record(silent_for.as_secs_f64(), &key);
         if !should_retire(entry.unanswered, silent_for) {
             return;
         }
@@ -337,6 +409,9 @@ impl TapHub {
         entry.suspect_strikes = entry.suspect_strikes.saturating_add(1);
         let cooldown = suspect_cooldown(entry.suspect_strikes);
         entry.suspect_until = Some(now + cooldown);
+        crate::metrics::metrics()
+            .tap_conn_strikes
+            .record(u64::from(entry.suspect_strikes), &key);
         if already_out {
             return;
         }
@@ -371,10 +446,62 @@ impl TapHub {
     /// Record that this connection answered, which puts it back in normal
     /// rotation whatever it accumulated before.
     pub(crate) fn mark_answered(&self, connection_id: u64) {
+        let mut guard = self.connections.lock();
+        let Some(entry) = guard.get_mut(&connection_id) else {
+            return;
+        };
+        let strikes = entry.suspect_strikes;
+        entry.unanswered = 0;
+        entry.suspect_until = None;
+        entry.suspect_strikes = 0;
+        entry.last_answered_at = Some(Instant::now());
+        if strikes > 0 {
+            // The other half of the probation marker: a connection that answers
+            // is trusted again at once, and the halved budget goes with it.
+            tracing::info!(
+                tap_id = %entry.state.tap_id.0,
+                connection_id,
+                strikes,
+                "tap connection left probation — it answered, so it gets the full request budget again"
+            );
+            let key = crate::metrics::connection_key_values(connection_id, &entry.state.tap_id.0);
+            crate::metrics::metrics()
+                .tap_conn_strikes
+                .record(0, &key);
+        }
+    }
+
+    /// Record one request chan opened on this connection.
+    ///
+    /// Called where the tap is actually asked, which is one chan per call:
+    /// `ZakofishHub::request_audio` and `request_audio_metadata` each open
+    /// exactly one (`conn.open_chan()`), so counting at the call site counts
+    /// chans.
+    pub(crate) fn record_stream_opened(&self, tap_id: &TapId, connection_id: u64) {
+        crate::metrics::record_stream_opened(connection_id, &tap_id.0);
+        let key = crate::metrics::connection_key_values(connection_id, &tap_id.0);
         if let Some(entry) = self.connections.lock().get_mut(&connection_id) {
-            entry.unanswered = 0;
-            entry.suspect_until = None;
-            entry.last_answered_at = Some(Instant::now());
+            entry.inflight_requests = entry.inflight_requests.saturating_add(1);
+            crate::metrics::metrics()
+                .tap_conn_inflight_requests
+                .record(entry.inflight_requests, &key);
+        }
+    }
+
+    /// Record that the chan a request opened on this connection got an answer.
+    ///
+    /// An answer of any kind closes it, including a tap that refuses the
+    /// request: what does not close it is a timeout, a transport error or a
+    /// disconnect, because protofish3 has no chan-close and those leave the chan
+    /// open on the wire. That asymmetry is the leak the gauge measures.
+    pub(crate) fn record_stream_closed(&self, tap_id: &TapId, connection_id: u64) {
+        crate::metrics::record_stream_closed(connection_id, &tap_id.0);
+        let key = crate::metrics::connection_key_values(connection_id, &tap_id.0);
+        if let Some(entry) = self.connections.lock().get_mut(&connection_id) {
+            entry.inflight_requests = entry.inflight_requests.saturating_sub(1);
+            crate::metrics::metrics()
+                .tap_conn_inflight_requests
+                .record(entry.inflight_requests, &key);
         }
     }
 }
@@ -417,6 +544,7 @@ mod tests {
             suspect_until: None,
             last_answered_at: Some(Instant::now()),
             suspect_strikes: 0,
+            inflight_requests: 0,
         }
     }
 
@@ -551,6 +679,22 @@ mod tests {
 
     /// A connection whose peer is gone fails and never answers again, so it is
     /// retired as soon as both halves of the rule hold.
+    /// The silence the retirement rule reads is the same silence the gauge
+    /// publishes: measured from the last answer, so a connection retired at 20
+    /// seconds reports 20 and not the cost of one lock.
+    #[test]
+    fn silence_is_measured_from_the_last_answer() {
+        let mut e = entry(1, false);
+        let answered_at = Instant::now();
+        e.last_answered_at = Some(answered_at);
+
+        assert_eq!(e.silent_for(answered_at).as_secs(), 0);
+        assert_eq!(
+            e.silent_for(answered_at + std::time::Duration::from_secs(42)).as_secs(),
+            42
+        );
+    }
+
     #[test]
     fn a_connection_that_stopped_answering_is_retired() {
         assert!(should_retire(UNANSWERED_EVICT_AFTER, SILENT_FOR));
