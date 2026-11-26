@@ -128,6 +128,20 @@ impl TapBuilder {
         self
     }
 
+    /// How long a request may sit with no reply before the process ends itself.
+    ///
+    /// Defaults to [`crate::watchdog::DEFAULT_REQUEST_DEADLINE`], overridable
+    /// with `TAP_REQUEST_DEADLINE_SECS`; a zero duration (or `0` in the
+    /// environment) turns the watchdog off.
+    ///
+    /// This is the death and restart half of the S2b contract; `livenessProbe`
+    /// on the tap manifests is the other half, for the case where the process
+    /// cannot run anything at all. See [`crate::watchdog`] for why both exist.
+    pub fn request_deadline(mut self, deadline: Duration) -> Self {
+        self.request_deadline = Some(deadline);
+        self
+    }
+
     /// `service.name` the metrics carry. Defaults to `zako3-tap`.
     pub fn service_name(mut self, name: impl Into<String>) -> Self {
         self.service_name = Some(name.into());
@@ -215,6 +229,21 @@ impl TapBuilder {
             tokio::spawn(crate::healthcheck::run_healthcheck_server(port, state));
         }
 
+        // Armed before the first connection, so the very first request is
+        // covered. A zero deadline turns it off (a tap driven by a debugger).
+        if let Some(deadline) = self
+            .request_deadline
+            .or_else(request_deadline_from_env)
+            .filter(|deadline| !deadline.is_zero())
+        {
+            tracing::info!(
+                deadline_ms = deadline.as_millis() as u64,
+                exit_code = crate::watchdog::REQUEST_DEADLINE_EXIT_CODE,
+                "request deadline armed: a request with no progress past it ends the process"
+            );
+            crate::watchdog::spawn(Arc::clone(&metrics), deadline);
+        }
+
         let bridge = Arc::new(HandlerBridge(handler));
 
         let drain = zakofish::tap_pf3::DrainConfig {
@@ -273,6 +302,30 @@ fn drain_timeout_from_env() -> Duration {
         .filter(|secs| *secs > 0)
         .map(Duration::from_secs)
         .unwrap_or(DEFAULT_DRAIN_TIMEOUT)
+}
+
+/// The request deadline when the caller did not set one.
+///
+/// `None` means "switched off", which is what `TAP_REQUEST_DEADLINE_SECS=0`
+/// asks for; an unreadable value keeps the default and says so, because a typo
+/// silently disabling the watchdog is the one outcome nobody would notice.
+fn request_deadline_from_env() -> Option<Duration> {
+    let raw = match std::env::var("TAP_REQUEST_DEADLINE_SECS") {
+        Ok(raw) => raw,
+        Err(_) => return Some(crate::watchdog::DEFAULT_REQUEST_DEADLINE),
+    };
+
+    match raw.trim().parse::<u64>() {
+        Ok(0) => None,
+        Ok(secs) => Some(Duration::from_secs(secs)),
+        Err(_) => {
+            tracing::warn!(
+                value = %raw,
+                "TAP_REQUEST_DEADLINE_SECS is not a number of seconds; keeping the default"
+            );
+            Some(crate::watchdog::DEFAULT_REQUEST_DEADLINE)
+        }
+    }
 }
 
 struct HandlerBridge(Arc<dyn TapHandler>);

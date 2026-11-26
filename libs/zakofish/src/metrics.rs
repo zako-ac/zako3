@@ -172,6 +172,7 @@ impl TapMetrics {
         instruments.chan_closed.add(0, &[]);
         instruments.accept_chan_errors.add(0, &[]);
         instruments.handshake.add(0, &[]);
+        instruments.deadline_exceeded.add(0, &[]);
 
         Arc::new(Self {
             in_flight: AtomicU32::new(0),

@@ -15,6 +15,7 @@ pub use error::{SdkError, TapError};
 pub use handler::TapHandler;
 pub use source::AudioSource;
 pub use stream::AudioStreamSender;
+pub use watchdog::{DEFAULT_REQUEST_DEADLINE, REQUEST_DEADLINE_EXIT_CODE};
 pub use zakofish::{Timestamp, TransferMode};
 
 // Re-export message types for SDK users

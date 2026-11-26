@@ -173,6 +173,42 @@ impl ZakofishHub {
         meta_dispatch(response)
     }
 
+    /// Close a live tap connection from the hub side.
+    ///
+    /// The hub is the only party that can do this: it holds the `Connection`,
+    /// and `protofish3::Connection::close` is what puts a CONNECTION_CLOSE on the
+    /// wire so the peer's own reconnect path runs instead of waiting out an idle
+    /// timeout. Without it a connection that has stopped answering sits in the
+    /// registry until its peer happens to restart, which is the state S2b leaves
+    /// behind (2026-11-27 00:25: closing the connection from this side made the
+    /// tap reconnect and answer again within 90 seconds).
+    ///
+    /// `code` is the close code the peer records; `on_tap_disconnected` reports
+    /// it. Returns `false` when no such session is registered, which is what a
+    /// caller sweeping its own registry can race into when the connection is
+    /// already tearing down — that is not an error, just nothing to close.
+    pub async fn close_connection(&self, tap_id: &TapId, connection_id: u64, code: u64) -> bool {
+        let wire_tap_id = zakofish::types::TapId(tap_id.0.clone());
+
+        // Cloned out of the map and dropped before the close, so the sessions
+        // lock is never held across anything the caller does afterwards.
+        let conn = {
+            let sessions = self.sessions.lock().await;
+            sessions
+                .get(&wire_tap_id)
+                .and_then(|map| map.get(&connection_id))
+                .cloned()
+        };
+
+        match conn {
+            Some(conn) => {
+                conn.close(code);
+                true
+            }
+            None => false,
+        }
+    }
+
     async fn get_session(
         &self,
         wire_tap_id: &zakofish::types::TapId,

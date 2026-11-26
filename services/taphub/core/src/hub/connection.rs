@@ -270,11 +270,12 @@ impl HubHandler for TapHubConnectionHandler {
         // drain is the tap saying goodbye, `no_close` is the transport never
         // getting a close frame at all, which is what a process that died or
         // stopped reading looks like from here.
-        let reason = match (entry.draining, close_code) {
-            (true, _) => "drain",
-            (false, None) => "no_close",
-            (false, Some(0)) => "clean",
-            (false, Some(_)) => "close_code",
+        let reason = match (entry.draining, entry.self_healing, close_code) {
+            (true, _, _) => "drain",
+            (false, true, _) => "self_heal",
+            (false, false, None) => "no_close",
+            (false, false, Some(0)) => "clean",
+            (false, false, Some(_)) => "close_code",
         };
         metrics::metrics()
             .tap_conn_closed_total
