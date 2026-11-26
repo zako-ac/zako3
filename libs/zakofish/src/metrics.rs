@@ -154,6 +154,25 @@ impl TapMetrics {
                 .with_description("Handshakes and re-handshakes that the hub accepted")
                 .build(),
         };
+        // Publish one sample per series before any traffic.
+        //
+        // An OpenTelemetry instrument with nothing recorded is absent from the
+        // scrape, not zero, so a fresh tap would answer `/metrics` with only
+        // whatever had happened since it started — and a dashboard asking "how
+        // many requests arrived" would get "no data" on exactly the replica
+        // that has served nothing yet, which is the state worth looking at.
+        // Recording zeros materialises every documented series at startup.
+        instruments.requests_received.add(0, &[KeyValue::new("kind", REQUEST_KIND_META)]);
+        instruments.requests_received.add(0, &[KeyValue::new("kind", REQUEST_KIND_AUDIO)]);
+        instruments.requests_completed.add(0, &[]);
+        instruments.in_flight.record(0, &[]);
+        instruments.last_request_at_ms.record(0, &[]);
+        instruments.last_reply_at_ms.record(0, &[]);
+        instruments.chan_open.add(0, &[]);
+        instruments.chan_closed.add(0, &[]);
+        instruments.accept_chan_errors.add(0, &[]);
+        instruments.handshake.add(0, &[]);
+
         Arc::new(Self {
             in_flight: AtomicU32::new(0),
             last_request_at_ms: AtomicU64::new(0),

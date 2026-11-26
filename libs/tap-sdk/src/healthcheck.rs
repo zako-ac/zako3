@@ -76,7 +76,7 @@ async fn health_handler(
 ) -> impl IntoResponse {
     let snapshot = state.metrics.snapshot();
     let now_ms = clock();
-    let silent_ms = now_ms.saturating_sub(snapshot.last_activity_at_ms);
+    let silent_ms = silent_ms(&snapshot, now_ms);
     let status = verdict(&snapshot, now_ms, state.stall_threshold);
 
     let body = if status == StatusCode::OK {
@@ -129,12 +129,24 @@ pub(crate) fn verdict(
         return StatusCode::OK;
     }
 
-    let silent_ms = now_ms.saturating_sub(snapshot.last_activity_at_ms);
-    if silent_ms > stall_threshold.as_millis() as u64 {
+    if silent_ms(snapshot, now_ms) > stall_threshold.as_millis() as u64 {
         StatusCode::SERVICE_UNAVAILABLE
     } else {
         StatusCode::OK
     }
+}
+
+/// How long the tap has been silent, for the body `/health` returns.
+///
+/// A tap that has never served anything reports `0` rather than the time since
+/// the unix epoch: `last_activity_at_ms` starts at zero, and subtracting it
+/// from the clock put a nineteen-digit number in front of anyone reading the
+/// probe by hand.
+fn silent_ms(snapshot: &TapSnapshot, now_ms: u64) -> u64 {
+    if snapshot.last_activity_at_ms == 0 {
+        return 0;
+    }
+    now_ms.saturating_sub(snapshot.last_activity_at_ms)
 }
 
 async fn metrics_handler() -> impl IntoResponse {
@@ -323,11 +335,49 @@ mod tests {
     /// appear on `/metrics` — the exporter does not add `_total` or a unit
     /// suffix to a name that already carries one.
     #[cfg(feature = "metrics")]
+    const SERIES: [&str; 9] = [
+        "tap_requests_received_total",
+        "tap_requests_completed_total",
+        "tap_in_flight",
+        "tap_last_request_at_ms",
+        "tap_last_reply_at_ms",
+        "tap_chan_open_total",
+        "tap_chan_closed_total",
+        "tap_accept_chan_errors_total",
+        "tap_handshake_total",
+    ];
+
+    #[cfg(feature = "metrics")]
     #[test]
     fn the_scrape_carries_the_documented_series() {
         zako3_telemetry::init_metrics("zako3-tap-test", None).expect("init metrics");
 
         let metrics = TapMetrics::instrumented();
+
+        // First, a tap that has served nothing: every series still has to be
+        // in the scrape, at zero. An instrument with nothing recorded is
+        // absent, not zero, and "no data" on the replica that has done nothing
+        // is exactly the state somebody is looking for.
+        let fresh = prometheus::gather();
+        for expected in SERIES {
+            let family = fresh
+                .iter()
+                .find(|f| f.name() == expected)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{expected}` is missing from an untrafficked scrape; families: {:?}",
+                        fresh.iter().map(|f| f.name()).collect::<Vec<_>>()
+                    )
+                });
+            for sample in family.get_metric() {
+                let value = match family.get_field_type() {
+                    prometheus::proto::MetricType::COUNTER => sample.get_counter().value(),
+                    _ => sample.get_gauge().value(),
+                };
+                assert_eq!(value, 0.0, "`{expected}` did not start at zero");
+            }
+        }
+
         let meta = metrics.request_received(RequestKind::Meta);
         metrics.reply_sent();
         metrics.chan_opened();
@@ -343,17 +393,7 @@ mod tests {
         let families = prometheus::gather();
         let names: Vec<String> = families.iter().map(|f| f.name().to_string()).collect();
 
-        for expected in [
-            "tap_requests_received_total",
-            "tap_requests_completed_total",
-            "tap_in_flight",
-            "tap_last_request_at_ms",
-            "tap_last_reply_at_ms",
-            "tap_chan_open_total",
-            "tap_chan_closed_total",
-            "tap_accept_chan_errors_total",
-            "tap_handshake_total",
-        ] {
+        for expected in SERIES {
             assert!(
                 names.iter().any(|n| n == expected),
                 "`{expected}` is missing from the scrape; families: {names:?}"
