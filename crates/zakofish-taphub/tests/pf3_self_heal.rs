@@ -209,17 +209,21 @@ async fn the_hub_closes_a_connection_it_holds() {
     loop {
         if let Some((id, code)) = f.recorder.disconnected.lock().unwrap().first().copied() {
             assert_eq!(id, connection_id, "the wrong connection was closed");
-            // The code we send goes on the wire *for the peer*; it is not
-            // observable from this side. protofish3's driver records the terminal
-            // code of its own loop and its `run()` overwrites that with `Some(0)`
-            // when the loop exits cleanly after a local close. That is exactly
-            // why taphub decides `reason=self_heal` from the entry's own
-            // `self_healing` flag rather than from the close code, and why this
-            // asserts the close happened instead of what this side thinks the
-            // code was.
+            // **The close code is not a reliable witness on this side, and the
+            // assertion says so instead of pinning one value.** Two writers race
+            // on protofish3's terminal code: the `Close` command records the code
+            // we sent (`driver.rs:472`), and the driver's `run()` epilogue then
+            // overwrites it with `Some(0)` for a clean exit (`:227`). `closed()`
+            // resolves on whichever write lands first, so the disconnect handler
+            // legitimately sees 4100, 0, or (if the peer's close won) nothing.
+            //
+            // This is exactly why taphub decides `reason=self_heal` from the
+            // entry's own `self_healing` flag, set before the close is sent, and
+            // never from the code: a reason derived from the code records the
+            // self-heal as `clean` about half the time.
             assert!(
-                matches!(code, Some(0) | None),
-                "a locally initiated close must not surface as a peer code; saw {code:?}"
+                matches!(code, Some(SELF_HEAL_CLOSE_CODE) | Some(0) | None),
+                "unexpected terminal code for a locally initiated close: {code:?}"
             );
             break;
         }
