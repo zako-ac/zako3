@@ -208,6 +208,17 @@ that never answers this request — one hop earlier, and it needs only the taphu
 image. It is off unless the variable is set, and it does not survive the next
 restart; the window is the variable, not a permanent behaviour.
 
+Two things to keep in mind while a window is open:
+
+- The stalled attempt opens a chan it never answers, on purpose (that is the
+  state being modelled), so `taphub_tap_conn_inflight_requests` climbs on the
+  probed connection for the length of the window. Do not read a probe window's
+  inflight as leak evidence — the signal it was built for is measured outside it.
+- `n` has to stay below the number of connections that tap has. With `n` at or
+  above it (always the case for a single-replica tap) the retry has nowhere
+  healthy to go and just times out twice; the connection also retires after
+  three of those, which is an outage rather than a probe.
+
 ## Node counters
 
 `scripts/audio-net-probe.sh` samples the kernel's view every 30 s and prints one

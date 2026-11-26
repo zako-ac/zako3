@@ -468,15 +468,16 @@ impl TapHub {
         if !is_within_oldest(&ids, probe.connections, connection_id) {
             return false;
         }
-        if let Some(entry) = guard.get_mut(&connection_id) {
-            if entry.suspect_strikes == 0 {
-                entry.suspect_strikes = 1;
-                tracing::warn!(
-                    tap_id = %entry.state.tap_id.0,
-                    connection_id,
-                    "tap connection entered probation on the stall probe — its metadata requests now get half the budget"
-                );
-            }
+        if let Some(entry) = guard
+            .get_mut(&connection_id)
+            .filter(|entry| entry.suspect_strikes == 0)
+        {
+            entry.suspect_strikes = 1;
+            tracing::warn!(
+                tap_id = %entry.state.tap_id.0,
+                connection_id,
+                "tap connection entered probation on the stall probe — its metadata requests now get half the budget"
+            );
         }
         true
     }
@@ -750,6 +751,28 @@ mod tests {
     fn a_connection_that_stopped_answering_is_retired() {
         assert!(should_retire(UNANSWERED_EVICT_AFTER, SILENT_FOR));
         assert!(!should_retire(UNANSWERED_EVICT_AFTER - 1, SILENT_FOR * 10));
+    }
+
+    /// The stall probe writes `suspect_strikes` without a cooldown, so the
+    /// connection has to stay routable — otherwise the retry it exists to
+    /// exercise could never happen — and one answer has to put it back.
+    #[test]
+    fn a_connection_on_probation_stays_routable_until_it_answers() {
+        let tap = TapId("t1".to_string());
+        let mut reg = registry(vec![entry(1, false), entry(2, false)]);
+
+        reg.get_mut(&1).unwrap().suspect_strikes = 1;
+        assert!(
+            !reg.get(&1).unwrap().suspect(Instant::now()),
+            "probation is not retirement: the retry has to be able to land here"
+        );
+        assert_eq!(routable(&reg, &tap), vec![1, 2]);
+
+        // What `mark_answered` does: the answer ends probation.
+        let e = reg.get_mut(&1).unwrap();
+        e.suspect_strikes = 0;
+        e.last_answered_at = Some(Instant::now());
+        assert_eq!(routable(&reg, &tap), vec![1, 2]);
     }
 
     /// The stall probe picks connections by position, not by the id it was armed
