@@ -217,6 +217,12 @@ impl TapMetrics {
             i.last_request_at_ms.record(now, &[]);
         }
 
+        // Nothing below reads these when the instruments are compiled out. The
+        // atomics above are updated either way — `/health` depends on them — so
+        // this is only about the no-`metrics` build staying warning-free.
+        #[cfg(not(feature = "metrics"))]
+        let _ = (kind, in_flight);
+
         RequestGuard {
             metrics: Arc::clone(self),
         }
@@ -289,6 +295,9 @@ impl Drop for RequestGuard {
             i.requests_completed.add(1, &[]);
             i.in_flight.record(u64::from(left), &[]);
         }
+
+        #[cfg(not(feature = "metrics"))]
+        let _ = left;
     }
 }
 
