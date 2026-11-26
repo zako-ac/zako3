@@ -672,7 +672,44 @@ impl TapHub {
     }
 }
 
+/// The connections the self-heal sweep must close right now, marked as closing.
+///
+/// Marking is part of taking: the entry leaves the routing set in the same
+/// critical section that selects it, so nothing can be dispatched into the
+/// window between "the hub decided this connection is dead" and "the close
+/// lands". A second call returns nothing for the same connection, which is what
+/// makes an overlapping sweep tick harmless.
+///
+/// Draining connections are skipped: they are already on their way out, and
+/// replacing a tap's own clean departure with a hub-side close would lose the
+/// drain accounting for no gain.
+pub(crate) fn take_self_heal_candidates(
+    registry: &mut HashMap<u64, ConnEntry>,
+    now: Instant,
+) -> Vec<(u64, TapId, Duration, u32)> {
+    let mut out = Vec::new();
+    for entry in registry.values_mut() {
+        if entry.draining || entry.self_healing {
+            continue;
+        }
+        let silent_for = entry.silent_for(now);
+        if !should_self_heal(entry.suspect_strikes, silent_for) {
+            continue;
+        }
+        entry.self_healing = true;
+        out.push((
+            entry.state.connection_id,
+            entry.state.tap_id.clone(),
+            silent_for,
+            entry.suspect_strikes,
+        ));
+    }
+    out
+}
+
 /// Whether `connection_id` is one of the `n` oldest connection ids in `ids`.
+///
+/// The stall probe names connections this way because arming it restarts the
 /// pod, which renumbers every connection: an id read before the restart is
 /// meaningless after it, while "the first two connections of this tap" survives
 /// the reconnect.
@@ -724,6 +761,7 @@ mod tests {
             last_answered_at: Some(Instant::now()),
             suspect_strikes: 0,
             inflight_requests: 0,
+            self_healing: false,
         }
     }
 

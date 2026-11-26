@@ -107,6 +107,7 @@ impl HubHandler for TapHubConnectionHandler {
                         last_answered_at: Some(std::time::Instant::now()),
                         suspect_strikes: 0,
                         inflight_requests: 0,
+                        self_healing: false,
                     },
                 );
 
@@ -254,6 +255,18 @@ impl HubHandler for TapHubConnectionHandler {
                 close_code = ?close_code,
                 "Draining tap finished its connection"
             );
+        } else if entry.self_healing {
+            // Not a warn: the hub decided this, it is the recovery working, and
+            // the line that says why was already written when the close was
+            // sent. `connected_taps` is decremented here because a self-healed
+            // connection never took the drain path that counts down.
+            tracing::info!(
+                tap_id = %tap_id.0,
+                connection_id,
+                close_code = ?close_code,
+                "Self-healed connection closed; the tap will reconnect"
+            );
+            metrics::metrics().connected_taps.add(-1, &[]);
         } else {
             tracing::warn!(
                 tap_id = %tap_id.0,

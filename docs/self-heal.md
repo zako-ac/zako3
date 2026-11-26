@@ -2,7 +2,7 @@
 
 What this is for: **nobody has to delete a pod to make Zako talk again.**
 
-Four days of S2b incidents all ended the same way — a tap connection stopped
+Four days of S2b incidents all ended the same way - a tap connection stopped
 answering, taphub kept it in the routing set or cycled it forever, and recovery
 was a human running `kubectl delete`. The 2026-11-27 00:25 measurement is the
 whole argument: when taphub was restarted, the wedged connection was closed by
@@ -28,15 +28,15 @@ The second and third overlap on purpose. See [§3](#3-why-both-the-deadline-and-
 
 Retirement (`mark_unanswered` → `suspect_until`) was already there and is not
 enough on its own: it is a **cooldown**, so the connection comes back into the
-routing set, swallows the next request, and is retired again — forever. The tap
+routing set, swallows the next request, and is retired again - forever. The tap
 is never told its connection is worthless, and the escalating cooldown only makes
 the cycle slower (60s → 15min), not impossible.
 
 The self-heal sweep runs every 30s and closes a connection when **both** hold:
 
-- `suspect_strikes > 0` — it has been retired at least once since it last
+- `suspect_strikes > 0` - it has been retired at least once since it last
   answered anything, and
-- `silent_for(now) >= 300s` — it has answered nothing for five minutes.
+- `silent_for(now) >= 300s` - it has answered nothing for five minutes.
 
 ```rust
 should_self_heal(strikes, silent_for) = strikes > 0 && silent_for >= 300s
@@ -54,19 +54,27 @@ closing on a strike would turn a busy tap's worst minute into a restart.
 **What the close does, in order:**
 
 1. the registry entry is marked `self_healing` in the same critical section that
-   selects it — it leaves the routing set **before** the close is sent, so no
+   selects it - it leaves the routing set **before** the close is sent, so no
    request can be dispatched into the gap (`routable_states` filters it);
 2. `zakofish-taphub`'s `ZakofishHub::close_connection` puts a CONNECTION_CLOSE
    with **code 4100** on the wire (application range, distinct from the `0` a
    draining tap sends);
 3. `on_tap_disconnected` records `taphub_tap_conn_closed_total{reason="self_heal"}`
    and logs `tap connection closed … reason=self_heal`;
-4. the tap's `ReconnectingClient` sees the close, reconnects, and re-handshakes —
-   that is the recovery, and it needs no cooperation from the tap's process.
+4. the tap's `ReconnectingClient` sees the close, reconnects, and re-handshakes.
+   That is the recovery, and it needs no cooperation from the tap's process.
 
 Draining connections are skipped: the tap is already leaving on its own terms,
 and replacing a clean departure with a hub-side close would lose the drain
 accounting for no gain.
+
+**The close code travels one way.** 4100 is what the *peer* records: the tap's
+client surfaces `ConnectionClosed(4100)` and reconnects. This side cannot read it
+back: protofish3's driver reports the terminal code of its own loop, and a clean
+local close ends with `Some(0)`. So `reason=self_heal` is decided from the
+entry's `self_healing` flag, set before the close is sent, and never from the
+close code - a reason derived from the code would record the self-heal as
+`clean`.
 
 ### The metric that made the alert possible
 
@@ -98,7 +106,7 @@ A request that has been in flight with **nothing written back** for
   70 is `EX_SOFTWARE`, distinct from 1 (start-up failure) and 137 (SIGKILL).
 - **What survives the exit.** The log line does (ClickStack, 30 days). The
   counter `tap_request_deadline_exceeded_total` is incremented first but only
-  survives if a scrape lands in the window between the breach and the exit —
+  survives if a scrape lands in the window between the breach and the exit:
   treat the log as the record and the counter as the dashboard's. The pod's
   `RESTARTS` counter carries the fact forward for anything reading kube-state
   metrics.
@@ -114,18 +122,18 @@ They fire on different failures, and neither covers the other's:
 | the failure | runtime scheduling? | deadline (60s) | liveness probe |
 |---|---|---|---|
 | a handler is stuck in an await (S2b) | yes | **fires** | fires later (60s of probe failures) |
-| the process is frozen — `SIGSTOP`, deadlock below the runtime | **no** | cannot run | **fires** |
+| the process is frozen - `SIGSTOP`, deadlock below the runtime | **no** | cannot run | **fires** |
 | a request is slow but progressing (long stream) | yes | correctly silent | correct (`/health` reads activity) |
 
 The `SIGSTOP` experiment (2026-11-27 04:38 KST) is the second row: the port stays
-open, `/health` never answers, and nothing inside the process runs again — a
+open, `/health` never answers, and nothing inside the process runs again - a
 watchdog inside it is worth nothing there. The liveness probe is the only
 observer left. Conversely the probe needs a probe period to notice, so the
 in-process deadline wins every race it is in.
 
 Liveness settings, per tap Deployment in `c1-flux`
 (`apps/c1/zako3/taps/*-tap.yml`): `httpGet /health` on the `healthcheck` port,
-`periodSeconds: 10`, `failureThreshold: 6`, `timeoutSeconds: 2` — 60 seconds to
+`periodSeconds: 10`, `failureThreshold: 6`, `timeoutSeconds: 2` - 60 seconds to
 restart, which is 3× the `/health` stall threshold (`TAP_HEALTH_STALL_SECS=20`)
 and ~80× supertonic's worst measured synthesis (753ms). Readiness is unchanged:
 a stalled pod should leave the routing set immediately *and* be replaced.
@@ -149,7 +157,7 @@ cargo test -p zako3-tap-sdk              # the deadline, and a child process tha
 | `zako3_tap_sdk::watchdog::tests::a_frame_that_keeps_moving_is_never_a_breach` | the deadline is on progress, not duration |
 | `…::a_stalled_request_ends_the_process_with_a_reason` | the real thing: a child process exits 70 and prints the reason |
 
-Production drills (not yet run — S11):
+Production drills (not yet run - S11):
 
 - **hub close**: `ZAKO_META_STALL_INJECT` raises `strikes` on a chosen tap's
   oldest connection without waiting for three real timeouts. Then watch
@@ -158,7 +166,7 @@ Production drills (not yet run — S11):
   0 → 2. The tap pod's `RESTARTS` must stay where it was: the recovery is the
   *connection*, not the pod.
 - **liveness**: `SIGSTOP` a scratch tap from the node's PID namespace (container
-  PID 1 discards the signal — see the probes doc §12-1), then watch the pod go
+  PID 1 discards the signal - see the probes doc §12-1), then watch the pod go
   `0/1` at ~30s and `RESTARTS` +1 with `1/1 Running` at ~90s.
 - **deadline**: needs a tap image built from this SDK. Inject a handler stall
   (`ZAKO_STALL_INJECT` exists for the engine and taphub, not for the tap); the
@@ -168,7 +176,7 @@ Production drills (not yet run — S11):
 
 1. **The four taps that are not supertonic get an inert probe today.** Their
    deployed images (`sha-3dc65f8`) predate `zako3#122/#123`, so their `/health`
-   is still the constant `"ok"` — the liveness probe is wired but cannot fail.
+   is still the constant `"ok"` - the liveness probe is wired but cannot fail.
    It becomes real when those images are rebuilt (F7 in
    `docs/reviews/zako-audio-review.md`). Supertonic (`sha-7d221b3`) has the
    state-based `/health` and is the only tap where the probe is live now.
@@ -179,7 +187,7 @@ Production drills (not yet run — S11):
 3. **A hub-side close is recovery, not diagnosis.** It removes the evidence along
    with the connection. The gdb capture (`docs/pod-probe`) triggers at
    `silent > 60s AND strikes > 0`, roughly four minutes before the self-heal
-   fires at 300s, so the capture window is wide — but a capture that fails for
+   fires at 300s, so the capture window is wide - but a capture that fails for
    any reason leaves nothing to look at, because the connection is gone.
 4. **taphub is still one replica.** The self-heal runs in the process that holds
    the connection, which is also the process a taphub restart removes. That
