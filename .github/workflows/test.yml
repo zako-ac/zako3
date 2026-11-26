@@ -136,3 +136,36 @@ jobs:
       # fork). Fixing those belongs to its own change.
       - name: Clippy
         run: cargo clippy -p zako3-audio-engine-core --all-targets --no-deps
+
+  tap-self-heal:
+    # The recovery path: taphub closing a connection that stopped answering, and
+    # the tap coming back without its process being touched. Same lesson as the
+    # `tap-drain` lane above — these tests existed and nothing ran them, so a
+    # regression in the recovery loop would have merged green.
+    #
+    # `zako3-taphub-core --lib` also runs in `tap-drain`; it is repeated here on
+    # purpose so this lane fails on its own subject rather than borrowing another
+    # job's step name.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: the hub closes a wedged connection and the tap reconnects (pf3_self_heal)
+        run: cargo test -p zakofish-taphub --test pf3_self_heal
+
+      - name: the close rule, and the sweep that applies it
+        run: cargo test -p zako3-taphub-core --lib
+
+      - name: the tap's own request deadline (a child process exits 70)
+        run: cargo test -p zako3-tap-sdk --lib

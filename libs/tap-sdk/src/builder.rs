@@ -42,6 +42,7 @@ pub struct TapBuilder {
     #[cfg(feature = "healthcheck")]
     healthcheck_port: Option<u16>,
     health_stall_threshold: Option<Duration>,
+    request_deadline: Option<Duration>,
     service_name: Option<String>,
 }
 

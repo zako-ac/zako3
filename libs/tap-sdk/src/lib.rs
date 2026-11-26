@@ -3,6 +3,7 @@ pub mod error;
 pub mod handler;
 pub mod source;
 pub mod stream;
+pub mod watchdog;
 
 #[cfg(feature = "auto-encode")]
 pub mod encode;
