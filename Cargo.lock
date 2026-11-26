@@ -11056,12 +11056,13 @@ dependencies = [
 
 [[package]]
 name = "zako3-tap-sdk"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum 0.7.9",
  "bytes",
  "ogg",
+ "prometheus",
  "protofish3",
  "rustls 0.23.42",
  "rustls-native-certs 0.8.4",
@@ -11070,6 +11071,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "zako3-telemetry",
  "zakofish",
 ]
 
@@ -11280,6 +11282,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "hickory-resolver",
+ "opentelemetry",
  "protofish3",
  "rcgen 0.14.8",
  "rmp-serde",

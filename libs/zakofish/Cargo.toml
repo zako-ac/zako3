@@ -6,10 +6,17 @@ authors = ["mincomk <mail@drchi.co.kr>"]
 description = "Implementation of the Zakofish API, which is for communication between Zako3 infra and Tap"
 license = "MIT"
 
+[features]
+# Record the request-path counters into the global OpenTelemetry meter provider
+# (see `zako3_telemetry::init_metrics`) in addition to the atomics `/health`
+# reads. Off by default, so a tap that only wants liveness pays nothing for it.
+metrics = ["dep:opentelemetry"]
+
 [dependencies]
 async-trait.workspace = true
 bytes = "1.11.1"
 hickory-resolver = { version = "0.24", features = ["tokio-runtime"] }
+opentelemetry = { version = "0.31", optional = true }
 protofish3.workspace = true
 rmp-serde = "1.3.1"
 rustls = "0.23.37"
