@@ -68,13 +68,17 @@ Draining connections are skipped: the tap is already leaving on its own terms,
 and replacing a clean departure with a hub-side close would lose the drain
 accounting for no gain.
 
-**The close code travels one way.** 4100 is what the *peer* records: the tap's
-client surfaces `ConnectionClosed(4100)` and reconnects. This side cannot read it
-back: protofish3's driver reports the terminal code of its own loop, and a clean
-local close ends with `Some(0)`. So `reason=self_heal` is decided from the
-entry's `self_healing` flag, set before the close is sent, and never from the
-close code - a reason derived from the code would record the self-heal as
-`clean`.
+**The close code is not a usable witness on this side.** 4100 is what the *peer*
+records: the tap's client surfaces `ConnectionClosed(4100)` and reconnects. Here,
+two writers race on protofish3's terminal code: the `Close` command records the
+code we sent (`driver.rs:472`), and the driver's `run()` epilogue then overwrites
+it with `Some(0)` for a clean exit (`:227`). `closed()` resolves on whichever
+write lands first, so the disconnect handler sees 4100, 0, or nothing at all,
+depending on timing. So `reason=self_heal` is decided from the entry's
+`self_healing` flag, set before the close is sent, and never from the close code:
+a reason derived from the code records the self-heal as `clean` about half the
+time, which is how this was found (a test that pinned the value passed once and
+failed once).
 
 ### The metric that made the alert possible
 
