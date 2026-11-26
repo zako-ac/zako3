@@ -61,6 +61,17 @@ pub(crate) struct ConnEntry {
     /// only direct measurement of that, and with the cumulative opened/closed
     /// counters it is what decides the stream-credit hypothesis.
     pub(crate) inflight_requests: i64,
+    /// The hub has decided this connection is dead and is closing it
+    /// (`TapHub::self_heal_heartbeat`).
+    ///
+    /// A self-heal close is neither a drain nor an accident, and the two flags
+    /// are kept apart on purpose: `draining` means the tap said it was leaving
+    /// and is counted as a planned departure, while this one means the hub
+    /// found a connection that had stopped answering and shut it. From the
+    /// moment it is set the connection is out of the routing set, so the window
+    /// between deciding to close and the disconnect landing cannot swallow a
+    /// request.
+    pub(crate) self_healing: bool,
 }
 
 impl ConnEntry {
@@ -138,7 +149,51 @@ pub(crate) fn should_retire(unanswered: u32, silent_for: Duration) -> bool {
     unanswered >= UNANSWERED_EVICT_AFTER && silent_for >= SILENT_FOR
 }
 
+/// How long a connection that has already been retired once may stay silent
+/// before the hub closes it instead of merely routing around it.
+///
+/// Retirement alone is not recovery: the cooldown lapses, the connection comes
+/// back into the routing set, swallows the next request, and is retired again —
+/// forever, because nothing on this side ever tells the tap its connection is
+/// worthless. Five minutes is long enough to rule out a tap that is merely
+/// buried (the load test's saturated tap answered every few seconds) and short
+/// enough that a wedged connection is gone before the escalating cooldown
+/// reaches its fifteen-minute ceiling.
+pub(crate) const SELF_HEAL_SILENT_FOR: Duration = Duration::from_secs(300);
+
+/// Whether a connection that has been retired at least once, and has been silent
+/// for `silent_for`, should be closed rather than only kept out of routing.
+///
+/// Both halves are required, exactly as in [`should_retire`], and the strike
+/// half is the load-bearing one: measured at 03:00 on 2026-11-27 every idle
+/// connection of the default tap had been silent for 2050–2075 seconds with
+/// zero strikes, and a rule written on silence alone would have closed all ten
+/// of them every five minutes all night, for no reason, training everyone to
+/// ignore the alert.
+pub(crate) fn should_self_heal(strikes: u32, silent_for: Duration) -> bool {
+    strikes > 0 && silent_for >= SELF_HEAL_SILENT_FOR
+}
+
+/// How often the self-heal sweep looks for connections to close.
+///
+/// The number only bounds how long a wedged connection survives past the
+/// threshold; closing is idempotent per connection (the entry is marked before
+/// the close is sent), so a tick that overlaps a teardown does nothing.
+pub(crate) const SELF_HEAL_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
+/// The close code the hub sends when it self-heals a connection.
+///
+/// In the application-defined range (4000–4999) so it cannot be confused with
+/// the `0` a draining tap sends, and it lands in `tap_conn_closed_total` and the
+/// tap's own log as a number a reader can look up.
+pub(crate) const SELF_HEAL_CLOSE_CODE: u64 = 4100;
+
 pub(crate) type ConnectionRegistry = Arc<Mutex<HashMap<u64, ConnEntry>>>;
+
+/// One connection's row in the gauge heartbeat: id, tap, silence, strikes and
+/// open request chans. A named type only so the snapshot below stops being a
+/// five-field tuple at the call site.
+type ConnGaugeRow = (u64, TapId, f64, u64, i64);
 
 pub struct TapHub {
     pub zf_hub: ZakofishHub,
@@ -204,6 +259,60 @@ impl TapHub {
             r = self.zf_hub.run() => r,
             _ = self.lease_heartbeat() => Ok(()),
             _ = self.connection_gauge_heartbeat() => Ok(()),
+            _ = self.self_heal_heartbeat() => Ok(()),
+        }
+    }
+
+    /// Close connections that retired and then stayed silent.
+    ///
+    /// This is the half of the eviction design that was missing: retiring a
+    /// connection takes it out of routing, but the cooldown lapses, the
+    /// connection returns, swallows a request, and is retired again — and
+    /// nothing ever tells the tap that its connection is worthless. Closing it
+    /// does: the tap's transport sees CONNECTION_CLOSE, reconnects, and
+    /// re-handshakes, which is a fresh connection on a fresh socket. The
+    /// 2026-11-27 00:25 incident is the proof this works — restarting taphub
+    /// closed the wedged connection and the tap came back and answered inside
+    /// 90 seconds; this does the same thing to one connection instead of all of
+    /// them.
+    ///
+    /// The registry entry is marked before the close is sent, so a request
+    /// cannot be routed into the gap between the decision and the teardown.
+    async fn self_heal_heartbeat(&self) {
+        let mut ticker = tokio::time::interval(SELF_HEAL_SWEEP_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            ticker.tick().await;
+
+            let candidates = {
+                let mut guard = self.connections.lock();
+                take_self_heal_candidates(&mut guard, Instant::now())
+            };
+
+            for (connection_id, tap_id, silent_for, strikes) in candidates {
+                tracing::warn!(
+                    tap_id = %tap_id.0,
+                    connection_id,
+                    silent_secs = silent_for.as_secs(),
+                    strikes,
+                    close_code = SELF_HEAL_CLOSE_CODE,
+                    "closing a tap connection that has stopped answering — self-heal"
+                );
+                let closed = self
+                    .zf_hub
+                    .close_connection(&tap_id, connection_id, SELF_HEAL_CLOSE_CODE)
+                    .await;
+                if !closed {
+                    // The teardown won the race; `on_tap_disconnected` will do
+                    // the bookkeeping, and the entry is on its way out anyway.
+                    tracing::info!(
+                        tap_id = %tap_id.0,
+                        connection_id,
+                        "self-heal close found no live session; the connection was already gone"
+                    );
+                }
+            }
         }
     }
 
@@ -215,13 +324,27 @@ impl TapHub {
         let mut ticker = tokio::time::interval(CONNECTION_GAUGE_INTERVAL);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
+        // Every tap this process has held a connection for, so a tap whose last
+        // connection went away is published as `0` instead of its series
+        // vanishing. A missing series and a zero are different claims: the alert
+        // this number exists for ("the default tap has no connection") must be
+        // able to tell "all its connections are gone" from "nothing scraped".
+        let mut seen_taps: std::collections::HashSet<TapId> = std::collections::HashSet::new();
+
         loop {
             ticker.tick().await;
 
             let now = Instant::now();
-            let snapshot: Vec<(u64, TapId, f64, u64, i64)> = {
+            let (snapshot, live_per_tap): (Vec<ConnGaugeRow>, HashMap<TapId, u64>) = {
                 let guard = self.connections.lock();
-                guard
+                let mut live: HashMap<TapId, u64> = HashMap::new();
+                for entry in guard.values() {
+                    if entry.draining || entry.self_healing {
+                        continue;
+                    }
+                    *live.entry(entry.state.tap_id.clone()).or_insert(0) += 1;
+                }
+                let snapshot = guard
                     .values()
                     .map(|entry| {
                         (
@@ -232,7 +355,8 @@ impl TapHub {
                             entry.inflight_requests,
                         )
                     })
-                    .collect()
+                    .collect();
+                (snapshot, live)
             };
 
             let metrics = crate::metrics::metrics();
@@ -241,6 +365,14 @@ impl TapHub {
                 metrics.tap_conn_silent_seconds.record(silent_secs, &key);
                 metrics.tap_conn_strikes.record(strikes, &key);
                 metrics.tap_conn_inflight_requests.record(inflight, &key);
+            }
+
+            seen_taps.extend(live_per_tap.keys().cloned());
+            for tap_id in &seen_taps {
+                let connected = live_per_tap.get(tap_id).copied().unwrap_or(0);
+                metrics
+                    .tap_connected
+                    .record(connected, &[opentelemetry::KeyValue::new("tap_id", tap_id.0.to_string())]);
             }
         }
     }
@@ -545,6 +677,41 @@ impl TapHub {
     }
 }
 
+/// The connections the self-heal sweep must close right now, marked as closing.
+///
+/// Marking is part of taking: the entry leaves the routing set in the same
+/// critical section that selects it, so nothing can be dispatched into the
+/// window between "the hub decided this connection is dead" and "the close
+/// lands". A second call returns nothing for the same connection, which is what
+/// makes an overlapping sweep tick harmless.
+///
+/// Draining connections are skipped: they are already on their way out, and
+/// replacing a tap's own clean departure with a hub-side close would lose the
+/// drain accounting for no gain.
+pub(crate) fn take_self_heal_candidates(
+    registry: &mut HashMap<u64, ConnEntry>,
+    now: Instant,
+) -> Vec<(u64, TapId, Duration, u32)> {
+    let mut out = Vec::new();
+    for entry in registry.values_mut() {
+        if entry.draining || entry.self_healing {
+            continue;
+        }
+        let silent_for = entry.silent_for(now);
+        if !should_self_heal(entry.suspect_strikes, silent_for) {
+            continue;
+        }
+        entry.self_healing = true;
+        out.push((
+            entry.state.connection_id,
+            entry.state.tap_id.clone(),
+            silent_for,
+            entry.suspect_strikes,
+        ));
+    }
+    out
+}
+
 /// Whether `connection_id` is one of the `n` oldest connection ids in `ids`.
 ///
 /// The stall probe names connections this way because arming it restarts the
@@ -567,7 +734,9 @@ pub(crate) fn routable_states(
 ) -> OnlineTapStates {
     registry
         .values()
-        .filter(|e| &e.state.tap_id == tap_id && !e.draining && !e.suspect(now))
+        .filter(|e| {
+            &e.state.tap_id == tap_id && !e.draining && !e.self_healing && !e.suspect(now)
+        })
         .map(|e| e.state.clone())
         .collect()
 }
@@ -597,6 +766,7 @@ mod tests {
             last_answered_at: Some(Instant::now()),
             suspect_strikes: 0,
             inflight_requests: 0,
+            self_healing: false,
         }
     }
 
@@ -790,5 +960,89 @@ mod tests {
         );
         assert!(!is_within_oldest(&ids, 1, 42), "an unknown id is never one");
         assert!(!is_within_oldest(&[], 5, 3));
+    }
+
+    /// The rule that decides whether a connection is closed rather than only
+    /// routed around. Silence alone is not enough: measured at 03:00 on
+    /// 2026-11-27, ten idle connections of the default tap had been silent for
+    /// 2050–2075 seconds with zero strikes, and that is a quiet night, not a
+    /// fault.
+    #[test]
+    fn silence_alone_never_closes_a_connection() {
+        assert!(should_self_heal(1, SELF_HEAL_SILENT_FOR));
+        assert!(should_self_heal(3, SELF_HEAL_SILENT_FOR * 4));
+        assert!(!should_self_heal(0, SELF_HEAL_SILENT_FOR * 100));
+        assert!(
+            !should_self_heal(1, SELF_HEAL_SILENT_FOR - std::time::Duration::from_secs(1)),
+            "the threshold is a floor, not a suggestion"
+        );
+    }
+
+    /// The sweep takes the wedged connection, leaves the quiet neighbour alone,
+    /// and takes the wedged one out of routing in the same step — otherwise a
+    /// request lands on it between the decision and the close.
+    #[test]
+    fn the_sweep_closes_the_wedged_connection_and_leaves_the_quiet_one() {
+        let tap = TapId("t1".to_string());
+        let now = Instant::now();
+        let mut reg = registry(vec![entry(1, false), entry(2, false)]);
+
+        // 1: retired twice, silent for longer than the threshold — S2b's shape.
+        {
+            let e = reg.get_mut(&1).unwrap();
+            e.suspect_strikes = 2;
+            e.last_answered_at = Some(now - SELF_HEAL_SILENT_FOR);
+        }
+        // 2: just as silent, never missed an answer — an idle connection.
+        reg.get_mut(&2).unwrap().last_answered_at = Some(now - SELF_HEAL_SILENT_FOR * 6);
+        assert_eq!(routable(&reg, &tap), vec![1, 2], "both are routable before");
+
+        let taken = take_self_heal_candidates(&mut reg, now);
+        let mut taken_ids: Vec<u64> = taken.iter().map(|(id, _, _, _)| *id).collect();
+        taken_ids.sort_unstable();
+        assert_eq!(
+            taken_ids,
+            vec![1],
+            "only the connection that stopped answering is closed"
+        );
+        assert_eq!(taken[0].3, 2, "the log line reports the strikes");
+        assert!(
+            reg.get(&1).unwrap().self_healing,
+            "the entry has to be marked before the close is sent"
+        );
+        assert_eq!(
+            routable(&reg, &tap),
+            vec![2],
+            "a connection being closed must not take another request"
+        );
+    }
+
+    /// An overlapping sweep tick (or a second pass before the close lands) must
+    /// not close the same connection twice, and a draining connection is left to
+    /// its own departure.
+    #[test]
+    fn a_connection_is_taken_once_and_a_draining_one_is_left_alone() {
+        let now = Instant::now();
+        let mut reg = registry(vec![entry(1, false), entry(2, true), entry(3, false)]);
+        for id in [1u64, 2, 3] {
+            let e = reg.get_mut(&id).unwrap();
+            e.suspect_strikes = 1;
+            e.last_answered_at = Some(now - SELF_HEAL_SILENT_FOR * 2);
+        }
+
+        let first = take_self_heal_candidates(&mut reg, now);
+        // The registry is a HashMap, so the sweep's order is not defined; the
+        // set is what the assertion is about.
+        let mut first_ids: Vec<u64> = first.iter().map(|(id, _, _, _)| *id).collect();
+        first_ids.sort_unstable();
+        assert_eq!(
+            first_ids,
+            vec![1, 3],
+            "the draining connection (2) leaves on its own terms"
+        );
+        assert!(
+            take_self_heal_candidates(&mut reg, now).is_empty(),
+            "a marked connection must not be closed again by the next tick"
+        );
     }
 }

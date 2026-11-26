@@ -335,7 +335,7 @@ mod tests {
     /// appear on `/metrics` — the exporter does not add `_total` or a unit
     /// suffix to a name that already carries one.
     #[cfg(feature = "metrics")]
-    const SERIES: [&str; 9] = [
+    const SERIES: [&str; 10] = [
         "tap_requests_received_total",
         "tap_requests_completed_total",
         "tap_in_flight",
@@ -345,6 +345,7 @@ mod tests {
         "tap_chan_closed_total",
         "tap_accept_chan_errors_total",
         "tap_handshake_total",
+        "tap_request_deadline_exceeded_total",
     ];
 
     #[cfg(feature = "metrics")]

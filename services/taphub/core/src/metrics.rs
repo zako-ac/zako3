@@ -49,6 +49,13 @@ pub struct TapHubMetrics {
     /// Zero means the connection is in normal rotation; above zero it is on
     /// probation and gets half the metadata budget (`handler/meta.rs`).
     pub tap_conn_strikes: Gauge<u64>,
+    /// Live connections per tap, labelled by `tap_id`, and published even when
+    /// the answer is zero.
+    ///
+    /// `taphub_connected_taps` is a single total, so "the default tap has no
+    /// connection left" was not expressible as a query at all — which is why the
+    /// alert for it (S11) had nothing to read.
+    pub tap_connected: Gauge<u64>,
     /// Request chans opened on a connection that have not been answered yet,
     /// labelled by `connection_id`.
     ///
@@ -155,6 +162,10 @@ pub fn metrics() -> &'static TapHubMetrics {
                 .with_description(
                     "Times this tap connection was retired without answering anything in between",
                 )
+                .build(),
+            tap_connected: meter
+                .u64_gauge("taphub_tap_connected")
+                .with_description("Live connections for this tap")
                 .build(),
             tap_conn_inflight_requests: meter
                 .i64_gauge("taphub_tap_conn_inflight_requests")

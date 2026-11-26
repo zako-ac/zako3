@@ -90,6 +90,7 @@ struct Instruments {
     chan_closed: Counter<u64>,
     accept_chan_errors: Counter<u64>,
     handshake: Counter<u64>,
+    deadline_exceeded: Counter<u64>,
 }
 
 impl TapMetrics {
@@ -153,6 +154,13 @@ impl TapMetrics {
                 .u64_counter("tap_handshake_total")
                 .with_description("Handshakes and re-handshakes that the hub accepted")
                 .build(),
+            deadline_exceeded: meter
+                .u64_counter("tap_request_deadline_exceeded_total")
+                .with_description(
+                    "Requests that passed their deadline with nothing written back; each one \
+                     ends the process, so this survives only until the next scrape",
+                )
+                .build(),
         };
         // Publish one sample per series before any traffic.
         //
@@ -172,6 +180,7 @@ impl TapMetrics {
         instruments.chan_closed.add(0, &[]);
         instruments.accept_chan_errors.add(0, &[]);
         instruments.handshake.add(0, &[]);
+        instruments.deadline_exceeded.add(0, &[]);
 
         Arc::new(Self {
             in_flight: AtomicU32::new(0),
@@ -273,6 +282,21 @@ impl TapMetrics {
         #[cfg(feature = "metrics")]
         if let Some(i) = &self.instruments {
             i.handshake.add(1, &[]);
+        }
+    }
+
+    /// A request passed its deadline with nothing written back, which is the
+    /// moment the process is about to end itself.
+    ///
+    /// Recorded even though the process exits immediately after: a Prometheus
+    /// pull reaches this value only if a scrape lands in the window between the
+    /// breach and the exit, so the **log line is the durable record** and this is
+    /// the cheap signal for a dashboard that already has a scrape in hand. The
+    /// restart is what carries the fact forward for anything reading counters.
+    pub fn request_deadline_exceeded(&self) {
+        #[cfg(feature = "metrics")]
+        if let Some(i) = &self.instruments {
+            i.deadline_exceeded.add(1, &[]);
         }
     }
 }
