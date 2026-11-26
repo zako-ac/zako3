@@ -38,6 +38,18 @@ const PCM_QUEUE: usize = 100;
 /// Frames buffered between the UDP receiver and the jitter buffer.
 const INGEST_QUEUE: usize = 256;
 
+/// How long the endpoint may stay armed with not one audio frame arriving
+/// before the transfer is abandoned.
+///
+/// Without it a tap that answered `AudioRequestSuccess` and then produced
+/// nothing looked like a transfer in progress: playback sat on an empty stream
+/// until the engine's 60s track watchdog fired, and the listener heard silence
+/// with no error anywhere. This bound turns that into a failure HQ can route
+/// elsewhere. 8s is ~10x supertonic's slowest measured synthesis (753ms) and
+/// ~4x its slowest replica (2.1s on dc2-s1), so only a genuinely dead tap
+/// trips it.
+const FIRST_FRAME_DEADLINE: Duration = Duration::from_secs(8);
+
 /// Sleep until `ts_ms` of the track has actually elapsed.
 ///
 /// Reading a cache entry is not a clock: the server serves frames as fast as it

@@ -161,7 +161,14 @@ pub struct AudioTimeouts {
 impl Default for AudioTimeouts {
     fn default() -> Self {
         Self {
-            dispatch: Duration::from_secs(10),
+            // Must stay under the audio engine's own per-attempt HQ budget
+            // (`default_hq_request_timeout_ms()` = 6000 in the engine's
+            // config): once the engine has given up, an HQ dispatch that keeps
+            // waiting only holds a tap streaming into a receiver nobody reads,
+            // and the listener gets silence plus a timeout instead of a
+            // failure it could retry. pf3's invariant was 5s < 6s; this keeps
+            // it. The 10s this replaces inverted it.
+            dispatch: Duration::from_secs(5),
             metadata: Duration::from_secs(6),
             preload: Duration::from_secs(5),
         }

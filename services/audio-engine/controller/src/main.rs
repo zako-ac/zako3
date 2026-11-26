@@ -380,11 +380,33 @@ async fn build_hq_audio(
 
     // One reader for the socket, plus a ticker driving per-transfer timers —
     // NACK retries and stall detection both hang off that.
+    //
+    // Supervised rather than fire-and-forget: `run` returns only when the
+    // socket itself fails, and a process that keeps advertising the sink after
+    // that receives no audio for any tap while looking perfectly healthy from
+    // outside. Nothing else in the engine watches this task.
     tokio::spawn({
         let e = Arc::clone(&endpoint);
         async move {
-            if let Err(err) = e.run().await {
-                tracing::error!(%err, "protofish4 endpoint stopped");
+            let restarts = opentelemetry::global::meter("zako3-audio-engine")
+                .u64_counter("protofish4_endpoint_restarts_total")
+                .with_description("Times the protofish4 ingest loop stopped and was restarted")
+                .build();
+            let mut backoff = Duration::from_millis(100);
+            loop {
+                let started = tokio::time::Instant::now();
+                match Arc::clone(&e).run().await {
+                    Ok(()) => tracing::warn!("protofish4 endpoint stopped; restarting"),
+                    Err(err) => tracing::error!(%err, "protofish4 endpoint stopped; restarting"),
+                }
+                restarts.add(1, &[]);
+                // A loop that ran for a while before failing is a new fault,
+                // not a hot spin; reset the backoff so the restart is prompt.
+                if started.elapsed() > Duration::from_secs(60) {
+                    backoff = Duration::from_millis(100);
+                }
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(30));
             }
         }
     });
