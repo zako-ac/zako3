@@ -998,8 +998,10 @@ mod tests {
         assert_eq!(routable(&reg, &tap), vec![1, 2], "both are routable before");
 
         let taken = take_self_heal_candidates(&mut reg, now);
+        let mut taken_ids: Vec<u64> = taken.iter().map(|(id, _, _, _)| *id).collect();
+        taken_ids.sort_unstable();
         assert_eq!(
-            taken.iter().map(|(id, _, _, _)| *id).collect::<Vec<_>>(),
+            taken_ids,
             vec![1],
             "only the connection that stopped answering is closed"
         );
@@ -1029,8 +1031,12 @@ mod tests {
         }
 
         let first = take_self_heal_candidates(&mut reg, now);
+        // The registry is a HashMap, so the sweep's order is not defined; the
+        // set is what the assertion is about.
+        let mut first_ids: Vec<u64> = first.iter().map(|(id, _, _, _)| *id).collect();
+        first_ids.sort_unstable();
         assert_eq!(
-            first.iter().map(|(id, _, _, _)| *id).collect::<Vec<_>>(),
+            first_ids,
             vec![1, 3],
             "the draining connection (2) leaves on its own terms"
         );
