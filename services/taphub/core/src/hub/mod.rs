@@ -190,6 +190,11 @@ pub(crate) const SELF_HEAL_CLOSE_CODE: u64 = 4100;
 
 pub(crate) type ConnectionRegistry = Arc<Mutex<HashMap<u64, ConnEntry>>>;
 
+/// One connection's row in the gauge heartbeat: id, tap, silence, strikes and
+/// open request chans. A named type only so the snapshot below stops being a
+/// five-field tuple at the call site.
+type ConnGaugeRow = (u64, TapId, f64, u64, i64);
+
 pub struct TapHub {
     pub zf_hub: ZakofishHub,
     pub sampler: Arc<Mutex<DynamicSampler>>,
@@ -330,7 +335,7 @@ impl TapHub {
             ticker.tick().await;
 
             let now = Instant::now();
-            let (snapshot, live_per_tap): (Vec<(u64, TapId, f64, u64, i64)>, HashMap<TapId, u64>) = {
+            let (snapshot, live_per_tap): (Vec<ConnGaugeRow>, HashMap<TapId, u64>) = {
                 let guard = self.connections.lock();
                 let mut live: HashMap<TapId, u64> = HashMap::new();
                 for entry in guard.values() {
