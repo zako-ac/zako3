@@ -172,6 +172,42 @@ verdict:
 - `no_upstream_record_is_reported_as_unknown`
 - `a_healthy_stream_raises_nothing`
 
+## Metadata retry probe (taphub)
+
+`taphub_meta_retry_total` is the counter for the metadata retry: a connection on
+probation (retired at least once for not answering, `strikes > 0`) gets half the
+request budget, and when it misses that, the request goes to another connection.
+That conjunction is rare enough that the counter sat at zero after it shipped,
+and a counter nobody has seen move is not evidence.
+
+`ZAKO_META_STALL_INJECT` on **taphub** makes it happen on demand:
+
+```
+ZAKO_META_STALL_INJECT=<tap_id>[:<n>]
+```
+
+`n` (default 1) counts from the lowest connection id — arming the variable
+restarts the pod and renumbers every connection, so the value is a position and
+not an id. For a request routed to one of those connections taphub opens the
+chan, holds the request open without sending it, and puts the connection on
+probation, so the next request on it takes the half budget and retries:
+
+- `/metrics`: `taphub_meta_attempts_total{attempt="2"}` and
+  `taphub_meta_retry_total` climb, `taphub_tap_conn_strikes` shows the probe's
+  connection at 1, and `taphub_tap_conn_inflight_requests` keeps the chan it
+  never answered.
+- logs: `meta stall probe: holding this request open`,
+  `tap connection entered probation on the stall probe`, then
+  `meta_retry attempt=2: …`.
+
+Why here and not on the tap: stopping a tap *process* kills the transport with
+it, so taphub sees a clean close instead of a wedged connection and the retry
+path is never entered (2026-11-26 experiment, recorded in the project decision
+log). The probe freezes what the counters actually observe — a connected peer
+that never answers this request — one hop earlier, and it needs only the taphub
+image. It is off unless the variable is set, and it does not survive the next
+restart; the window is the variable, not a permanent behaviour.
+
 ## Node counters
 
 `scripts/audio-net-probe.sh` samples the kernel's view every 30 s and prints one

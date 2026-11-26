@@ -443,6 +443,44 @@ impl TapHub {
             .is_some_and(|entry| entry.suspect_strikes > 0)
     }
 
+    /// Whether this metadata attempt should be held silent by the stall probe
+    /// (`ZAKO_META_STALL_INJECT`, see `handler/stall_inject.rs`), and if so, put
+    /// the connection on probation.
+    ///
+    /// The retry this exists to exercise only happens on the probation path, so
+    /// waiting for three real unanswered requests plus a silence window would
+    /// make the counter provable only during an incident. Nothing calls this
+    /// with the probe unarmed, and then it returns false on the first line.
+    pub(crate) fn stall_metadata_for(&self, tap_id: &TapId, connection_id: u64) -> bool {
+        let Some(probe) = super::handler::stall_probe() else {
+            return false;
+        };
+        if probe.tap_id != tap_id.0 {
+            return false;
+        }
+
+        let mut guard = self.connections.lock();
+        let ids: Vec<u64> = guard
+            .values()
+            .filter(|e| &e.state.tap_id == tap_id)
+            .map(|e| e.state.connection_id)
+            .collect();
+        if !is_within_oldest(&ids, probe.connections, connection_id) {
+            return false;
+        }
+        if let Some(entry) = guard.get_mut(&connection_id) {
+            if entry.suspect_strikes == 0 {
+                entry.suspect_strikes = 1;
+                tracing::warn!(
+                    tap_id = %entry.state.tap_id.0,
+                    connection_id,
+                    "tap connection entered probation on the stall probe — its metadata requests now get half the budget"
+                );
+            }
+        }
+        true
+    }
+
     /// Record that this connection answered, which puts it back in normal
     /// rotation whatever it accumulated before.
     pub(crate) fn mark_answered(&self, connection_id: u64) {
@@ -504,6 +542,19 @@ impl TapHub {
                 .record(entry.inflight_requests, &key);
         }
     }
+}
+
+/// Whether `connection_id` is one of the `n` oldest connection ids in `ids`.
+///
+/// The stall probe names connections this way because arming it restarts the
+/// pod, which renumbers every connection: an id read before the restart is
+/// meaningless after it, while "the first two connections of this tap" survives
+/// the reconnect.
+pub(crate) fn is_within_oldest(ids: &[u64], n: usize, connection_id: u64) -> bool {
+    let mut sorted = ids.to_vec();
+    sorted.sort_unstable();
+    sorted.truncate(n);
+    sorted.contains(&connection_id)
 }
 
 /// The connections of one tap that a request may be routed to: live, not on
@@ -699,5 +750,22 @@ mod tests {
     fn a_connection_that_stopped_answering_is_retired() {
         assert!(should_retire(UNANSWERED_EVICT_AFTER, SILENT_FOR));
         assert!(!should_retire(UNANSWERED_EVICT_AFTER - 1, SILENT_FOR * 10));
+    }
+
+    /// The stall probe picks connections by position, not by the id it was armed
+    /// with: the arm restarts the pod, so ids captured before it are gone.
+    #[test]
+    fn the_stall_probe_picks_the_oldest_connections() {
+        let ids = [9u64, 3, 7];
+        assert!(is_within_oldest(&ids, 1, 3), "the lowest id is the oldest");
+        assert!(!is_within_oldest(&ids, 1, 7));
+        assert!(is_within_oldest(&ids, 2, 7));
+        assert!(!is_within_oldest(&ids, 2, 9));
+        assert!(
+            is_within_oldest(&ids, 3, 9),
+            "asking for every connection targets every connection"
+        );
+        assert!(!is_within_oldest(&ids, 1, 42), "an unknown id is never one");
+        assert!(!is_within_oldest(&[], 5, 3));
     }
 }
