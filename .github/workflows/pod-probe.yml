@@ -1,0 +1,55 @@
+name: Publish pod-probe image
+
+# The debug image for the automatic stall capture. It is built here, not in the
+# cluster, because `apt-get` inside a zako3 pod hangs at connect (measured
+# 2026-11-27): a capture image that installs gdb at run time never finishes
+# installing it. See `ops/pod-probe/README.md`.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/pod-probe/**"
+      - ".github/workflows/pod-probe.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/zako-ac/pod-probe
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Short sha
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ops/pod-probe
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE }}:main
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
