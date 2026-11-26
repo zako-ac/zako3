@@ -82,14 +82,14 @@ capture_pod() {
   local conn=${CONNECTION_ID:-unknown}
   local pod_ip=${TARGET_POD_IP:-}
 
-  emit "meta capture_begin ts=$(date -u +%Y-%m-%dT%H:%M:%SZ) namespace=${ns} pod=${pod} node=$(hostname) tap_id=${tap} connection_id=${conn} pod_uid=${uid} budget_secs=${BUDGET_SECS}"
+  emit "meta capture_begin ts=$(date -u +%Y-%m-%dT%H:%M:%SZ) namespace=${ns} pod=${pod} node=${TARGET_NODE:-$(hostname)} tap_id=${tap} connection_id=${conn} pod_uid=${uid} budget_secs=${BUDGET_SECS}"
 
   local found pid comm
   found=$(find_host_pid "$uid")
   pid=${found%% *}
   comm=${found#* }
   if [ -z "${found:-}" ] || [ -z "$pid" ]; then
-    emit "meta error=target_pod_not_on_this_node pod=${pod} node=$(hostname)"
+    emit "meta error=target_pod_not_on_this_node pod=${pod} node=${TARGET_NODE:-$(hostname)}"
     emit "meta capture_end result=no_target elapsed_s=$((SECONDS - START))"
     return 0
   fi
@@ -156,7 +156,7 @@ capture_pod() {
             -ex "set sysroot /proc/${pid}/root" \
             -ex "attach ${pid}" \
             -ex "info threads" \
-            -ex "thread apply all bt" \
+            -ex "thread apply all bt 15" \
             -ex "detach" 2>&1)
     rc=$?
     if [ -n "$out" ]; then printf '%s\n' "$out" | raw; fi

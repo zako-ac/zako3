@@ -129,6 +129,7 @@ create_capture_job() {
                 {name: "TARGET_POD", value: $pod},
                 {name: "TARGET_POD_UID", value: $uid},
                 {name: "TARGET_POD_IP", value: $ip},
+                {name: "TARGET_NODE", value: $node},
                 {name: "TAP_ID", value: $tap},
                 {name: "CONNECTION_ID", value: $conn},
                 {name: "CAPTURE_BUDGET_SECS", value: "30"}
