@@ -41,6 +41,8 @@ pub struct TapBuilder {
     drain_timeout: Option<Duration>,
     #[cfg(feature = "healthcheck")]
     healthcheck_port: Option<u16>,
+    health_stall_threshold: Option<Duration>,
+    service_name: Option<String>,
 }
 
 impl TapBuilder {
@@ -100,14 +102,35 @@ impl TapBuilder {
         self
     }
 
-    /// Spawn a minimal HTTP server on `port` that responds `200 OK` to `GET /health`.
+    /// Spawn a minimal HTTP server on `port` serving `GET /health` and
+    /// `GET /metrics`.
     ///
     /// Requires the `healthcheck` crate feature. The server runs as a background
     /// task alongside the Hub connection; bind failures are logged but do not
     /// abort the tap.
+    ///
+    /// `/health` is state-based: it answers `503` when a request is in flight and
+    /// nothing has been written back for [`Self::health_stall_threshold`], so a
+    /// readiness probe (or a liveness probe, where a deployment has one) can
+    /// see a tap that is up but no longer serving.
     #[cfg(feature = "healthcheck")]
     pub fn healthcheck_port(mut self, port: u16) -> Self {
         self.healthcheck_port = Some(port);
+        self
+    }
+
+    /// How long a request may sit with no reply before `/health` reports `503`.
+    ///
+    /// Defaults to [`crate::healthcheck::DEFAULT_STALL_THRESHOLD`], overridable
+    /// with `TAP_HEALTH_STALL_SECS`.
+    pub fn health_stall_threshold(mut self, threshold: Duration) -> Self {
+        self.health_stall_threshold = Some(threshold);
+        self
+    }
+
+    /// `service.name` the metrics carry. Defaults to `zako3-tap`.
+    pub fn service_name(mut self, name: impl Into<String>) -> Self {
+        self.service_name = Some(name.into());
         self
     }
 
@@ -156,9 +179,40 @@ impl TapBuilder {
             selection_weight: self.selection_weight,
         };
 
+        // One object for both readers: the `/metrics` counters and the
+        // inputs `/health` decides on are the same numbers, so a scrape and a
+        // probe cannot disagree about how many requests are in flight.
+        let metrics = {
+            #[cfg(feature = "metrics")]
+            {
+                let service_name = self.service_name.as_deref().unwrap_or("zako3-tap");
+                match zako3_telemetry::init_metrics(service_name, otlp_endpoint_from_env()) {
+                    Ok(()) => zakofish::metrics::TapMetrics::instrumented(),
+                    Err(e) => {
+                        // Losing the exporter must not take the voice down: the
+                        // counters below are maintained either way, so `/health`
+                        // still works without `/metrics`.
+                        tracing::error!("could not install the metrics exporter: {e:#}");
+                        zakofish::metrics::TapMetrics::new()
+                    }
+                }
+            }
+            #[cfg(not(feature = "metrics"))]
+            {
+                tracing::info!("built without the `metrics` feature; /metrics will be empty");
+                zakofish::metrics::TapMetrics::new()
+            }
+        };
+
         #[cfg(feature = "healthcheck")]
         if let Some(port) = self.healthcheck_port {
-            tokio::spawn(crate::healthcheck::run_healthcheck_server(port));
+            let state = crate::healthcheck::HealthState {
+                metrics: Arc::clone(&metrics),
+                stall_threshold: self
+                    .health_stall_threshold
+                    .unwrap_or_else(health_stall_threshold_from_env),
+            };
+            tokio::spawn(crate::healthcheck::run_healthcheck_server(port, state));
         }
 
         let bridge = Arc::new(HandlerBridge(handler));
@@ -174,7 +228,7 @@ impl TapBuilder {
         client_config.protofish = zakofish::default_protofish3_config();
         client_config.handshake_timeout = Duration::from_secs(10);
 
-        let zf_tap = ZakofishTapPf3::new(client_config)?;
+        let zf_tap = ZakofishTapPf3::new_with_metrics(client_config, metrics)?;
         zf_tap
             .connect_and_run_with(&hub_addr, server_name.as_str(), hello, bridge, drain)
             .await?;
@@ -190,6 +244,27 @@ impl TapBuilder {
 /// started just before the drain did, and well inside the 45s grace period the
 /// tap manifests give the pod.
 pub const DEFAULT_DRAIN_TIMEOUT: Duration = zakofish::tap_pf3::DrainConfig::DEFAULT_TIMEOUT;
+
+/// Where a tap's metrics go when the deployment sets an OTLP endpoint.
+///
+/// Unset is the normal case: `/metrics` is what the tap is scraped through, and
+/// the exporter is built either way.
+fn otlp_endpoint_from_env() -> Option<String> {
+    std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .ok()
+        .filter(|endpoint| !endpoint.is_empty())
+}
+
+/// The stall threshold when the caller did not set one.
+#[cfg(feature = "healthcheck")]
+fn health_stall_threshold_from_env() -> Duration {
+    std::env::var("TAP_HEALTH_STALL_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or(crate::healthcheck::DEFAULT_STALL_THRESHOLD)
+}
 
 fn drain_timeout_from_env() -> Duration {
     std::env::var("ZAKO_DRAIN_TIMEOUT_SECS")

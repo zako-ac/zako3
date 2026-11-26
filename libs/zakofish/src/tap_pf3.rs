@@ -12,10 +12,11 @@ use protofish3::{
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::error::{Result, ZakofishError};
+use crate::metrics::{RequestKind, TapMetrics};
 use crate::tap::TapHandler;
 use crate::tap_streams::encode_pf3_chunk;
 use crate::types::TransferMode;
@@ -65,24 +66,42 @@ pub struct ZakofishTapPf3 {
     ///
     /// Shared with every spawned per-request task so a drain can wait for them
     /// and so a new request arriving during the drain can be refused instead of
-    /// started.
-    in_flight: Arc<AtomicU32>,
+    /// started. The same object is what `/metrics` reports and what `/health`
+    /// decides on, which is why it is one struct and not three counters.
+    metrics: Arc<TapMetrics>,
     draining: Arc<AtomicBool>,
 }
 
 impl ZakofishTapPf3 {
     pub fn new(client_config: ClientConfig) -> Result<Self> {
+        Self::new_with_metrics(client_config, TapMetrics::new())
+    }
+
+    /// [`Self::new`] with the request-path state supplied by the caller.
+    ///
+    /// The caller keeps its own reference to the same [`TapMetrics`]: that is
+    /// what the `/health` endpoint reads, and what the OpenTelemetry
+    /// instruments record into when the `metrics` feature is on.
+    pub fn new_with_metrics(
+        client_config: ClientConfig,
+        metrics: Arc<TapMetrics>,
+    ) -> Result<Self> {
         let client = Client::bind(client_config)?;
         Ok(Self {
             client: Arc::new(client),
-            in_flight: Arc::new(AtomicU32::new(0)),
+            metrics,
             draining: Arc::new(AtomicBool::new(false)),
         })
     }
 
     /// How many requests this tap is serving right now.
     pub fn in_flight(&self) -> u32 {
-        self.in_flight.load(Ordering::SeqCst)
+        self.metrics.in_flight()
+    }
+
+    /// The request-path state this connection maintains.
+    pub fn metrics(&self) -> Arc<TapMetrics> {
+        Arc::clone(&self.metrics)
     }
 
     /// Begin draining without a signal, for a caller that owns the shutdown.
@@ -239,7 +258,7 @@ impl ZakofishTapPf3 {
             // fire right after a fresh connect.
             dns_interval.tick().await;
 
-            if let Err(e) = do_handshake(&conn, &hello_info).await {
+            if let Err(e) = do_handshake(&conn, &hello_info, &self.metrics).await {
                 tracing::error!(
                     "Initial handshake with {} failed: {:?}; retrying",
                     current_addr,
@@ -305,7 +324,7 @@ impl ZakofishTapPf3 {
                             "Reconnected to Hub at {} (same IP), re-sending ClientHello",
                             current_addr,
                         );
-                        if let Err(e) = do_handshake(&conn, &hello_info).await {
+                        if let Err(e) = do_handshake(&conn, &hello_info, &self.metrics).await {
                             tracing::error!("Re-handshake failed: {:?}", e);
                         }
                     }
@@ -314,24 +333,27 @@ impl ZakofishTapPf3 {
                     chan_result = conn.accept_chan() => {
                         match chan_result {
                             Ok((sender, receiver)) => {
+                                self.metrics.chan_opened();
                                 let handler_clone = handler.clone();
-                                let in_flight = Arc::clone(&self.in_flight);
+                                let metrics = Arc::clone(&self.metrics);
                                 let draining = Arc::clone(&self.draining);
                                 tokio::spawn(async move {
                                     if let Err(e) = handle_incoming_chan(
                                         sender,
                                         receiver,
                                         handler_clone,
-                                        in_flight,
+                                        Arc::clone(&metrics),
                                         draining,
                                     )
                                     .await
                                     {
                                         tracing::error!("Error handling incoming chan: {:?}", e);
                                     }
+                                    metrics.chan_closed();
                                 });
                             }
                             Err(e) => {
+                                self.metrics.accept_chan_error();
                                 tracing::error!(
                                     "accept_chan error (addr={}): {:?}; re-resolving and reconnecting",
                                     current_addr, e,
@@ -364,7 +386,7 @@ impl ZakofishTapPf3 {
                         if !self.draining.load(Ordering::SeqCst) {
                             continue;
                         }
-                        drain_and_close(&conn, &self.in_flight, &self.draining, drain.timeout)
+                        drain_and_close(&conn, &self.metrics, &self.draining, drain.timeout)
                             .await;
                         break 'outer;
                     }
@@ -416,13 +438,6 @@ async fn wait_for_shutdown(sig: &mut Option<ShutdownSignal>) {
     }
 }
 
-fn unix_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 /// How often the tap checks whether it has been asked to stop.
 ///
 /// The ceiling on "shutdown requested" → "notice on the wire". It costs a timer
@@ -452,16 +467,16 @@ const CLOSE_SETTLE: Duration = Duration::from_millis(100);
 
 async fn drain_and_close(
     conn: &ReconnectingClient,
-    in_flight: &Arc<AtomicU32>,
+    metrics: &Arc<TapMetrics>,
     draining: &Arc<AtomicBool>,
     timeout: Duration,
 ) {
     let started = Instant::now();
-    let started_at_unix_ms = unix_millis();
+    let started_at_unix_ms = crate::metrics::unix_millis();
     // Set before the notice is sent: a request that arrives between the two must
     // already be refused.
     draining.store(true, Ordering::SeqCst);
-    let inflight = in_flight.load(Ordering::SeqCst);
+    let inflight = metrics.in_flight();
 
     tracing::info!(
         in_flight = inflight,
@@ -519,7 +534,7 @@ async fn drain_and_close(
         tracing::warn!("draining without a notice; the hub learns only from the close");
     }
 
-    while in_flight.load(Ordering::SeqCst) > 0 && started.elapsed() < timeout {
+    while metrics.in_flight() > 0 && started.elapsed() < timeout {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
@@ -530,7 +545,7 @@ async fn drain_and_close(
     // which is the case this whole path exists to replace.
     tokio::time::sleep(NOTICE_SETTLE).await;
 
-    let left = in_flight.load(Ordering::SeqCst);
+    let left = metrics.in_flight();
     if left > 0 {
         tracing::warn!(
             left,
@@ -546,22 +561,6 @@ async fn drain_and_close(
     // immediately can leave it unsent, and the hub would then be back to waiting
     // for an idle timeout on a socket nobody is holding.
     tokio::time::sleep(CLOSE_SETTLE).await;
-}
-
-/// Counts a request as in flight for as long as it is alive, however it ends.
-struct InFlightGuard(Arc<AtomicU32>);
-
-impl InFlightGuard {
-    fn new(counter: Arc<AtomicU32>) -> Self {
-        counter.fetch_add(1, Ordering::SeqCst);
-        Self(counter)
-    }
-}
-
-impl Drop for InFlightGuard {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::SeqCst);
-    }
 }
 
 /// Resolve a `"<host>:<port>"` string to a [`SocketAddr`].
@@ -613,7 +612,11 @@ async fn resolve(host: &str, resolver: &TokioAsyncResolver) -> Result<SocketAddr
     })
 }
 
-async fn do_handshake(conn: &ReconnectingClient, hello_info: &TapClientHello) -> Result<()> {
+async fn do_handshake(
+    conn: &ReconnectingClient,
+    hello_info: &TapClientHello,
+    metrics: &Arc<TapMetrics>,
+) -> Result<()> {
     let (sender, mut receiver) = conn.take_handshake_chan().await?;
 
     let hello_msg = TapToHubMessage::ClientHello(hello_info.clone());
@@ -625,6 +628,7 @@ async fn do_handshake(conn: &ReconnectingClient, hello_info: &TapClientHello) ->
 
     match response {
         HubToTapMessage::Accept => {
+            metrics.handshake();
             tracing::info!("Tap connected and accepted by Hub.");
             Ok(())
         }
@@ -642,11 +646,43 @@ async fn handle_incoming_chan(
     sender: ChanSender,
     mut receiver: ChanReceiver,
     handler: Arc<dyn TapHandler>,
-    in_flight: Arc<AtomicU32>,
+    metrics: Arc<TapMetrics>,
     draining: Arc<AtomicBool>,
 ) -> Result<()> {
     let payload_bytes = receiver.recv_msg().await?;
     let msg: HubToTapMessage = crate::protocol::codec::decode_msgpack(&payload_bytes)?;
+
+    let kind = match &msg {
+        HubToTapMessage::AudioRequest(_) => RequestKind::Audio,
+        HubToTapMessage::AudioMetadataRequest(_) => RequestKind::Meta,
+        _ => {
+            tracing::warn!("Received unexpected message on pf3 data chan: {:?}", msg);
+            return Ok(());
+        }
+    };
+
+    // One line per request, written before anything in the handler can block.
+    //
+    // This is the line that separates the two halves of a "the tap went quiet"
+    // report: with no receipt log there was no way to tell a request the hub
+    // never routed to this tap from one the tap accepted and then sat on, and
+    // the counter alone cannot show *which* message went missing. Info level,
+    // because a request arrives a few times a second at most.
+    match &msg {
+        HubToTapMessage::AudioRequest(request) => tracing::info!(
+            kind = kind.as_str(),
+            source = %request.ars,
+            in_flight = metrics.in_flight(),
+            "tap request received"
+        ),
+        HubToTapMessage::AudioMetadataRequest(request) => tracing::info!(
+            kind = kind.as_str(),
+            source = %request.ars,
+            in_flight = metrics.in_flight(),
+            "tap request received"
+        ),
+        _ => {}
+    }
 
     // A request that was accepted just before the drain started is refused
     // rather than served: this process is about to stop existing, so starting
@@ -659,13 +695,8 @@ async fn handle_incoming_chan(
     // `wait_for_tap` fails anything it had already dispatched to this
     // connection, so a request that never arrives here is a request that was
     // retried somewhere else.
-    if draining.load(Ordering::SeqCst)
-        && matches!(
-            &msg,
-            HubToTapMessage::AudioRequest(_) | HubToTapMessage::AudioMetadataRequest(_)
-        )
-    {
-        tracing::info!("refused a request that arrived while draining");
+    if draining.load(Ordering::SeqCst) {
+        tracing::info!(kind = kind.as_str(), "refused a request that arrived while draining");
         let refusal = TapToHubMessage::AudioRequestFailure(
             crate::types::message::AudioRequestFailureMessage {
                 reason: "tap is draining".to_string(),
@@ -675,11 +706,13 @@ async fn handle_incoming_chan(
         sender
             .send_msg(crate::protocol::codec::encode_msgpack(&refusal)?.to_vec())
             .await?;
+        metrics.reply_sent();
         return Ok(());
     }
 
-    // Held for the whole of this request: the drain waits on this count.
-    let _in_flight = InFlightGuard::new(in_flight);
+    // Held for the whole of this request: the drain waits on this count, and so
+    // does `/health` — a request that is stuck holds it until the task ends.
+    let _in_flight = metrics.request_received(kind);
 
     match msg {
         HubToTapMessage::AudioRequest(request) => {
@@ -692,6 +725,7 @@ async fn handle_incoming_chan(
                     sender
                         .send_msg(crate::protocol::codec::encode_msgpack(&response_msg)?.to_vec())
                         .await?;
+                    metrics.reply_sent();
 
                     let mut send_xfer = sender.start_xfer(map_mode(transfer_mode)).await?;
 
@@ -703,6 +737,10 @@ async fn handle_incoming_chan(
                         );
                         let buf = encode_pf3_chunk(timestamp, &bytes);
                         send_xfer.send(buf).await?;
+                        // Per frame, not per stream: a request that is still
+                        // producing audio is making progress, and `/health`
+                        // must not read a long synthesis as a stall.
+                        metrics.reply_sent();
                     }
 
                     send_xfer.end().await?;
@@ -712,6 +750,7 @@ async fn handle_incoming_chan(
                     sender
                         .send_msg(crate::protocol::codec::encode_msgpack(&response_msg)?.to_vec())
                         .await?;
+                    metrics.reply_sent();
                 }
             }
         }
@@ -725,18 +764,18 @@ async fn handle_incoming_chan(
                     sender
                         .send_msg(crate::protocol::codec::encode_msgpack(&response_msg)?.to_vec())
                         .await?;
+                    metrics.reply_sent();
                 }
                 Err(failure_msg) => {
                     let response_msg = TapToHubMessage::AudioRequestFailure(failure_msg);
                     sender
                         .send_msg(crate::protocol::codec::encode_msgpack(&response_msg)?.to_vec())
                         .await?;
+                    metrics.reply_sent();
                 }
             }
         }
-        _ => {
-            tracing::warn!("Received unexpected message on pf3 data chan: {:?}", msg);
-        }
+        _ => unreachable!("kind was matched above, so this is an audio or metadata request"),
     }
 
     Ok(())
