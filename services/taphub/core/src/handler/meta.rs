@@ -115,6 +115,16 @@ pub(crate) async fn handle_request_audio_meta_inner(
 
         let now = Instant::now();
         let remaining = deadline.saturating_duration_since(now);
+        // The stall probe (`ZAKO_META_STALL_INJECT`, off by default) holds the
+        // request open instead of sending it: a connection that is still
+        // connected and sends nothing back, which is the one state production
+        // never hands us on demand. `stall_inject` says why a frozen tap process
+        // is not that state.
+        //
+        // Asked before the probation read below on purpose: the probe puts the
+        // connection on probation, and reading that first would spend this
+        // request's whole budget instead of the half budget that retries.
+        let stalled = tap_hub.stall_metadata_for(&tap_id, connection_id);
         let on_probation = tap_hub.is_on_probation(connection_id);
         let attempt_deadline = if on_probation {
             std::cmp::min(deadline, now + (remaining / 2).max(MIN_PROBATION_BUDGET))
@@ -125,15 +135,34 @@ pub(crate) async fn handle_request_audio_meta_inner(
         // One chan is opened on this connection per attempt; counting it here is
         // what turns "is the tap out of stream credit" into a number.
         tap_hub.record_stream_opened(&tap_id, connection_id);
-        let request = tap_hub.zf_hub.request_audio_metadata(
-            tap_id.clone(),
-            connection_id,
-            req.request.clone(),
-            req.headers.clone(),
-        );
-        let kind = match super::cancel::wait_for_tap(request, attempt_deadline, &mut disconnect_rx)
+        if stalled {
+            tracing::warn!(
+                tap_id = %tap_id.0,
+                connection_id,
+                attempt = tried.len(),
+                "meta stall probe: holding this request open and not sending it to the tap"
+            );
+        }
+        let waited = if stalled {
+            // Never resolves, so only the two deadlines can end it — the shape a
+            // wedged tap connection has, with no transport error or disconnect to
+            // tell it apart from a healthy one.
+            super::cancel::wait_for_tap(
+                std::future::pending(),
+                attempt_deadline,
+                &mut disconnect_rx,
+            )
             .await
-        {
+        } else {
+            let request = tap_hub.zf_hub.request_audio_metadata(
+                tap_id.clone(),
+                connection_id,
+                req.request.clone(),
+                req.headers.clone(),
+            );
+            super::cancel::wait_for_tap(request, attempt_deadline, &mut disconnect_rx).await
+        };
+        let kind = match waited {
             Waited::Done(Ok(m)) => {
                 tap_hub.mark_answered(connection_id);
                 tap_hub.record_stream_closed(&tap_id, connection_id);

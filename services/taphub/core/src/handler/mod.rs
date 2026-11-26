@@ -14,6 +14,8 @@ mod invalidate_cache;
 mod meta;
 mod permission;
 mod preload;
+mod stall_inject;
+pub(crate) use stall_inject::probe as stall_probe;
 mod stream;
 pub(crate) mod tap_lookup;
 
