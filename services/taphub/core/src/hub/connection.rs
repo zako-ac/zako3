@@ -106,6 +106,7 @@ impl HubHandler for TapHubConnectionHandler {
                         suspect_until: None,
                         last_answered_at: Some(std::time::Instant::now()),
                         suspect_strikes: 0,
+                        inflight_requests: 0,
                     },
                 );
 
@@ -264,6 +265,28 @@ impl HubHandler for TapHubConnectionHandler {
             metrics::metrics().connected_taps.add(-1, &[]);
         }
         let _ = entry.disconnect_tx.send(true);
+
+        // Why the connection is gone, decided where both halves are known: a
+        // drain is the tap saying goodbye, `no_close` is the transport never
+        // getting a close frame at all, which is what a process that died or
+        // stopped reading looks like from here.
+        let reason = match (entry.draining, close_code) {
+            (true, _) => "drain",
+            (false, None) => "no_close",
+            (false, Some(0)) => "clean",
+            (false, Some(_)) => "close_code",
+        };
+        metrics::metrics()
+            .tap_conn_closed_total
+            .add(1, &[KeyValue::new("reason", reason)]);
+        tracing::info!(
+            tap_id = %tap_id.0,
+            connection_id,
+            reason,
+            close_code = ?close_code,
+            inflight_requests = entry.inflight_requests,
+            "tap connection closed"
+        );
 
         let uptime_secs = (chrono::Utc::now() - entry.state.connected_at)
             .num_seconds()

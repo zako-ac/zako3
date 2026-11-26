@@ -221,6 +221,9 @@ pub(crate) async fn handle_request_audio_inner(
             tap_id = %tap_id.0,
             connection_id,
         );
+        // One chan per attempt, counted where it is opened: opened minus closed
+        // is the number of chans this connection still has open on the wire.
+        tap_hub.record_stream_opened(&tap_id, connection_id);
         let request_fut = tap_hub
             .zf_hub
             .request_audio(
@@ -237,12 +240,15 @@ pub(crate) async fn handle_request_audio_inner(
         final_error = match wait_for_tap(request_fut, deadline, &mut disconnect_rx).await {
             Waited::Done(Ok(triple)) => {
                 tap_hub.mark_answered(connection_id);
+                tap_hub.record_stream_closed(&tap_id, connection_id);
                 let (succ, rel, unrel) = triple;
                 break (connection_id, succ, rel, unrel, disconnect_rx);
             }
             Waited::Done(Err(ZakofishError::TapRequestFailure { reason, try_others })) => {
                 // The tap answered, and its answer was "no". Asking another
-                // replica the same question would only get the same answer.
+                // replica the same question would only get the same answer. The
+                // chan completed, so it is not an open one.
+                tap_hub.record_stream_closed(&tap_id, connection_id);
                 return Err(TapHubError::TapScript { reason, try_others });
             }
             Waited::Done(Err(e)) => {
