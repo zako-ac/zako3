@@ -17,7 +17,7 @@ exactly which failure each one catches.
 | mechanism | lives in | fires when | recovery |
 |---|---|---|---|
 | **Hub-side close** | taphub (`self_heal_heartbeat`) | a connection has been retired at least once **and** has answered nothing for 300s | taphub closes it; the tap's transport reconnects and re-handshakes |
-| **In-process request deadline** | the tap (`zako3-tap-sdk` `watchdog`) | a request is in flight and nothing has been written back for 60s | the process exits 70; kubelet restarts the pod |
+| **In-process request deadline** | the tap (`zako3-tap-sdk` `watchdog`, and `zakofish4-tap` `watchdog` since 2026-11-27) | a request is in flight and nothing has been written back for 60s | the process exits 70; kubelet restarts the pod |
 | **Liveness probe** | c1-flux, per tap Deployment | `/health` returns 503 six times in a row, 10s apart | kubelet restarts the pod |
 
 The second and third overlap on purpose. See [§3](#3-why-both-the-deadline-and-the-liveness-probe).
@@ -91,7 +91,9 @@ claims, and the alert in S11 needs to tell "all its connections are gone" from
 
 ## 2. The tap's own request deadline
 
-`libs/tap-sdk/src/watchdog.rs`, wired in `TapBuilder::run`.
+`libs/tap-sdk/src/watchdog.rs` (protofish3) and `zakofish4-tap/src/watchdog.rs`
+(protofish4, zako-ac/zakofish4#5), both wired in `TapBuilder::run` and both armed by
+the same `TAP_REQUEST_DEADLINE_SECS`.
 
 A request that has been in flight with **nothing written back** for
 `TAP_REQUEST_DEADLINE_SECS` (default 60) ends the process with **exit code 70**.
@@ -161,7 +163,23 @@ cargo test -p zako3-tap-sdk              # the deadline, and a child process tha
 | `zako3_tap_sdk::watchdog::tests::a_frame_that_keeps_moving_is_never_a_breach` | the deadline is on progress, not duration |
 | `…::a_stalled_request_ends_the_process_with_a_reason` | the real thing: a child process exits 70 and prints the reason |
 
-Production drills (not yet run - S11):
+Production drills. **Run 2026-11-27 00:08-00:30 UTC** (zako3#131 wiring, taps#17 image):
+
+- **liveness, on the live protofish4 canary** (`supertonic-tap-v4`, image `sha-e8ecf11`): the
+  container's pid 1 was `SIGSTOP`ped from the node's PID namespace at 00:26:26. Readiness failed
+  first (pod `0/1`), the liveness probe failed at ~00:28:00 with `context deadline exceeded`,
+  kubelet killed and restarted the container, and the pod answered the gateway again in the same
+  second it started (00:28:11). `RESTARTS 1`, last state `Error` / exit `137` — the kubelet's own
+  SIGKILL after the grace period, which is the frozen case's signature and not the deadline's.
+- **hub close + the tap reconnecting without a pod restart**: after taphub was rolled to the
+  self-heal image at 00:13, all ten connections re-authenticated within ~90s with every tap pod's
+  `RESTARTS` unchanged. `taphub_tap_connected{tap_id}` reports 2 for all five taps.
+
+Not yet observed in production: an actual `reason="self_heal"` close. It needs `strikes > 0` on a
+connection that also went 300s without answering, which a quiet night does not produce; the drill
+for it is below and belongs with S11.
+
+Drills (procedure):
 
 - **hub close**: `ZAKO_META_STALL_INJECT` raises `strikes` on a chosen tap's
   oldest connection without waiting for three real timeouts. Then watch
@@ -178,16 +196,17 @@ Production drills (not yet run - S11):
 
 ## 5. What this does not cover
 
-1. **The four taps that are not supertonic get an inert probe today.** Their
+1. **The four taps that are not supertonic get an inert probe.** Their
    deployed images (`sha-3dc65f8`) predate `zako3#122/#123`, so their `/health`
    is still the constant `"ok"` - the liveness probe is wired but cannot fail.
    It becomes real when those images are rebuilt (F7 in
-   `docs/reviews/zako-audio-review.md`). Supertonic (`sha-7d221b3`) has the
-   state-based `/health` and is the only tap where the probe is live now.
-2. **The request deadline exists in no image yet.** It lives in
-   `zako3-tap-sdk`; the `taps` repository pins the SDK by revision and every tap
-   image must be rebuilt from a revision that has it. Until then
-   `TAP_REQUEST_DEADLINE_SECS` in `taps-common-config` is an unused variable.
+   `docs/reviews/zako-audio-review.md`). Supertonic on either transport
+   (`sha-7d221b3` pf3, `sha-e8ecf11` pf4) has the state-based `/health` and a
+   live probe.
+2. **The request deadline is in the protofish4 canary image only.** `sha-e8ecf11`
+   (taps#17) carries `zakofish4-tap`'s watchdog. The pf3 supertonic image
+   (`sha-7d221b3`, the rollback path) and the four pf3 taps predate theirs, so
+   `TAP_REQUEST_DEADLINE_SECS` is inert on them until they are rebuilt.
 3. **A hub-side close is recovery, not diagnosis.** It removes the evidence along
    with the connection. The gdb capture (`docs/pod-probe`) triggers at
    `silent > 60s AND strikes > 0`, roughly four minutes before the self-heal
@@ -197,7 +216,7 @@ Production drills (not yet run - S11):
    the connection, which is also the process a taphub restart removes. That
    restart still costs every tap a reconnect (D10; the two-replica design needs a
    routing owner per connection and is out of scope).
-5. **protofish4 taps have neither mechanism.** `zakofish4-tap` has no
-   `TapMetrics`, no state-based `/health` and no deadline. The M4 migration has
-   to carry §2 and §3 over, or the taps that move lose the self-heal they gain
-   here (`zako-tap-pf4-migration.md` §4/P6).
+5. **protofish4 taps now have both mechanisms**, but only the canary image has
+   them deployed; the other four taps are still pf3 images. Any tap that moves
+   must be rebuilt from a `taps` commit that carries both (§2 landed in
+   zakofish4#5, the state-based `/health` in zakofish4#3).
