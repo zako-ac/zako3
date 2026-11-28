@@ -60,6 +60,10 @@ pub struct RelayConfig {
     pub max_pending: usize,
     pub route_idle: Duration,
     pub negative_ttl: Duration,
+    /// How long one route lookup may run before it is given up on. See
+    /// [`RelayConfig::max_pending`] for why the lookup is off the datagram
+    /// path, and [`spawn_lookup`] for why it must still end.
+    pub lookup_timeout: Duration,
 }
 
 struct Resolution {
@@ -101,7 +105,12 @@ pub async fn run(
                     Decision::ToTap(to) => forward(&socket, &buf[..len], to, "to_tap").await,
                     Decision::Lookup => {
                         hold(&mut pending, cfg.max_pending, id, &buf[..len], from);
-                        spawn_lookup(Arc::clone(&routes), resolved_tx.clone(), id);
+                        spawn_lookup(
+                            Arc::clone(&routes),
+                            resolved_tx.clone(),
+                            id,
+                            cfg.lookup_timeout,
+                        );
                     }
                     Decision::Pending => {
                         hold(&mut pending, cfg.max_pending, id, &buf[..len], from);
@@ -219,25 +228,56 @@ fn spawn_lookup(
     routes: Arc<dyn RouteSource>,
     tx: mpsc::Sender<Resolution>,
     id: protofish4::RequestId,
+    timeout: Duration,
 ) {
     tokio::spawn(async move {
-        let authority = routes.lookup(&id.0).await;
-        // Resolved once, here, and never on the datagram path: the registry
-        // stores authority strings, and a DNS round-trip per packet would be a
-        // far worse cost than the Redis read it follows.
-        let sink = match &authority {
-            Some(a) => match lookup_host(a.as_str()).await {
-                Ok(mut addrs) => addrs.next(),
-                Err(e) => {
-                    tracing::warn!(%e, %a, "could not resolve a sink address");
-                    None
-                }
-            },
-            None => None,
+        // Everything the answer needs — the registry read and the address
+        // resolution behind it — runs inside one budget. Unbounded, a single
+        // stuck read would keep this id in `Pending` indefinitely: the relay
+        // would hold the first handful of datagrams and drop every one after
+        // them, the sender would still report a completed stream, and the
+        // listener would hear nothing at all. That is the shape of an "audio
+        // sometimes just does not arrive" incident, so it is made to end here.
+        let resolved = tokio::time::timeout(timeout, async {
+            let authority = routes.lookup(&id.0).await;
+            // Resolved once, here, and never on the datagram path: the registry
+            // stores authority strings, and a DNS round-trip per packet would be
+            // a far worse cost than the Redis read it follows.
+            match &authority {
+                Some(a) => match lookup_host(a.as_str()).await {
+                    Ok(mut addrs) => addrs.next(),
+                    Err(e) => {
+                        tracing::warn!(%e, %a, "could not resolve a sink address");
+                        None
+                    }
+                },
+                None => None,
+            }
+        })
+        .await;
+
+        let sink = match resolved {
+            Ok(sink) => sink,
+            Err(_) => {
+                metrics::LOOKUPS.with_label_values(&["timeout"]).inc();
+                tracing::warn!(
+                    request_id = %id.0,
+                    timeout_ms = timeout.as_millis() as u64,
+                    "route lookup timed out; this request id is marked unroutable for the \
+                     negative TTL and its datagrams are dropped, not held"
+                );
+                None
+            }
         };
-        metrics::LOOKUPS
-            .with_label_values(&[if sink.is_some() { "hit" } else { "miss" }])
-            .inc();
+
+        // A miss and a timeout both end as `None`: what the relay needs is a
+        // decision, and "no route" is one. Without it the id would stay in
+        // `Pending` no matter how long the relay ran.
+        if resolved.is_ok() {
+            metrics::LOOKUPS
+                .with_label_values(&[if sink.is_some() { "hit" } else { "miss" }])
+                .inc();
+        }
         let _ = tx.send(Resolution { id, sink }).await;
     });
 }

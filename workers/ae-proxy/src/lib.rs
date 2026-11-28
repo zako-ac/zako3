@@ -53,6 +53,7 @@ pub async fn run() -> anyhow::Result<()> {
                 max_pending: config.max_pending,
                 route_idle: config.route_idle,
                 negative_ttl: config.negative_ttl,
+                lookup_timeout: config.lookup_timeout,
             },
         ) => {
             if let Err(e) = res {

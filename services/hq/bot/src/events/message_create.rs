@@ -106,7 +106,12 @@ async fn handle_message_create(
 
         let channel_ids = service
             .playback
-            .resolve_tts_channels(guild_id, message_channel_id, user_voice_info, &settings)
+            .resolve_tts_channels(
+                guild_id,
+                message_channel_id,
+                user_voice_info.clone(),
+                &settings,
+            )
             .await?;
 
         let message_id = msg.id.to_string();
@@ -171,8 +176,37 @@ async fn handle_message_create(
                 );
             }
         } else {
+            // Nothing to play into. Which "nothing" this is decides whether the
+            // loss is a setting or a fault: a session elsewhere in the guild
+            // that the reading rule excluded is ordinary, while no session at
+            // all means nobody in this guild could have heard the message.
+            let sessions = service
+                .playback
+                .sessions_in_guild(guild_id)
+                .await
+                .unwrap_or_default();
+            let reason = if sessions.is_empty() {
+                // The one line to read when a user says Zako ignored them: it
+                // carries where the author was, what rule applied, and that the
+                // guild had no session at all.
+                tracing::info!(
+                    guild_id = %guild_id,
+                    channel_id = %message_channel_id,
+                    user_id = %author_id,
+                    message_id = %message_id,
+                    author_voice_channel = ?user_voice_info
+                        .as_ref()
+                        .and_then(|v| v.channel_id)
+                        .map(u64::from),
+                    text_reading_rule = ?settings.text_reading_rule,
+                    "no Zako session in this guild; the message has nowhere to be read"
+                );
+                DroppedReason::NoBotSession
+            } else {
+                DroppedReason::NotInChannel
+            };
             service.playback.record_dropped(
-                DroppedReason::NotInChannel,
+                reason,
                 guild_id,
                 message_channel_id,
                 &author_id,

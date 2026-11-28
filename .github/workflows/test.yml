@@ -169,3 +169,36 @@ jobs:
 
       - name: the tap's own request deadline (a child process exits 70)
         run: cargo test -p zako3-tap-sdk --lib
+
+  proxy-hq:
+    # The two pieces of the "a message was typed and nobody heard it" path that
+    # no lane built before this one: `ae-proxy` relays every audio datagram on
+    # the v4 path and `hq` decides whether a message becomes audio at all. A
+    # change to either could previously only fail in the image build, long after
+    # review.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tests-rust
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libopus-dev pkg-config libssl-dev nasm
+
+      - name: the relay holds, sheds and gives up on a route lookup (ae-proxy)
+        run: cargo test -p zako3-ae-proxy
+
+      - name: drop and unreadable accounting (hq-core)
+        run: cargo test -p hq-core --lib
+
+      # Compile check, not a warning gate: `hq-bot` carries lints that predate
+      # this pipeline, and the point of the step is that the crate is built on a
+      # pull request at all.
+      - name: Clippy (compile check for the message path)
+        run: cargo clippy -p zako3-ae-proxy -p hq-core -p hq-bot --all-targets --no-deps

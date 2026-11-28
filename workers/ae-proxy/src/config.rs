@@ -35,6 +35,14 @@ pub struct Config {
     /// live transfer, which is a far worse outcome than losing the negative
     /// cache.
     pub max_negative: usize,
+    /// How long one route lookup may run before it is given up on.
+    ///
+    /// Lookups run off the datagram path so a spray of guessed ids cannot
+    /// stall the relay behind Redis round-trips, but that also means a read
+    /// that never returns keeps its request id unresolved forever. This bound
+    /// is what makes such a read end in a counted drop instead of silently
+    /// eating the whole transfer.
+    pub lookup_timeout: Duration,
 }
 
 impl Config {
@@ -54,6 +62,7 @@ impl Config {
             negative_ttl: Duration::from_secs(parse("ZK_AEP_NEGATIVE_TTL_SECONDS", 5)),
             max_pending: parse("ZK_AEP_MAX_PENDING", 512),
             max_negative: parse("ZK_AEP_MAX_NEGATIVE", 4096),
+            lookup_timeout: Duration::from_millis(parse("ZK_AEP_LOOKUP_TIMEOUT_MS", 2000)),
         })
     }
 }

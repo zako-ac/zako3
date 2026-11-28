@@ -24,6 +24,13 @@ pub struct HqMetrics {
     /// `dropped_reason`. A message routed to two channels increments once per
     /// channel it failed to reach.
     pub messages_dropped_total: Counter<u64>,
+    /// One increment per message that never reached the engine because there
+    /// was nothing to play it into: no Zako bot connected anywhere in the
+    /// guild. Kept apart from `messages_dropped_total` on purpose. That counter
+    /// is the audit's "a play failed" signal and deliberately leaves ordinary
+    /// states out of it; this one exists because an ordinary state is still a
+    /// message a user typed and nobody heard.
+    pub messages_unreadable_total: Counter<u64>,
 }
 
 static METRICS: OnceLock<HqMetrics> = OnceLock::new();
@@ -47,6 +54,13 @@ impl HqMetrics {
                 .with_description(
                     "Messages dropped on a play attempt, by dropped_reason \
                      (one increment per channel a message failed to reach)",
+                )
+                .build(),
+            messages_unreadable_total: meter
+                .u64_counter("hq_messages_unreadable_total")
+                .with_description(
+                    "Messages that never reached the engine because no Zako bot was \
+                     connected in the guild, by reason",
                 )
                 .build(),
         }
@@ -88,6 +102,22 @@ fn record_message_dropped_on(metrics: &HqMetrics, reason: &str) {
         .add(1, &[KeyValue::new("dropped_reason", reason.to_string())]);
 }
 
+/// Record one message that could not be played because the guild had no Zako
+/// session at all.
+///
+/// This is the counter that answers "is Zako quietly ignoring a channel",
+/// which the drop counter cannot: a message with nowhere to go never reached
+/// the engine, so it is not a failed play.
+pub fn record_message_unreadable(reason: &str) {
+    record_message_unreadable_on(metrics(), reason);
+}
+
+fn record_message_unreadable_on(metrics: &HqMetrics, reason: &str) {
+    metrics
+        .messages_unreadable_total
+        .add(1, &[KeyValue::new("reason", reason.to_string())]);
+}
+
 #[cfg(test)]
 mod tests {
     use opentelemetry::metrics::MeterProvider;
@@ -101,6 +131,7 @@ mod tests {
         // no-op meter, and recording must not panic.
         record_play_attempt(1, false);
         record_message_dropped("tap_unavailable");
+        record_message_unreadable("no_bot_session");
     }
 
     /// The drop counter is only useful if an operator can see it. This wires
@@ -122,6 +153,7 @@ mod tests {
         record_play_attempt_on(&metrics, 1, false);
         record_play_attempt_on(&metrics, 2, true);
         record_message_dropped_on(&metrics, "tap_unavailable");
+        record_message_unreadable_on(&metrics, "no_bot_session");
 
         let families = registry.gather();
         let names: Vec<String> = families.iter().map(|f| f.name().to_string()).collect();
@@ -137,6 +169,13 @@ mod tests {
             point(dropped, &[("dropped_reason", "tap_unavailable")]),
             1.0,
             "a drop is counted once under its reason"
+        );
+
+        let unreadable = family(&families, "hq_messages_unreadable_total", &names);
+        assert_eq!(
+            point(unreadable, &[("reason", "no_bot_session")]),
+            1.0,
+            "a message with nowhere to play is counted where an operator looks"
         );
     }
 
