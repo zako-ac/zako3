@@ -548,6 +548,21 @@ impl PlaybackService {
         record_early_drop(reason, guild_id, channel_id, discord_user_id, message_id);
     }
 
+    /// Voice channels of `guild_id` that a Zako bot is connected to.
+    ///
+    /// The message path asks this to tell "a session exists but the rules
+    /// excluded this message" from "the guild has no session at all": the first
+    /// is an ordinary setting, the second is a message nobody will ever hear.
+    pub async fn sessions_in_guild(&self, guild_id: GuildId) -> CoreResult<Vec<ChannelId>> {
+        Ok(self
+            .audio_engine
+            .get_sessions_in_guild(guild_id)
+            .await?
+            .into_iter()
+            .map(|s| s.channel_id)
+            .collect())
+    }
+
     /// Determines which voice channels should receive TTS audio given the user's
     /// voice state and their `TextReadingRule` setting.
     ///
@@ -645,6 +660,13 @@ pub enum DroppedReason {
     NoConsumer,
     /// Routing placed the message in no channel Zako is in.
     NotInChannel,
+    /// The guild has no Zako session at all, so the message had nowhere to go.
+    ///
+    /// Separate from [`Self::NotInChannel`], which is also what a user who
+    /// chose "only in the voice channel" gets when they are elsewhere. This one
+    /// means nobody in the guild could have heard the message even if they
+    /// wanted to, and it is counted.
+    NoBotSession,
     /// Text mapping produced nothing to say.
     MappingEmpty,
     /// Anything else: engine transport, an internal engine failure, a tap
@@ -660,6 +682,7 @@ impl DroppedReason {
             Self::PermissionDenied => "permission_denied",
             Self::NoConsumer => "no_consumer",
             Self::NotInChannel => "not_in_channel",
+            Self::NoBotSession => "no_bot_session",
             Self::MappingEmpty => "mapping_empty",
             Self::EngineError => "engine_error",
         }
@@ -800,6 +823,25 @@ pub fn record_early_drop(
         attempts: 0,
     };
     let payload = drop.to_json();
+    if reason == DroppedReason::NoBotSession {
+        // Not an ordinary state: the guild had no session, so nobody there
+        // could have heard this message. `info` and a counter, because a
+        // debug-only line is the same thing as no line for anyone who is not
+        // already staring at this guild.
+        tracing::info!(
+            dropped_reason = reason.as_str(),
+            guild_id = %drop.guild_id,
+            channel_id = %drop.channel_id,
+            user_id = %drop.user_id,
+            message_id = drop.message_id.as_deref().unwrap_or(""),
+            track_id = "",
+            attempts = 0,
+            payload = %payload,
+            "message not played: no Zako session in this guild"
+        );
+        crate::metrics::record_message_unreadable(reason.as_str());
+        return;
+    }
     tracing::debug!(
         dropped_reason = reason.as_str(),
         guild_id = %drop.guild_id,
@@ -973,6 +1015,7 @@ mod tests {
         assert!(DroppedReason::RequestTimeout.is_retriable());
         assert!(!DroppedReason::PermissionDenied.is_retriable());
         assert!(!DroppedReason::NotInChannel.is_retriable());
+        assert!(!DroppedReason::NoBotSession.is_retriable());
         assert!(!DroppedReason::NoConsumer.is_retriable());
         assert!(!DroppedReason::MappingEmpty.is_retriable());
     }

@@ -53,6 +53,7 @@ async fn spawn_proxy(sink: Option<SocketAddr>) -> Proxy {
                 max_pending: 512,
                 route_idle: Duration::from_secs(60),
                 negative_ttl: Duration::from_secs(5),
+                lookup_timeout: Duration::from_secs(2),
             },
         )
         .await;
@@ -182,6 +183,89 @@ async fn an_unroutable_id_is_asked_about_once() {
         proxy.lookups.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "a spray of packets for one unroutable id must not become a Redis load test"
+    );
+}
+
+/// A route lookup that never answers must end in a drop, not in an id that is
+/// pending forever.
+///
+/// This is the shape of the production failure it exists for: the tap streams a
+/// whole message, the proxy holds the opening datagrams and drops the rest while
+/// a stuck registry read keeps the id unresolved, the sender still reports a
+/// completed stream, and the listener hears nothing. Bounding the lookup turns
+/// that into one log line and one counter.
+#[tokio::test]
+async fn a_lookup_that_never_answers_is_given_up_on_and_counted() {
+    struct Hanging {
+        lookups: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl RouteSource for Hanging {
+        async fn lookup(&self, _request_id: &uuid::Uuid) -> Option<String> {
+            self.lookups
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            std::future::pending::<()>().await;
+            None
+        }
+    }
+
+    let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.expect("bind proxy"));
+    let addr = socket.local_addr().expect("proxy addr");
+    let lookups = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let routes = Arc::new(Hanging {
+        lookups: Arc::clone(&lookups),
+    });
+    tokio::spawn(async move {
+        let _ = run(
+            socket,
+            routes,
+            RelayConfig {
+                max_routes: 16,
+                max_negative: 16,
+                max_pending: 512,
+                route_idle: Duration::from_secs(60),
+                negative_ttl: Duration::from_secs(5),
+                lookup_timeout: Duration::from_millis(100),
+            },
+        )
+        .await;
+    });
+
+    let tap = UdpSocket::bind("127.0.0.1:0").await.expect("bind tap");
+    let raw = protofish4::random_key();
+    let key = protofish4::SessionKey::from_bytes(&raw).unwrap();
+    let id = protofish4::RequestId(uuid::Uuid::new_v4());
+    let header = protofish4::proto::header::Header::new(
+        protofish4::proto::frame::PacketKind::Keepalive,
+        id,
+        0,
+    );
+    let datagram = protofish4::proto::crypto::seal(
+        &key,
+        header,
+        protofish4::proto::types::Direction::Send,
+        &[0u8; 4],
+    )
+    .expect("seal");
+
+    for _ in 0..3 {
+        tap.send_to(&datagram, addr).await.expect("send");
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert_eq!(
+        lookups.load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "the id is asked about once and then remembered as unroutable, \
+         even though the registry never answered"
+    );
+
+    let scrape = zako3_ae_proxy::metrics::gather();
+    assert!(
+        scrape.contains(r#"aeproxy_route_lookups_total{result="timeout"}"#),
+        "a lookup that timed out must be visible in the scrape:\n{scrape}"
     );
 }
 
